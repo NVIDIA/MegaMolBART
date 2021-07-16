@@ -1,0 +1,40 @@
+name: MegaMolBART
+do_training: False # set to False if only preprocessing data
+do_testing: False # set to True to run evaluation on test data after training
+
+model:
+  train_ds:
+    split_name: train
+    filepath: /data/zinc_csv
+    zinc: true
+    max_seq_length: 512
+    pin_memory: true
+    shuffle: true
+    drop_last: false
+    num_workers: 8
+    batch_size: 8
+
+  validation_ds:
+    split_name: valid
+    filepath: /data/zinc_csv
+    zinc: true
+    max_seq_length: 512
+    pin_memory: true
+    shuffle: true
+    drop_last: false
+    num_workers: 8
+    batch_size: 8
+
+  test_ds:
+    split_name: test
+    filepath: /data/zinc_csv
+    zinc: true
+    max_seq_length: 512
+    pin_memory: true
+    shuffle: true
+    drop_last: false
+    num_workers: 8
+    batch_size: 8
+
+  tokenizer:
+    vocab_file: /models/megamolbart/bart_vocab.txt
