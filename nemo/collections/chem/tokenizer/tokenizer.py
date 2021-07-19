@@ -4,7 +4,7 @@ import re
 import torch
 import random
 from pathlib import Path
-from util import (DEFAULT_BEGIN_TOKEN, DEFAULT_END_TOKEN, DEFAULT_PAD_TOKEN, \
+from nemo.collections.chem.parts.util import (DEFAULT_BEGIN_TOKEN, DEFAULT_END_TOKEN, DEFAULT_PAD_TOKEN, \
                   DEFAULT_UNK_TOKEN, DEFAULT_MASK_TOKEN, DEFAULT_SEP_TOKEN, \
                   DEFAULT_MASK_PROB, DEFAULT_SHOW_MASK_TOKEN_PROB, DEFAULT_MASK_SCHEME, \
                   DEFAULT_SPAN_LAMBDA, DEFAULT_VOCAB_PATH, DEFAULT_CHEM_TOKEN_START, REGEX)

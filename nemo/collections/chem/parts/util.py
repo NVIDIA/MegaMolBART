@@ -1,5 +1,7 @@
 # coding=utf-8
 
+# TODO move to default config
+
 # Paths
 DEFAULT_VOCAB_PATH = '/models/megamolbart/bart_vocab.txt'
 CHECKPOINTS_DIR = '/models/megamolbart/checkpoints'

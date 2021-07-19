@@ -1,6 +1,10 @@
 # coding=utf-8
 
-from megatron.module import MegatronModule
+try:
+    from megatron.module import MegatronModule # v 1.1.5
+except:
+    from megatron.model.module import MegatronModule
+    
 from apex.normalization import FusedLayerNorm
 from megatron import mpu
 from torch.nn import init

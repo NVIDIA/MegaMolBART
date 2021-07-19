@@ -1,27 +1,81 @@
 name: MegaMolBART
-do_training: False # set to False if only preprocessing data
+do_training: True # set to False to preprocess data
 do_testing: False # set to True to run evaluation on test data after training
 
+exp_manager:
+  exp_dir: null  # exp_dir for experiment, defaults to "./nemo_experiments"
+  name: ${name}  # The name of your model
+  create_tensorboard_logger: true
+  create_checkpoint_callback: true
+
+# TODO how / where to configure data and/or model parallelism? Pull from ENV for clusters?
+trainer:
+  gpus: 1
+  num_nodes: 1
+  model_parallel_size: null
+  model_parallel_rank: null
+  # data_parallel_size: null
+  max_epochs: 200
+  # amp_level: O1 # O1/O2 for mixed precision
+  # precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
+  accelerator: ddp
+  checkpoint_callback: False
+  logger: true
+  log_every_n_steps: 10  # Interval for logging
+  check_val_every_n_epoch: 10
+
+# TODO optimizer and scheduler may not be correctly set to map to MegaMolBART training
+optim:
+  name: adam # TODO try adam and adamw --> Megatron uses AdamW, paper says Adam
+  lr: 1.0
+  weight_decay: 0.00
+  beta1: 0.9
+  beta2: 0.999
+  sched:
+    name: CosineAnnealing # lr_decay_style=cosine
+    warmup_steps: null
+    warmup_ratio: 0.01 # warmup
+    min_lr: 1.0e-5
+    last_epoch: -1
+    max_steps: 110000 # lr_decay_iters
+    monitor: val_loss # TODO also monitor character accuracy
+    reduce_on_plateau: false
+
 model:
+  name: MegaMolBART
+  pretrained: false
+  checkpoint_file: null # /path/to/my/checkpoint/model_optim_rng.pt
+  hidden_size: 256
+  feedforward: 1024 # 4 * hidden_size
+  num_layers: 4
+  num_attention_heads: 8
+  max_seq_len: 512
+  dropout: 0.1
+
+  tokenizer:
+    vocab_file: /workspace/nemo/collections/chem/tokenizer/bart_vocab.txt
+
   train_ds:
     split_name: train
     filepath: /data/zinc_csv
     zinc: true
-    max_seq_length: 512
+    max_seq_length: ${model.max_seq_len}
     pin_memory: true
     shuffle: true
     drop_last: false
+    num_samples: -1
     num_workers: 8
     batch_size: 8
 
   validation_ds:
-    split_name: valid
+    split_name: val
     filepath: /data/zinc_csv
     zinc: true
-    max_seq_length: 512
+    max_seq_length: ${model.max_seq_len}
     pin_memory: true
     shuffle: true
     drop_last: false
+    num_samples: -1
     num_workers: 8
     batch_size: 8
 
@@ -29,12 +83,11 @@ model:
     split_name: test
     filepath: /data/zinc_csv
     zinc: true
-    max_seq_length: 512
+    max_seq_length: ${model.max_seq_len}
     pin_memory: true
     shuffle: true
     drop_last: false
+    num_samples: -1
     num_workers: 8
     batch_size: 8
 
-  tokenizer:
-    vocab_file: /models/megamolbart/bart_vocab.txt

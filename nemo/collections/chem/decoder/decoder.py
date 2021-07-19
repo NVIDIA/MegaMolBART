@@ -2,7 +2,7 @@
 
 import torch
 from rdkit import Chem, RDLogger
-from util import DEFAULT_MAX_SEQ_LEN
+from nemo.collections.chem.parts.util import DEFAULT_MAX_SEQ_LEN
 
 class DecodeSampler:
     def __init__(
