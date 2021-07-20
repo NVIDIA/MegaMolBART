@@ -118,60 +118,61 @@ class MoleculeDataset(Dataset):
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
         return output
 
-# class MoleculeDataLoader(object):
+# Not for use with NeMo
+class MoleculeDataLoader(object):
 
-#     """Loads data from a csv file containing molecules."""
+    """Loads data from a csv file containing molecules."""
 
-#     def __init__(
-#         self,
-#         file_path,
-#         batch_size=32,
-#         num_buckets=20,
-#         num_workers=32,
-#         vocab_path=DEFAULT_VOCAB_PATH, 
-#         chem_token_start=DEFAULT_CHEM_TOKEN_START, 
-#         regex=REGEX
-#         ):
+    def __init__(
+        self,
+        file_path,
+        batch_size=32,
+        num_buckets=20,
+        num_workers=32,
+        vocab_path=DEFAULT_VOCAB_PATH, 
+        chem_token_start=DEFAULT_CHEM_TOKEN_START, 
+        regex=REGEX
+        ):
 
-#         path = Path(file_path)
-#         if path.is_dir():
-#             self.df = self._read_dir_df(file_path)
-#         else:
-#             self.df = pd.read_csv(path)
+        path = Path(file_path)
+        if path.is_dir():
+            self.df = self._read_dir_df(file_path)
+        else:
+            self.df = pd.read_csv(path)
 
-#         train_dataset = MoleculeDataset(self.df, split='train', zinc=True)
-#         val_dataset = MoleculeDataset(self.df, split='val', zinc=True)
-#         self.tokenizer = load_tokenizer(vocab_path, chem_token_start, regex)
+        train_dataset = MoleculeDataset(self.df, split='train', zinc=True)
+        val_dataset = MoleculeDataset(self.df, split='val', zinc=True)
+        self.tokenizer = load_tokenizer(vocab_path, chem_token_start, regex)
 
-#         world_size = \
-#             torch.distributed.get_world_size(group=mpu.get_data_parallel_group())
-#         rank = \
-#             torch.distributed.get_rank(group=mpu.get_data_parallel_group())
-#         sampler = torch.utils.data.SequentialSampler(train_dataset)
-#         batch_sampler = DistributedBatchSampler(sampler, batch_size,
-#                 True, rank, world_size)
+        world_size = \
+            torch.distributed.get_world_size(group=mpu.get_data_parallel_group())
+        rank = \
+            torch.distributed.get_rank(group=mpu.get_data_parallel_group())
+        sampler = torch.utils.data.SequentialSampler(train_dataset)
+        batch_sampler = DistributedBatchSampler(sampler, batch_size,
+                True, rank, world_size)
 
-#         self.train_loader = torch.utils.data.DataLoader(train_dataset,
-#                 batch_sampler=batch_sampler, num_workers=num_workers,
-#                 pin_memory=True, collate_fn=collate_fn)
-#         self.val_loader = torch.utils.data.DataLoader(val_dataset,
-#                 num_workers=num_workers, pin_memory=True,
-#                 collate_fn=collate_fn)
+        self.train_loader = torch.utils.data.DataLoader(train_dataset,
+                batch_sampler=batch_sampler, num_workers=num_workers,
+                pin_memory=True, collate_fn=collate_fn)
+        self.val_loader = torch.utils.data.DataLoader(val_dataset,
+                num_workers=num_workers, pin_memory=True,
+                collate_fn=collate_fn)
 
-#     def get_data(self):
-#         return (self.train_loader, self.val_loader)
+    def get_data(self):
+        return (self.train_loader, self.val_loader)
 
-#     def _read_dir_df(self, path):
-#         args = get_args()
-#         names = os.listdir(path)
-#         m = len(names)
-#         world_size = max(mpu.get_data_parallel_world_size(), args.world_size)
-#         rank = max(mpu.get_data_parallel_rank(), args.rank)
-#         partition = int(m/world_size) + 1
-#         partition = max(partition, 10)
-#         idx = partition*rank % m
-#         selected_names = names[idx:(idx+10)]
-#         dfs = [pd.read_csv(path + '/' + f) for f in selected_names]
+    def _read_dir_df(self, path):
+        args = get_args()
+        names = os.listdir(path)
+        m = len(names)
+        world_size = max(mpu.get_data_parallel_world_size(), args.world_size)
+        rank = max(mpu.get_data_parallel_rank(), args.rank)
+        partition = int(m/world_size) + 1
+        partition = max(partition, 10)
+        idx = partition*rank % m
+        selected_names = names[idx:(idx+10)]
+        dfs = [pd.read_csv(path + '/' + f) for f in selected_names]
 
-#         zinc_df = pd.concat(dfs, ignore_index=True, copy=False)
-#         return zinc_df
+        zinc_df = pd.concat(dfs, ignore_index=True, copy=False)
+        return zinc_df

@@ -15,23 +15,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+sys.path.insert(0, '/workspace') # TODO remove this
+
 import os
 from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
-import pandas as pd
-import numpy as np
 import tempfile
+import re
+import braceexpand
 
 import torch
-
+import numpy as np
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning import Trainer
+import pytorch_lightning as pl
 
+from nemo.core.config import hydra_runner
+from nemo.utils import logging
+from nemo.utils.exp_manager import exp_manager
+from nemo.utils.app_state import AppState
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
 from nemo.core.neural_types import ChannelType, LossType, MaskType, NeuralType
-from nemo.utils import logging
-from nemo.utils.app_state import AppState
 from nemo.utils.env_var_parsing import get_envint
 
 from megatron import get_args, initialize_megatron
@@ -58,6 +63,7 @@ from nemo.collections.chem.models.megatron_bart import MegatronBART
 
 __all__ = ["MegaMolBARTModel"]
 
+from IPython import embed
 class MegaMolBARTModel(ModelPT):
     # @property
     # def input_types(self) -> Optional[Dict[str, NeuralType]]:
@@ -72,18 +78,19 @@ class MegaMolBARTModel(ModelPT):
     # def output_types(self) -> Optional[Dict[str, NeuralType]]:
     #     return {
     #         "loss": NeuralType((), LossType()),
-    #         "decoder_hidden_states": NeuralType(("B", "T", "D"), ChannelType(), optional=True),
-    #         "encoder_hidden_states": NeuralType(("B", "T", "D"), ChannelType(), optional=True),
+    #         "decoder_hidden_states": NeuralType(("B", "T"), ChannelType(), optional=True),
+    #         "encoder_hidden_states": NeuralType(("B", "T"), ChannelType(), optional=True),
     #     }
 
-    def __init__(self, cfg: DictConfig, trainer: Trainer = None) -> None:
+    def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
         
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
-        self._model_parallel_size = cfg.trainer.model_parallel_size # TODO how are these configured?
-        self._model_parallel_rank = cfg.trainer.model_parallel_rank
+        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
+        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
         self._hidden_size = cfg.model.hidden_size
+        self.max_seq_len = cfg.model.max_seq_len
 
         if not os.path.exists(cfg.model.tokenizer.vocab_file):
             raise ValueError(f'Vocab file not found at {cfg.model.tokenizer.vocab_file}')
@@ -92,11 +99,10 @@ class MegaMolBARTModel(ModelPT):
 
         # Megatron initilization -- must be done before superclass init and model loaded
         args = self.setup_megatron(cfg) # TODO do megatron args need to be preserved?
-        super().__init__(cfg=cfg.model, trainer=trainer) # TODO fix data parallel loading
+        super().__init__(cfg=cfg.model, trainer=trainer)
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
         # load model
-        # self.setup_optimization(cfg.optim) # TODO fix beta tuple in config
         sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
         self.model = MegatronBART( 
@@ -110,9 +116,8 @@ class MegaMolBARTModel(ModelPT):
                                 cfg.model.max_seq_len,
                                 cfg.model.dropout)
 
-        # def count_parameters(model):
-        # return sum(p.numel() for p in model.parameters()
-        #            if p.requires_grad)
+        self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        self.setup_optimization(cfg.optim)
 
     def _update_megatron_args(
         self,
@@ -125,8 +130,8 @@ class MegaMolBARTModel(ModelPT):
             parser.set_defaults(micro_batch_size=micro_batch_size)
             parser.set_defaults(tensor_model_parallel_size=tensor_model_parallel_size)
             parser.set_defaults(scaled_masked_softmax_fusion=scaled_masked_softmax_fusion)
-            # parser.set_defaults(bias_gelu_fusion=bias_gelu_fusion)
-            # parser.set_defaults(bias_dropout_fusion=bias_dropout_fusion)
+            parser.set_defaults(bias_gelu_fusion=bias_gelu_fusion)
+            parser.set_defaults(bias_dropout_fusion=bias_dropout_fusion)
             return parser
 
         return extra_args_provider
@@ -160,6 +165,7 @@ class MegaMolBARTModel(ModelPT):
                 'lazy_mpu_init': True,
                 'tokenizer_type': 'BertWordPieceCase',
                 'vocab_file': self._get_megatron_vocab_file()}
+                # TODO vocab size may need to be set
 
         # extra args provider
         if self._model_parallel_size is not None:
@@ -253,84 +259,79 @@ class MegaMolBARTModel(ModelPT):
         return DecodeSampler(tokenizer, cfg.model.max_seq_len)
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
-        self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config)
+        logging.info('Loading training data')
+        self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config, split_name='train')
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
-        self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
+        logging.info('Loading validation data')
+        self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config, split_name='val')
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
-        self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config)
+        logging.info('Loading test data')
+        self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config, split_name='test')
 
-    def get_data(self):
-        return (self._train_dl, self._validation_dl)
-
-    def _read_dir_df(self, path):
-        # # args = get_args()
-
-        # names = np.array(os.listdir(path))
-        # num_files = len(names)
-
-        # if torch.distributed.is_initialized():
-        #     num_gpus = self.trainer.num_gpus
-        #     if not isinstance(num_gpus, int):
-        #         num_gpus = len(num_gpus)
-
-        #     world_size = self.trainer.num_nodes * num_gpus # torch.distributed.get_world_size()
-        #     rank = get_envint("RANK", None) # torch.distributed.get_rank()
-
-        # # num_data_parallel = int(m/world_size) + 1
-        # # num_data_parallel = max(num_data_parallel, 10)
-        
-        # print('WARNING: Distributed data splitting is not setup')
-        # # num_data_parallel = 1
-
-        # # split_names = np.array_split(names, num_data_parallel)
-        # # split_names = [list(x) for x in split_names]
-        
-        # # idx = num_data_parallel * rank % m
-        # # selected_names = names[idx:(idx+10)]
-        # # dfs = [pd.read_csv(os.path.join(path, files)) for files in selected_names]
-
-        # # zinc_df = pd.concat(dfs, ignore_index=True, copy=False)
-        # print('WARNING: Only a single file is being read')
-        # zinc_df = pd.read_csv(os.path.join(path, names[0]))
-        # return zinc_df
-        pass
-
-    def _setup_dataset_from_config(self, cfg: DictConfig):
-        # TODO split paths by rank for data parallel
-        filepath = Path(cfg.filepath) 
-        if filepath.is_dir():
+    def _split_dataset_paths_for_ddp(self, filepath):
+        # Get all file paths
+        if os.path.isdir(filepath):
             dataset_paths = [os.path.join(filepath, x) for x in sorted(os.listdir(filepath))]
         else:
-            dataset_paths = [filepath]
-        
-        print('\n\nWARNING: DATASET PATHS TRUNCATED\n\n')
-        dataset_paths = dataset_paths[:1]
+            filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # Replace '(', '[', '<' and '_OP_' with '{'
+            filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # Replace ')', ']', '>' and '_CL_' with '}'
+            dataset_paths = list(braceexpand.braceexpand(filepath))
+        dataset_paths = np.array(dataset_paths)
+        num_dataset_paths = len(dataset_paths)
+
+        # split for data parallel
+        if torch.distributed.is_initialized():
+            world_size = torch.distributed.get_world_size()
+            if world_size > num_dataset_paths:
+                logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
+            rank = torch.distributed.get_rank()
+        else:
+            world_size = 1
+            rank = 0
+        num_chunks = min(num_dataset_paths, world_size)
+        split_dataset_paths = np.array_split(dataset_paths, num_chunks)
+        index = rank % len(split_dataset_paths)
+        dataset_paths = split_dataset_paths[index]
+            
+        return dataset_paths
+
+    def _setup_dataset_from_config(self, cfg: DictConfig, split_name: str):
+        dataset_paths = self._split_dataset_paths_for_ddp(cfg.filepath)
+        logging.info(f'Loading data from {dataset_paths}')
 
         datasets = []
         for path in dataset_paths:
-            data = MoleculeDataset(path, split=cfg.split_name, zinc=cfg.zinc)
+            data = MoleculeDataset(path, split=split_name, zinc=cfg.zinc)
             datasets.append(data)
-        return torch.utils.data.ConcatDataset(datasets)
 
-    def setup_dataloader_from_config(self, cfg: DictConfig):
-        dataset = self._setup_dataset_from_config(cfg)
-
-        if cfg.split_name == 'train':
-            if torch.distributed.is_initialized():
-                rank = torch.distributed.get_rank(group=get_data_parallel_group())
-                batch_sampler = DistributedSampler(dataset, rank=rank, shuffle=cfg.shuffle, drop_last=cfg.drop_last)
-            else:
-                batch_sampler = torch.utils.data.SequentialSampler(dataset)
-            
-            dataloader = torch.utils.data.DataLoader(dataset,
-                batch_sampler=batch_sampler, num_workers=cfg.num_workers,
-                pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
+        if len(datasets) == 1:
+            datasets = datasets[0]
         else:
-            dataloader = torch.utils.data.DataLoader(dataset,
-                num_workers=cfg.num_workers,
-                pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
+            datasets = torch.utils.data.ConcatDataset(datasets)
+        return datasets
+
+    def setup_dataloader_from_config(self, cfg: DictConfig, split_name: str):
+        dataset = self._setup_dataset_from_config(cfg, split_name)
+
+        # if split_name == 'train':
+        #     if torch.distributed.is_initialized():
+        #         rank = torch.distributed.get_rank(group=get_data_parallel_group())
+        #         batch_sampler = DistributedSampler(dataset, rank=rank, shuffle=cfg.shuffle, drop_last=cfg.drop_last)
+        #     else:
+        #         batch_sampler = torch.utils.data.SequentialSampler(dataset)
+            
+        #     dataloader = torch.utils.data.DataLoader(dataset,
+        #         batch_sampler=batch_sampler, num_workers=cfg.num_workers,
+        #         pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
+        # else:
+        #     dataloader = torch.utils.data.DataLoader(dataset,
+        #         num_workers=cfg.num_workers,
+        #         pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
+        dataloader = torch.utils.data.DataLoader(dataset,
+            num_workers=cfg.num_workers,
+            pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
 
         return dataloader
 
@@ -366,11 +367,12 @@ class MegaMolBARTModel(ModelPT):
         dec_tokens = dec_token_output['original_tokens']
         dec_mask = dec_token_output['original_pad_masks']
 
-        (enc_tokens, enc_mask) = self._check_seq_len(enc_tokens, enc_mask)
-        (dec_tokens, dec_mask) = self._check_seq_len(dec_tokens, dec_mask)
+        max_seq_len = self.max_seq_len
+        (enc_tokens, enc_mask) = self._check_seq_len(enc_tokens, enc_mask, max_seq_len)
+        (dec_tokens, dec_mask) = self._check_seq_len(dec_tokens, dec_mask, max_seq_len)
 
-        enc_token_ids = self.convert_tokens_to_ids(enc_tokens)
-        dec_token_ids = self.convert_tokens_to_ids(dec_tokens)
+        enc_token_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
+        dec_token_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
         enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1)
         enc_pad_mask = torch.tensor(enc_mask,
                                     dtype=torch.int64).transpose(0, 1)
@@ -403,53 +405,55 @@ class MegaMolBARTModel(ModelPT):
     def training_step(self, batch: Tuple, batch_idx: int) -> Dict:
         """
         Lightning calls this inside the training loop with the data from the training dataloader
-        passed in as `batch`. Loss calculation from HuggingFace's BartForConditionalGeneration.
+        passed in as `batch`. 
         """
-        # input_ids, input_mask, decoder_input_ids, labels = batch
-        # loss = self.forward(
-        #     input_ids=input_ids, attention_mask=input_mask, decoder_input_ids=decoder_input_ids, labels=labels,
-        # )[0]
         outputs = self.forward(batch)
 
-        loss = self.model.module._calc_loss(batch, outputs)
-        acc = self.model.module._calc_char_acc(batch, outputs)
-        reduced_loss = loss #reduce_losses([loss])[0]
+        loss = self.model._calc_loss(batch, outputs)
+        char_acc = self.model._calc_char_acc(batch, outputs)
         lr = self._optimizer.param_groups[0]["lr"]
-        tensorboard_logs = {'mask_loss': reduced_loss, 'char_acc': acc, 'lr': lr}
+        tensorboard_logs = {'train_loss': loss.item(),
+                            'val_loss': loss.item(), 
+                            'train_char_acc': char_acc, 
+                            'lr': lr}
 
-        return {"loss": loss, "log": tensorboard_logs}
+        return {'loss': loss, 
+                'log': tensorboard_logs}
 
     def validation_step(self, batch: Tuple, batch_idx: int) -> Dict:
         """
         Lightning calls this inside the validation loop with the data from the validation dataloader
-        passed in as `batch`. Loss calculation from HuggingFace's BartForConditionalGeneration.
+        passed in as `batch`. 
         """
-        outputs = self.model.module.validation_step(batch)
+        outputs = self.model.validation_step(batch)
+        loss = outputs['val_loss']
+        char_acc = outputs['val_token_acc']
+        molecular_accuracy= outputs['val_molecular_accuracy']
+        perplexity= outputs['val_perplexity']
         invalid_smiles = outputs['val_invalid_smiles']
-        val_loss = outputs['val_loss']
-        token_acc = outputs['val_token_acc']
-        val_perplexity= outputs['val_perplexity']
-        val_molecular_accuracy= outputs['val_molecular_accuracy']
 
-        # input_ids, input_mask, decoder_input_ids, labels = batch
-        # loss, logits = self.forward(
-        #     input_ids=input_ids, attention_mask=input_mask, decoder_input_ids=decoder_input_ids, labels=labels,
-        # )[:2]
-        # self.validation_perplexity(logits=logits)
-
-        tensorboard_logs = {"val_loss": val_loss}
-        return {"val_loss": val_loss, "log": tensorboard_logs}
+        tensorboard_logs = {'val_loss': loss,
+                            'val_char_acc': char_acc,
+                            'val_mol_acc': molecular_accuracy,
+                            'val_perplexity': perplexity,
+                            'val_invalid_smiles': invalid_smiles}
+        return {'val_loss': loss, 
+                'char_acc': char_acc,
+                'mol_acc': molecular_accuracy,
+                'perplexity': perplexity,
+                'invalid_smiles': invalid_smiles,
+                'log': tensorboard_logs}
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        #perplexity = self.validation_perplexity.compute()
-        tensorboard_logs = {"val_loss": avg_loss}#, "perplexity": perplexity}
-        # logging.info(f"evaluation perplexity {perplexity.item()}")
-        return {"val_loss": avg_loss, "log": tensorboard_logs}
+        loss = torch.tensor([x['val_loss'] for x in outputs]).mean().item()
+        perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
+        tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
+        logging.info(f'Validation perplexity {perplexity}')
+        return {'val_loss': loss, 'log': tensorboard_logs}
 
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
@@ -457,16 +461,16 @@ class MegaMolBARTModel(ModelPT):
 
 
 if __name__ == '__main__':
+    seed = 42
+    pl.seed_everything(seed, workers=True)
+    
     cfg = OmegaConf.load('/workspace/examples/chem/conf/megamolbart_base.yaml')
-    a = MegaMolBARTModel(cfg)
-
-    from IPython import embed
-    embed()
-
-
-
-
-
+    logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
+    
+    trainer = pl.Trainer(**cfg.trainer, limit_train_batches=10, limit_val_batches=2, limit_test_batches=2)
+    exp_manager(trainer, cfg.get("exp_manager", None))
+    model = MegaMolBARTModel(cfg, trainer)
+    trainer.fit(model)
 
 
     # @typecheck.disable_checks()
