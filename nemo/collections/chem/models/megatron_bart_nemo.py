@@ -97,6 +97,8 @@ class MegaMolBARTModel(ModelPT):
         self._hidden_size = cfg.model.hidden_size
         self.max_seq_len = cfg.model.max_seq_len
 
+        self.has_megatron_encoder = True
+        # self.restore_megatron_encoder_weights = True if cfg.model.checkpoint_file else False
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
         self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus if trainer is not None else 1
@@ -255,6 +257,9 @@ class MegaMolBARTModel(ModelPT):
                 logging.info(f'torch.distributed not initialized yet. Will not restore model parallel checkpoint')
         else:
             logging.error(f'restore_path: {restore_path} must be a file or directory.')
+
+    def restore_megatron_encoder_weights(self, restore_path: str):
+        self.restore_weights(restore_path) 
 
     def setup_tokenizer(self, cfg: DictConfig) -> MolEncTokenizer:
         regex = cfg.get('regex', REGEX)
@@ -524,14 +529,8 @@ if __name__ == '__main__':
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
     
 
-    nlpddp = NLPDDPPlugin(num_nodes=cfg.trainer.num_nodes)
-    
-    # nlpddp.lightning_module.has_megatron_encoder = True
-    # TODO the above is a failed attempt at working around the following error
-    # originating from the NLPDDPPlugin:
-    # Traceback (most recent call last):
-    # File "nemo/collections/chem/models/megatron_bart_nemo.py", line 540, in <module>
-    #     model = MegaMolBARTModel(cfg, trainer)
+    # File "nemo/collections/chem/models/megatron_bart_nemo.py", line 539, in <module>
+    #     trainer.fit(model)
     # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 460, in fit
     #     self._run(model)
     # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 758, in _run
@@ -540,12 +539,8 @@ if __name__ == '__main__':
     #     self.accelerator.start_training(self)
     # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/accelerators/accelerator.py", line 96, in start_training
     #     self.training_type_plugin.start_training(trainer)
-    # File "/code/NeMo/nemo/collections/nlp/parts/nlp_overrides.py", line 67, in start_training
-    #     if self.lightning_module.has_megatron_encoder:
-    # File "/opt/conda/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1130, in __getattr__
-    #     raise AttributeError("'{}' object has no attribute '{}'".format(
-    # AttributeError: 'MegaMolBARTModel' object has no attribute 'has_megatron_encoder'
-    
+    # File "/code/NeMo/nemo/collections/nlp/parts/nlp_overrides.py", line 102, in start_training
+    nlpddp = NLPDDPPlugin(num_nodes=cfg.trainer.num_nodes)    
     trainer = pl.Trainer(plugins=[nlpddp],
                          **cfg.trainer, 
                          limit_train_batches=10, 
