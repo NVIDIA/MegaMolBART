@@ -43,16 +43,16 @@ model:
   num_attention_heads: 8
   max_seq_len: 512
   dropout: 0.1
-  batch_size: 8
-  data_dir: '/data/zinc_csv'
+  data_dir: '/data/zinc_csv_small'
 
   tokenizer:
-    vocab_file: /workspace/nemo/collections/chem/tokenizer/bart_vocab.txt
+    vocab_file: /code/NeMo/nemo/collections/chem/tokenizer/bart_vocab.txt
 
   train_ds:
     filepath: "${model.data_dir}/x[000..001].csv"
     zinc: true
     pin_memory: true
+    batch_size: 8
     shuffle: true
     drop_last: false
     num_samples: -1

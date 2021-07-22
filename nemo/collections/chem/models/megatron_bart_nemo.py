@@ -17,6 +17,7 @@
 
 import sys
 sys.path.insert(0, '/workspace') # TODO remove this
+sys.path.insert(0, '/code/NeMo') # TODO remove this
 
 import os
 from typing import Dict, List, Optional, Tuple, Union
@@ -25,10 +26,14 @@ import tempfile
 import re
 import braceexpand
 
-import torch
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
+
+import torch
+import torch.distributed as dist
+import torch.utils.data as pt_data
 import pytorch_lightning as pl
+from pytorch_lightning.utilities import rank_zero_only
 
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
@@ -38,6 +43,7 @@ from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
 from nemo.core.neural_types import ChannelType, LossType, MaskType, NeuralType
 from nemo.utils.env_var_parsing import get_envint
+from nemo.collections.common.metrics import GlobalAverageLossMetric
 
 from megatron import get_args, initialize_megatron
 from megatron.model.bert_model import bert_attention_mask_func
@@ -52,7 +58,8 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 # from megatron.data.samplers import DistributedBatchSampler
-from torch.utils.data.distributed import DistributedSampler
+# from torch.utils.data.distributed import DistributedSampler
+from nemo.collections.nlp.parts.nlp_overrides import NLPDDPPlugin
 
 # TODO simplify imports
 from nemo.collections.chem.tokenizer.tokenizer import MolEncTokenizer
@@ -87,10 +94,12 @@ class MegaMolBARTModel(ModelPT):
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
-        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
-        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
         self._hidden_size = cfg.model.hidden_size
         self.max_seq_len = cfg.model.max_seq_len
+
+        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
+        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
+        self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus if trainer is not None else 1
 
         if not os.path.exists(cfg.model.tokenizer.vocab_file):
             raise ValueError(f'Vocab file not found at {cfg.model.tokenizer.vocab_file}')
@@ -98,7 +107,7 @@ class MegaMolBARTModel(ModelPT):
         self._vocab_size = len(self.tokenizer)
 
         # Megatron initilization -- must be done before superclass init and model loaded
-        args = self.setup_megatron(cfg) # TODO do megatron args need to be preserved?
+        _ = self.setup_megatron(cfg)
         super().__init__(cfg=cfg.model, trainer=trainer)
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
@@ -265,10 +274,36 @@ class MegaMolBARTModel(ModelPT):
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         logging.info('Loading validation data')
         self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config, split_name='val')
+        # instantiate Torchmetric for each val dataloader
+        if self._validation_dl is not None:
+            for dataloader_idx in range(len(self._validation_dl)):
+                if dataloader_idx == 0:
+                    setattr(
+                        self, f'val_loss', GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                    )
+                else:
+                    setattr(
+                        self,
+                        f'val_loss_{dataloader_idx}',
+                        GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                    )
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
         self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config, split_name='test')
+        # instantiate Torchmetric for each test dataloader
+        if self._test_dl is not None:
+            for dataloader_idx in range(len(self._test_dl)):
+                if dataloader_idx == 0:
+                    setattr(
+                        self, f'test_loss', GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                    )
+                else:
+                    setattr(
+                        self,
+                        f'test_loss_{dataloader_idx}',
+                        GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                    )
 
     def _split_dataset_paths_for_ddp(self, filepath):
         # Get all file paths
@@ -310,28 +345,25 @@ class MegaMolBARTModel(ModelPT):
             datasets = datasets[0]
         else:
             datasets = torch.utils.data.ConcatDataset(datasets)
+
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig, split_name: str):
         dataset = self._setup_dataset_from_config(cfg, split_name)
 
-        # if split_name == 'train':
-        #     if torch.distributed.is_initialized():
-        #         rank = torch.distributed.get_rank(group=get_data_parallel_group())
-        #         batch_sampler = DistributedSampler(dataset, rank=rank, shuffle=cfg.shuffle, drop_last=cfg.drop_last)
-        #     else:
-        #         batch_sampler = torch.utils.data.SequentialSampler(dataset)
-            
-        #     dataloader = torch.utils.data.DataLoader(dataset,
-        #         batch_sampler=batch_sampler, num_workers=cfg.num_workers,
-        #         pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
-        # else:
-        #     dataloader = torch.utils.data.DataLoader(dataset,
-        #         num_workers=cfg.num_workers,
-        #         pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
-        dataloader = torch.utils.data.DataLoader(dataset,
-            num_workers=cfg.num_workers,
-            pin_memory=cfg.pin_memory, collate_fn=self.collate_fn)
+        # TODO setup distributed sampler when data loding is improved
+        if cfg.shuffle:
+            sampler = pt_data.RandomSampler(dataset)
+        else:
+            sampler = pt_data.SequentialSampler(dataset)
+
+        dataloader = pt_data.DataLoader(dataset,
+            batch_size=cfg.batch_size,
+            sampler=sampler,
+            num_workers=cfg.get("num_workers", 1),
+            pin_memory=cfg.get("pin_memory", False), 
+            drop_last=cfg.get("drop_last", False),
+            collate_fn=self.collate_fn)
 
         return dataloader
 
@@ -420,6 +452,18 @@ class MegaMolBARTModel(ModelPT):
         return {'loss': loss, 
                 'log': tensorboard_logs}
 
+    # TODO is this needed for ddp?
+    # @rank_zero_only
+    # def log_param_stats(self):
+    #     for name, p in self.named_parameters():
+    #         if p.requires_grad:
+    #             self.trainer.logger.experiment.add_histogram(name + '_hist', p, global_step=self.global_step)
+    #             self.trainer.logger.experiment.add_scalars(
+    #                 name,
+    #                 {'mean': p.mean(), 'stddev': p.std(), 'max': p.max(), 'min': p.min()},
+    #                 global_step=self.global_step,
+    #             )
+
     def validation_step(self, batch: Tuple, batch_idx: int) -> Dict:
         """
         Lightning calls this inside the validation loop with the data from the validation dataloader
@@ -449,6 +493,18 @@ class MegaMolBARTModel(ModelPT):
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
+        # TODO is this needed for ddp?
+        # # if user specifies one validation dataloader, then PTL reverts to giving a list of dictionary instead of a list of list of dictionary
+        # if isinstance(outputs[0], dict):
+        #     outputs = [outputs]
+
+        # loss_list, perplexity_list = [], []
+        # for dataloader_idx, output in enumerate(outputs):
+        #             if dataloader_idx == 0:
+        #                 loss = getattr(self, 'val_loss').compute()
+        #             else:
+        #                 loss = getattr(self, f'val_loss_{dataloader_idx}').compute()
+
         loss = torch.tensor([x['val_loss'] for x in outputs]).mean().item()
         perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
         tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
@@ -464,10 +520,39 @@ if __name__ == '__main__':
     seed = 42
     pl.seed_everything(seed, workers=True)
     
-    cfg = OmegaConf.load('/workspace/examples/chem/conf/megamolbart_base.yaml')
+    cfg = OmegaConf.load('/code/NeMo/examples/chem/conf/megamolbart_base.yaml')
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
     
-    trainer = pl.Trainer(**cfg.trainer, limit_train_batches=10, limit_val_batches=2, limit_test_batches=2)
+
+    nlpddp = NLPDDPPlugin(num_nodes=cfg.trainer.num_nodes)
+    
+    # nlpddp.lightning_module.has_megatron_encoder = True
+    # TODO the above is a failed attempt at working around the following error
+    # originating from the NLPDDPPlugin:
+    # Traceback (most recent call last):
+    # File "nemo/collections/chem/models/megatron_bart_nemo.py", line 540, in <module>
+    #     model = MegaMolBARTModel(cfg, trainer)
+    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 460, in fit
+    #     self._run(model)
+    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 758, in _run
+    #     self.dispatch()
+    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 799, in dispatch
+    #     self.accelerator.start_training(self)
+    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/accelerators/accelerator.py", line 96, in start_training
+    #     self.training_type_plugin.start_training(trainer)
+    # File "/code/NeMo/nemo/collections/nlp/parts/nlp_overrides.py", line 67, in start_training
+    #     if self.lightning_module.has_megatron_encoder:
+    # File "/opt/conda/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1130, in __getattr__
+    #     raise AttributeError("'{}' object has no attribute '{}'".format(
+    # AttributeError: 'MegaMolBARTModel' object has no attribute 'has_megatron_encoder'
+    
+    trainer = pl.Trainer(plugins=[nlpddp],
+                         **cfg.trainer, 
+                         limit_train_batches=10, 
+                         limit_val_batches=2, 
+                         limit_test_batches=2)
+    
+
     exp_manager(trainer, cfg.get("exp_manager", None))
     model = MegaMolBARTModel(cfg, trainer)
     trainer.fit(model)
