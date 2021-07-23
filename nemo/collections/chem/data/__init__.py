@@ -1,1 +1,4 @@
-from nemo.collections.chem.data.csv_data import MoleculeDataset, MoleculeDatasetConfig
+from .csv_data import (MoleculeCsvDatasetConfig, 
+                       MoleculeCsvCombinedDatasetConfig, 
+                       MoleculeCsvDataset, 
+                       MoleculeCsvCombinedDataset)

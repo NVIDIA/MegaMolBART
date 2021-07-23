@@ -16,424 +16,12 @@ except:
     from megatron.model.module import MegatronModule
 
 from dataclasses import dataclass
+from nemo.collections.chem.data import MoleculeCsvDatasetConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig
-from nemo.core.config.modelPT import OptimConfig, SchedConfig
-# from nemo.core.config.modelPT import NemoConfig
+from nemo.core.classes.dataset import DatasetConfig
+from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
-# TODO refactor model layers and encode/decode into thei rown classes
-class MultiheadAttention(MegatronModule):
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        cross_attention=False,
-        init_method=init.xavier_uniform_,
-        ):
-
-        super(MultiheadAttention, self).__init__()
-
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.attn_dropout = nn.Dropout(p=dropout)
-        self.bias = bias
-        self.cross_attention = cross_attention
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scaling = self.head_dim ** -0.5
-        self.init_method = init_method
-        self.skip_bias = not bias
-
-        # Self-Attention is Column Parallelized
-        self.query_key_value = mpu.ColumnParallelLinear(self.embed_dim,
-                3 * self.embed_dim, gather_output=True,
-                init_method=self.init_method,
-                skip_bias_add=self.skip_bias)
-
-        # Cross-Attention is Row and Column Parallelized
-        self.q_proj = mpu.RowParallelLinear(self.embed_dim,
-                self.embed_dim, input_is_parallel=False,
-                init_method=self.init_method, bias=bias,
-                skip_bias_add=self.skip_bias)
-        self.key_value = mpu.ColumnParallelLinear(self.embed_dim, 2
-                * self.embed_dim, gather_output=True,
-                init_method=self.init_method,
-                skip_bias_add=self.skip_bias)
-
-        # Final projection is Row Parallelized
-        self.out_proj = mpu.RowParallelLinear(self.embed_dim,
-                self.embed_dim, input_is_parallel=False,
-                init_method=self.init_method, bias=bias)
-
-    def forward(
-        self,
-        query,
-        key=None,
-        value=None,
-        key_padding_mask=None,
-        attn_mask=None,
-        ):
-        """Input shape: Time x Batch x Channel
-
-        Args:
-            query - tokens/states of shape [Time x Batch x Channel]
-            key - tokens/states of shape [Time x Batch x Channel]
-            value - tokens/states of shape [Time x Batch x Channel]
-            key_padding_mask - keys that are pads where padding
-                elements are indicated by 1s. Shape: [batch, src_len].
-            attn_mask - typically used to implement causal attention, where
-                the mask prevents the attention from looking forward in time.
-                Shape: [tgt_len, src_len].
-        Returns:
-            outputs - attention probability scores of shape (Time x Batch x Channel)
-        """
-
-        (tgt_len, bsz, embed_dim) = query.size()
-
-        # Compute attention projections
-        if not self.cross_attention:
-            (q_k_v, bias) = self.query_key_value(query)
-            (q, k, v) = mpu.split_tensor_along_last_dim(q_k_v, 3)
-        else:
-            q, _ = self.q_proj(query)
-            if key is None:
-                assert value is None, \
-                    'Cross attention mode: since key is None, value must also be None.'
-                k = v = None
-            else:
-                (k_v, bias) = self.key_value(key)
-                (k, v) = mpu.split_tensor_along_last_dim(k_v, 2)
-
-        # Scale query and reshape
-        q = q.contiguous()
-        q *= self.scaling
-        q = q.view(tgt_len, bsz * self.num_heads,
-                   self.head_dim).transpose(0, 1)
-        if k is not None:
-            k = k.contiguous().view(-1, bsz * self.num_heads,
-                                    self.head_dim).transpose(0, 1)
-        if v is not None:
-            v = v.contiguous().view(-1, bsz * self.num_heads,
-                                    self.head_dim).transpose(0, 1)
-
-        # Compute attention scores
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
-        assert list(attn_weights.size()) == [bsz * self.num_heads,
-                tgt_len, src_len]
-
-        # Apply causal attention mask
-        if attn_mask is not None:
-            attn_mask = attn_mask.unsqueeze(0)
-            attn_weights += attn_mask
-
-        # Apply padding mask
-        if key_padding_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads,
-                    tgt_len, src_len)
-            attn_weights = \
-                attn_weights.masked_fill(key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
-                    float('-inf'))
-            attn_weights = attn_weights.view(bsz * self.num_heads,
-                    tgt_len, src_len)
-
-        # Compute attention probabilities
-        attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = self.attn_dropout(attn_weights)
-
-        # Compute context and output projection
-        attn = torch.bmm(attn_probs, v)
-        assert list(attn.size()) == [bsz * self.num_heads, tgt_len,
-                self.head_dim]
-        if attn.size(1) == 1:  # a single decoder step (sequence length == 1)
-            attn = attn.contiguous().view(tgt_len, bsz, embed_dim)
-        else:
-            attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz,
-                    embed_dim)
-        (attn, bias) = self.out_proj(attn)
-        attn_output_weights = attn_probs.view(bsz, self.num_heads,
-                tgt_len, src_len)
-        attn_output_weights = attn_output_weights.sum(dim=1) \
-            / self.num_heads
-        return (attn, attn_output_weights)
-
-class EncoderLayer(MegatronModule):
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        init_method=init.xavier_uniform_,
-        ):
-
-        super(EncoderLayer, self).__init__()
-        self.self_attn = MultiheadAttention(
-            embed_dim,
-            num_heads,
-            dropout=dropout,
-            bias=bias,
-            cross_attention=False,
-            init_method=init_method,
-            )
-        self.self_attn_layer_norm = FusedLayerNorm(embed_dim)
-        self.attn_dropout = nn.Dropout(p=dropout)
-        self.activation_fn = F.gelu
-        self.activation_dropout = nn.Dropout(p=dropout)
-        self.fc1 = mpu.ColumnParallelLinear(embed_dim, 4
-                * embed_dim, gather_output=False,
-                init_method=init_method, skip_bias_add=False)
-        self.fc2 = mpu.RowParallelLinear(4 * embed_dim,
-                embed_dim, input_is_parallel=True,
-                init_method=init_method, skip_bias_add=False)
-        self.final_layer_norm = FusedLayerNorm(embed_dim)
-
-    def forward(
-        self,
-        x,
-        encoder_padding_mask=None,
-        attn_mask=None,
-        ):
-        """
-        Args:
-            x: input to the layer of shape (seq_len, batch, embed_dim)
-            encoder_padding_mask: binary ByteTensor of shape
-                (batch, seq_len) where padding elements are indicated by 1.
-            attn_mask: binary tensor of shape (tgt_len, src_len),
-                where tgt_len is the length of output and src_len is the
-                length of input, though here both are equal to seq_len.
-        Returns:
-            encoded output of shape (seq_len, batch, embed_dim)
-        """
-
-        if attn_mask is not None:
-            attn_mask = attn_mask.masked_fill(attn_mask.to(torch.bool),
-                    -1e8)
-        residual = x
-        x = self.self_attn_layer_norm(x)
-        (x, weights) = self.self_attn(query=x, key=x, value=x,
-                key_padding_mask=encoder_padding_mask,
-                attn_mask=attn_mask)
-        x = self.attn_dropout(x)
-        x = x + residual
-        residual = x
-        x = self.final_layer_norm(x)
-        x, _ = self.fc1(x)
-        x = self.activation_fn(x)
-        x = self.activation_dropout(x)
-        x, _ = self.fc2(x)
-        x = self.attn_dropout(x)
-        x = x + residual
-        return x
-
-class DecoderLayer(MegatronModule):
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        init_method=init.xavier_uniform_,
-        ):
-
-        super(DecoderLayer, self).__init__()
-        self.self_attn = MultiheadAttention(
-            embed_dim,
-            num_heads,
-            dropout=dropout,
-            bias=bias,
-            cross_attention=False,
-            init_method=init_method,
-            )
-        self.self_attn_layer_norm = FusedLayerNorm(embed_dim)
-        self.encoder_attn = MultiheadAttention(
-            embed_dim,
-            num_heads,
-            dropout=dropout,
-            bias=bias,
-            cross_attention=True,
-            init_method=init_method,
-            )
-        self.encoder_attn_layer_norm = FusedLayerNorm(embed_dim)
-        self.dropout = nn.Dropout(p=dropout)
-        self.activation_fn = F.gelu
-        self.activation_dropout = nn.Dropout(p=dropout)
-        self.fc1 = mpu.ColumnParallelLinear(embed_dim, 4
-                * embed_dim, gather_output=False,
-                init_method=init_method, skip_bias_add=False)
-        self.fc2 = mpu.RowParallelLinear(4 * embed_dim,
-                embed_dim, input_is_parallel=True,
-                init_method=init_method, skip_bias_add=False)
-        self.final_layer_norm = FusedLayerNorm(embed_dim)
-
-    def forward(
-        self,
-        x,
-        encoder_out=None,
-        encoder_padding_mask=None,
-        self_attn_mask=None,
-        self_attn_padding_mask=None,
-        ):
-        """
-        Args:
-            x: input to decoder layer of shape (seq_len, batch, embed_dim)
-            encoder_out: output from the encoder
-            encoder_padding_mask: binary ByteTensor of shape
-                (batch, seq_len) where padding elements are indicated by 1
-            self_attn_mask: binary tensor of shape (tgt_len, src_len),
-                where tgt_lent is the length of output and src_len is the
-                length of input, though here both are equal to seq_len.
-            self_attn_padding_mask: binary ByteTensor of shape
-                (batch, seq_len) where padding elements are indicated by 1.
-        Returns:
-            encoded output of shape (seq_len, batch, embed_dim)
-        """
-
-        residual = x
-        x = self.self_attn_layer_norm(x)
-
-        # Self-Attention block
-
-        (x, weights) = self.self_attn(query=x, key=x, value=x,
-                key_padding_mask=self_attn_padding_mask,
-                attn_mask=self_attn_mask)
-        x = self.dropout(x)
-        x = x + residual
-
-        # Cross-Attention block
-        if encoder_out is not None:
-            residual = x
-            x = self.encoder_attn_layer_norm(x)
-            (x, attn) = self.encoder_attn(query=x, key=encoder_out,
-                    value=encoder_out,
-                    key_padding_mask=encoder_padding_mask)
-            x = self.dropout(x)
-            x = x + residual
-        residual = x
-        x = self.final_layer_norm(x)
-
-        # Fully-connected block
-        x, _ = self.fc1(x)
-        x = self.activation_fn(x)
-        x = self.activation_dropout(x)
-        x, _ = self.fc2(x)
-        x = self.dropout(x)
-        x = x + residual
-        return x
-
-class ParallelTransformerEncoder(MegatronModule):
-
-    def __init__(
-        self,
-        num_layers,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        init_method=init.xavier_uniform_,
-        ):
-
-        super(ParallelTransformerEncoder, self).__init__()
-        self.layers = nn.ModuleList([])
-        self.num_layers = num_layers
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.attn_dropout = dropout
-        self.bias = bias
-        self.init_method = init_method
-        self.layers.extend([self.build_encoder_layer() for i in
-                           range(self.num_layers)])
-        self.norm = FusedLayerNorm(self.embed_dim)
-
-    def build_encoder_layer(self):
-        layer = EncoderLayer(self.embed_dim, self.num_heads,
-                             dropout=self.attn_dropout, bias=self.bias,
-                             init_method=self.init_method)
-        return layer
-
-    def forward(
-        self,
-        src,
-        mask=None,
-        src_key_padding_mask=None,
-        ):
-        """Pass the input through the encoder layers in turn.
-        Args:
-            src: the sequence to the encoder (required).
-            mask: the mask for the src sequence (optional).
-            src_key_padding_mask: the mask for the src keys per batch (optional).
-        Returns:
-            encoded output of shape (src_len, batch, embed_dim)
-        """
-
-        output = src
-        for mod in self.layers:
-            output = mod(output, attn_mask=mask,
-                         encoder_padding_mask=src_key_padding_mask)
-        output = self.norm(output)
-        return output
-
-class ParallelTransformerDecoder(MegatronModule):
-
-    def __init__(
-        self,
-        num_layers,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        init_method=init.xavier_uniform_,
-        ):
-
-        super(ParallelTransformerDecoder, self).__init__()
-        self.layers = nn.ModuleList([])
-        self.num_layers = num_layers
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.attn_dropout = dropout
-        self.bias = bias
-        self.init_method = init_method
-        self.layers.extend([self.build_decoder_layer() for i in
-                           range(self.num_layers)])
-        self.norm = FusedLayerNorm(self.embed_dim)
-
-    def build_decoder_layer(self):
-        layer = DecoderLayer(self.embed_dim, self.num_heads,
-                             dropout=self.attn_dropout, bias=self.bias,
-                             init_method=self.init_method)
-        return layer
-
-    def forward(
-        self,
-        tgt,
-        memory,
-        tgt_mask=None,
-        tgt_key_padding_mask=None,
-        memory_key_padding_mask=None,
-        ):
-        """Pass the inputs (and mask) through the decoder layer in turn.
-        Args:
-            tgt: the sequence to the decoder (required).
-            memory: the sequence from the last layer of the encoder (required).
-            tgt_mask: the mask for the tgt sequence (optional).
-            tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
-            memory_key_padding_mask: the mask for the memory keys per batch (optional).
-        Returns:
-            decoded output of shape (tgt_len, batch, embed_dim)
-        """
-
-        output = tgt
-        for mod in self.layers:
-            output = mod(output, encoder_out=memory,
-                         encoder_padding_mask=memory_key_padding_mask,
-                         self_attn_mask=tgt_mask,
-                         self_attn_padding_mask=tgt_key_padding_mask)
-        output = self.norm(output)
-        return output
-
+from .megatron_bart_enc_dec import ParallelTransformerDecoder, ParallelTransformerEncoder
 
 # Model parameters
 DEFAULT_D_MODEL = 256
@@ -442,6 +30,7 @@ DEFAULT_NUM_HEADS = 8
 DEFAULT_D_FEEDFORWARD = 4 * DEFAULT_D_MODEL
 DEFAULT_MAX_SEQ_LEN = 512
 DEFAULT_DROPOUT = 0.0
+
 
 @dataclass
 class MegatronBARTSchedConfig(SchedConfig):
@@ -453,6 +42,7 @@ class MegatronBARTSchedConfig(SchedConfig):
     monitor: Optional[str] = 'loss'
     reduce_on_plateau: Optional[bool] = False
 
+
 @dataclass
 class MegatronBARTOptimConfig(OptimConfig):
     name: str = 'adam'
@@ -461,8 +51,9 @@ class MegatronBARTOptimConfig(OptimConfig):
     weight_decay: float = 0.0
     sched: Optional[SchedConfig] = MegatronBARTSchedConfig()
 
+
 @dataclass
-class MegatronBARTConfig():
+class MegatronBARTConfig(ModelConfig):
     name: str = 'MegatronBART'
     decode_sampler: DecodeSamplerConfig = DecodeSamplerConfig()
     d_model: int = DEFAULT_D_MODEL
@@ -473,7 +64,11 @@ class MegatronBARTConfig():
     dropout: float = DEFAULT_DROPOUT
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
+    train_ds: DatasetConfig = MoleculeCsvDatasetConfig()
+    validation_ds: Optional[DatasetConfig] = MoleculeCsvDatasetConfig()
+    test_ds: Optional[DatasetConfig] = MoleculeCsvDatasetConfig()
     optim: Optional[OptimConfig] = MegatronBARTOptimConfig()
+
 
 class MegatronBART(MegatronModule):
 
@@ -711,7 +306,8 @@ class MegatronBART(MegatronModule):
         perp = torch.pow(log_probs.exp(), exp)
         return perp.mean().item()
 
-    def _calc_char_acc(self, batch_input, model_output):
+    @staticmethod
+    def _calc_char_acc(batch_input, model_output):
         token_ids = batch_input['target']
         target_mask = batch_input['target_pad_mask']
         token_output = model_output['token_output']
@@ -809,7 +405,8 @@ class MegatronBART(MegatronModule):
         encs = torch.stack(encs)
         return encs
 
-    def _generate_square_subsequent_mask(self, sz):
+    @staticmethod
+    def _generate_square_subsequent_mask(sz):
         """ 
         Method copied from Pytorch nn.Transformer.
         Generate a square mask for the sequence. The masked positions are filled with float('-inf').

@@ -55,10 +55,10 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeDataset
-from nemo.collections.chem.tokenizer import MolEncTokenizer, REGEX, DEFAULT_CHEM_TOKEN_START
+from nemo.collections.chem.data import MoleculeCsvDataset
+from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
-from nemo.collections.chem.models import MegatronBART
+from .megatron_bart_base import MegatronBART
 # from megatron.data.samplers import DistributedBatchSampler
 # from torch.utils.data.distributed import DistributedSampler
 
@@ -67,7 +67,7 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-        
+
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
@@ -85,6 +85,7 @@ class MegaMolBARTModel(ModelPT):
 
         _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded
         super().__init__(cfg=cfg.model, trainer=trainer)
+
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
         # Load model
@@ -104,13 +105,14 @@ class MegaMolBARTModel(ModelPT):
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.setup_optimization(cfg.model.optim)
 
+    @staticmethod
     def _update_megatron_args(
-        self,
         micro_batch_size: int = 1,
         tensor_model_parallel_size: int = 1,
         scaled_masked_softmax_fusion: bool = False,
         bias_gelu_fusion: bool = False,
         bias_dropout_fusion: bool = False):
+
         def extra_args_provider(parser):
             parser.set_defaults(micro_batch_size=micro_batch_size)
             parser.set_defaults(tensor_model_parallel_size=tensor_model_parallel_size)
@@ -121,7 +123,8 @@ class MegaMolBARTModel(ModelPT):
 
         return extra_args_provider
 
-    def _get_megatron_vocab_file(self) -> str:
+    @staticmethod
+    def _get_megatron_vocab_file() -> str:
         """Generate fake Megatron vocab file with required tokens"""
         fake_vocab_contents = '\n'.join(['[CLS]', '[SEP]', '[PAD]', '[MASK]'])
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as fh:
@@ -207,7 +210,7 @@ class MegaMolBARTModel(ModelPT):
         logging.info(f"Checkpoint loaded from from {filename}")
 
     def restore_weights(self, restore_path: str) -> None:
-        """Restores module/model's weights.
+        """Restores module/model's weights for Megatron model
            For model parallel checkpoints the directory structure
            should be restore_path/mp_rank_0X/model_optim_rng.pt
 
@@ -228,22 +231,22 @@ class MegaMolBARTModel(ModelPT):
         else:
             logging.error(f'restore_path: {restore_path} must be a file or directory.')
 
-    def setup_tokenizer(self, cfg: DictConfig) -> MolEncTokenizer:
-        tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=cfg.vocab_path, 
-                                                    regex=cfg.regex,
-                                                    chem_tokens_start_idx=cfg.chem_tokens_start_idx)
+    @staticmethod
+    def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
+        tokenizer = MolEncTokenizer.from_vocab_file(**cfg)
         return tokenizer
 
-    def setup_sampler(self, tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
+    @staticmethod
+    def setup_sampler(tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
         return DecodeSampler(tokenizer, cfg.model.max_seq_len)
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
         logging.info('Loading training data')
-        self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config, split_name='train')
+        self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config)
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         logging.info('Loading validation data')
-        self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config, split_name='val')
+        self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
         # Instantiate Torchmetric for each val dataloader
         if self._validation_dl is not None:
             for dataloader_idx in range(len(self._validation_dl)):
@@ -260,7 +263,7 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
-        self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config, split_name='test')
+        self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config)
         # instantiate Torchmetric for each test dataloader
         if self._test_dl is not None:
             for dataloader_idx in range(len(self._test_dl)):
@@ -275,50 +278,26 @@ class MegaMolBARTModel(ModelPT):
                         GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
                     )
 
-    def _split_dataset_paths_for_ddp(self, filepath):
-        # Get all file paths
-        if os.path.isdir(filepath):
-            dataset_paths = [os.path.join(filepath, x) for x in sorted(os.listdir(filepath))]
-        else:
-            filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # Replace '(', '[', '<' and '_OP_' with '{'
-            filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # Replace ')', ']', '>' and '_CL_' with '}'
-            dataset_paths = list(braceexpand.braceexpand(filepath))
-        dataset_paths = np.array(dataset_paths)
-        num_dataset_paths = len(dataset_paths)
-
-        # Split for data parallel
-        if dist.is_initialized():
-            world_size = dist.get_world_size()
-            if world_size > num_dataset_paths:
-                logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
-            rank = dist.get_rank()
-        else:
-            world_size = 1
-            rank = 0
-        num_chunks = min(num_dataset_paths, world_size)
-        split_dataset_paths = np.array_split(dataset_paths, num_chunks)
-        index = rank % len(split_dataset_paths)
-        dataset_paths = split_dataset_paths[index]          
-        return dataset_paths
-
-    def _setup_dataset_from_config(self, cfg: DictConfig, split_name: str):
-        dataset_paths = self._split_dataset_paths_for_ddp(cfg.filepath)
+    @staticmethod
+    def _setup_dataset_from_config(cfg: DictConfig):
+        cfg = dict(cfg)
+        filepath = cfg.pop('filepath', None)
+        dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
 
         datasets = []
         for path in dataset_paths:
-            data = MoleculeDataset(path, split=split_name, zinc=cfg.zinc)
+            data = MoleculeCsvDataset(path, **cfg)
             datasets.append(data)
 
         if len(datasets) == 1:
             datasets = datasets[0]
         else:
             datasets = pt_data.ConcatDataset(datasets)
-
         return datasets
 
-    def setup_dataloader_from_config(self, cfg: DictConfig, split_name: str):
-        dataset = self._setup_dataset_from_config(cfg, split_name)
+    def setup_dataloader_from_config(self, cfg: DictConfig):
+        dataset = self._setup_dataset_from_config(cfg)
 
         # TODO setup distributed sampler when data loading is improved
         if cfg.shuffle:
@@ -336,7 +315,8 @@ class MegaMolBARTModel(ModelPT):
 
         return dataloader
 
-    def _check_seq_len(self, tokens: List[List[str]], mask: List[List[int]], max_seq_len: int):
+    @staticmethod
+    def _check_seq_len(tokens: List[List[str]], mask: List[List[int]], max_seq_len: int):
         """ Warn user and shorten sequence if the tokens are too long, otherwise return original
 
         Args:
@@ -455,7 +435,8 @@ class MegaMolBARTModel(ModelPT):
                 'invalid_smiles': invalid_smiles,
                 'log': tensorboard_logs}
 
-    def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
+    @staticmethod
+    def validation_epoch_end(outputs: List[Dict]) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
@@ -469,3 +450,36 @@ class MegaMolBARTModel(ModelPT):
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
+
+
+def expand_dataset_paths(filepath: str) -> List[str]:
+    """Expand dataset paths from braces"""
+    # TODO this should go in a Nemo fileutils module or similar
+    filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # Replace '(', '[', '<' and '_OP_' with '{'
+    filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # Replace ')', ']', '>' and '_CL_' with '}'
+    dataset_paths = list(braceexpand.braceexpand(filepath))
+    return dataset_paths
+
+def shard_dataset_paths_for_ddp(self, dataset_paths):
+    """Shard dataset paths for ddp"""
+    dataset_paths = np.array(dataset_paths)
+    num_dataset_paths = len(dataset_paths)
+
+    # Split for data parallel
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+        if world_size > num_dataset_paths:
+            logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
+        rank = dist.get_rank()
+        logging.info(f'Torch distributed is initialized with world size {world_size} and rank {rank}.')
+    else:
+        world_size = 1
+        rank = 0
+        logging.info(f'Torch distributed is not initialized.')
+
+    num_chunks = min(num_dataset_paths, world_size)
+    split_dataset_paths = np.array_split(dataset_paths, num_chunks)
+    index = rank % num_chunks
+    logging.info(f'Selected dataset paths {split_dataset_paths} and index {index}')
+    dataset_paths = split_dataset_paths[index]          
+    return dataset_paths
