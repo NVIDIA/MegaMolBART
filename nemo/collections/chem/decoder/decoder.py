@@ -6,9 +6,9 @@ from rdkit import Chem, RDLogger
 from dataclasses import dataclass
 from nemo.collections.chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
 
-# @dataclass
-# class DecodeSamplerConfig():
-#     max_seq_len: int = DEFAULT_MAX_SEQ_LEN
+@dataclass
+class DecodeSamplerConfig():
+    max_seq_len: int = DEFAULT_MAX_SEQ_LEN
 
 class DecodeSampler:
     def __init__(

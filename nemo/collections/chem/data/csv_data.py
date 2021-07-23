@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 from rdkit import Chem
 
-# from dataclasses import dataclass
+from dataclasses import dataclass
 from pysmilesutils.augment import SMILESAugmenter
 
 # from megatron import mpu, get_args
@@ -17,9 +17,9 @@ from pysmilesutils.augment import SMILESAugmenter
 # from nemo.collections.chem.parts.util import DEFAULT_CHEM_TOKEN_START, DEFAULT_VOCAB_PATH, DEFAULT_MAX_SEQ_LEN, REGEX
 # from nemo.collections.chem.tokenizer.tokenizer import load_tokenizer
 
-# @dataclass
-# class MoleculeDatasetConfig():
-#     zinc: bool = False
+@dataclass
+class MoleculeDatasetConfig():
+    zinc: bool = False
 
 class MoleculeDataset(Dataset):
     """Simple Molecule dataset that reads from a single DataFrame."""

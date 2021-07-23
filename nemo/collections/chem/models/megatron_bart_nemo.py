@@ -83,7 +83,7 @@ class MegaMolBARTModel(ModelPT):
         self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
         self._vocab_size = len(self.tokenizer)
 
-        _ = self.setup_megatron(cfg) # Megatron initilization -- must be done before superclass init and model loaded
+        _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded
         super().__init__(cfg=cfg.model, trainer=trainer)
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
@@ -230,8 +230,8 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_tokenizer(self, cfg: DictConfig) -> MolEncTokenizer:
         tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=cfg.vocab_path, 
-                                                    regex=REGEX, # TODO fix this
-                                                    chem_tokens_start_idx=DEFAULT_CHEM_TOKEN_START)
+                                                    regex=cfg.regex,
+                                                    chem_tokens_start_idx=cfg.chem_tokens_start_idx)
         return tokenizer
 
     def setup_sampler(self, tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
