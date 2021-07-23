@@ -15,10 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-sys.path.insert(0, '/workspace') # TODO remove this
-sys.path.insert(0, '/code/NeMo') # TODO remove this
-
 import os
 from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
@@ -28,6 +24,7 @@ import braceexpand
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
+from dataclasses import dataclass
 
 import torch
 import torch.distributed as dist
@@ -57,78 +54,55 @@ from megatron.mpu import (
     set_pipeline_model_parallel_rank,
     set_pipeline_model_parallel_world_size,
 )
+
+from nemo.collections.chem.data import MoleculeDataset
+from nemo.collections.chem.tokenizer import MolEncTokenizer, REGEX, DEFAULT_CHEM_TOKEN_START
+from nemo.collections.chem.decoder import DecodeSampler
+from nemo.collections.chem.models import MegatronBART
 # from megatron.data.samplers import DistributedBatchSampler
 # from torch.utils.data.distributed import DistributedSampler
-from nemo.collections.nlp.parts.nlp_overrides import NLPDDPPlugin
-
-# TODO simplify imports
-from nemo.collections.chem.tokenizer.tokenizer import MolEncTokenizer
-from nemo.collections.chem.data.csv_data import MoleculeDataset
-from nemo.collections.chem.decoder.decoder import DecodeSampler
-from nemo.collections.chem.parts.util import REGEX, DEFAULT_VOCAB_PATH, DEFAULT_CHEM_TOKEN_START #,DEFAULT_MAX_SEQ_LEN #, DEFAULT_VOCAB_PATH, DEFAULT_CHEM_TOKEN_START, REGEX
-from nemo.collections.chem.models.megatron_bart import MegatronBART
 
 __all__ = ["MegaMolBARTModel"]
 
-from IPython import embed
-class MegaMolBARTModel(ModelPT):
-    # @property
-    # def input_types(self) -> Optional[Dict[str, NeuralType]]:
-    #     return {
-    #         "input_ids": NeuralType(('B', 'T'), ChannelType()),
-    #         "attention_mask": NeuralType(('B', 'T'), MaskType(), optional=True),
-    #         "decoder_input_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
-    #         "labels": NeuralType(('B', 'T'), ChannelType(), optional=True),
-    #     }
 
-    # @property
-    # def output_types(self) -> Optional[Dict[str, NeuralType]]:
-    #     return {
-    #         "loss": NeuralType((), LossType()),
-    #         "decoder_hidden_states": NeuralType(("B", "T"), ChannelType(), optional=True),
-    #         "encoder_hidden_states": NeuralType(("B", "T"), ChannelType(), optional=True),
-    #     }
-
+class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
         
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
-        self._hidden_size = cfg.model.hidden_size
+        self._hidden_size = cfg.model.d_model
         self.max_seq_len = cfg.model.max_seq_len
 
-        self.has_megatron_encoder = True
-        # self.restore_megatron_encoder_weights = True if cfg.model.checkpoint_file else False
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
         self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus if trainer is not None else 1
 
-        if not os.path.exists(cfg.model.tokenizer.vocab_file):
-            raise ValueError(f'Vocab file not found at {cfg.model.tokenizer.vocab_file}')
-        self.tokenizer = self.setup_tokenizer(cfg.model.tokenizer)
+        if not os.path.exists(cfg.tokenizer.vocab_path):
+            raise ValueError(f'Vocab file not found at {cfg.tokenizer.vocab_path}')
+        self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
         self._vocab_size = len(self.tokenizer)
 
-        # Megatron initilization -- must be done before superclass init and model loaded
-        _ = self.setup_megatron(cfg)
+        _ = self.setup_megatron(cfg) # Megatron initilization -- must be done before superclass init and model loaded
         super().__init__(cfg=cfg.model, trainer=trainer)
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
-        # load model
+        # Load model
         sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
         self.model = MegatronBART( 
                                 sampler,
                                 pad_token_idx,
                                 self._vocab_size,
-                                cfg.model.hidden_size,
+                                cfg.model.d_model,
                                 cfg.model.num_layers,
-                                cfg.model.num_attention_heads,
-                                cfg.model.feedforward,
+                                cfg.model.num_heads,
+                                cfg.model.d_feedforward,
                                 cfg.model.max_seq_len,
                                 cfg.model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        self.setup_optimization(cfg.optim)
+        self.setup_optimization(cfg.model.optim)
 
     def _update_megatron_args(
         self,
@@ -156,21 +130,21 @@ class MegaMolBARTModel(ModelPT):
         return vocab_file
 
     def complete_lazy_init(self) -> None:
-        # finish megatron-lm initialization
+        # Finish megatron-lm initialization
         if hasattr(self, "_lazy_init_fn") and self._lazy_init_fn is not None:
             self._lazy_init_fn()
             self._lazy_init_fn = None
 
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
-        # configure globals
-        set_pipeline_model_parallel_rank(0)  # pipeline model parallelism not implemented in NeMo
-        set_pipeline_model_parallel_world_size(1)  # pipeline model parallelism not implemented in NeMo
+        # Configure globals
+        set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not implemented in NeMo
+        set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not implemented in NeMo
 
         # megatron input arguments
         args = {'num_layers': cfg.model.num_layers,
-                'hidden_size': cfg.model.hidden_size,
-                'num_attention_heads': cfg.model.num_attention_heads,
+                'hidden_size': cfg.model.d_model,
+                'num_attention_heads': cfg.model.num_heads,
                 'max_position_embeddings': cfg.model.max_seq_len,
                 'onnx_safe': True,
                 'lazy_mpu_init': True,
@@ -182,8 +156,7 @@ class MegaMolBARTModel(ModelPT):
         if self._model_parallel_size is not None:
             app_state = AppState()
             self._app_state = app_state
-            # must be set for model parallel megatron-lm
-            os.environ["WORLD_SIZE"] = str(app_state.world_size)
+            os.environ["WORLD_SIZE"] = str(app_state.world_size) # Must be set for model parallel megatron-lm
             os.environ["RANK"] = str(self._model_parallel_rank)
             extra_args_provider = self._update_megatron_args(tensor_model_parallel_size=self._model_parallel_size)
         else:
@@ -199,16 +172,14 @@ class MegaMolBARTModel(ModelPT):
             extra_args_provider=extra_args_provider, args_defaults=args, ignore_unknown_args=True
         )
 
-        # read Megatron arguments back
+        # Read Megatron arguments back
         args = get_args()
         logging.info(f'Megatron-lm argparse args: {args}')
 
-        # This loads a fake model from megatron, mostly for the sake of ensuring compatile checkpoint dict
-        # TODO test if needed
+        # This loads a fake model from megatron, mostly for the sake of ensuring compatible checkpoint dict
         _, self._language_model_key = get_language_model(
             attention_mask_func=bert_attention_mask_func, num_tokentypes=2, add_pooler=False
         )
-
         return args
 
     def _load_checkpoint(self, filename: str) -> None:
@@ -227,7 +198,7 @@ class MegaMolBARTModel(ModelPT):
         else:
             logging.warning('Megatron-lm checkpoint version not found. Setting checkpoint_version to 0.')
             set_checkpoint_version(0)
-        # to load from Megatron pretrained checkpoint
+        # To load from Megatron pretrained checkpoint
         if 'model' in state_dict:
             self.language_model.load_state_dict(state_dict['model'][self._language_model_key])
         else:
@@ -244,13 +215,12 @@ class MegaMolBARTModel(ModelPT):
             restore_path (str): restore_path should a file or a directory if using model parallel
         """
         self._restore_path = restore_path
-
         if os.path.isfile(restore_path):
             self._load_checkpoint(restore_path)
         elif os.path.isdir(restore_path):
-            # need model parallel groups to restore model parallel checkpoints
+            # Need model parallel groups to restore model parallel checkpoints
             if model_parallel_is_initialized():
-                model_parallel_rank = torch.distributed.get_rank(group=get_model_parallel_group())
+                model_parallel_rank = dist.get_rank(group=get_model_parallel_group())
                 mp_restore_path = f'{restore_path}/mp_rank_{model_parallel_rank:02d}/model_optim_rng.pt'
                 self._load_checkpoint(mp_restore_path)
             else:
@@ -258,15 +228,10 @@ class MegaMolBARTModel(ModelPT):
         else:
             logging.error(f'restore_path: {restore_path} must be a file or directory.')
 
-    def restore_megatron_encoder_weights(self, restore_path: str):
-        self.restore_weights(restore_path) 
-
     def setup_tokenizer(self, cfg: DictConfig) -> MolEncTokenizer:
-        regex = cfg.get('regex', REGEX)
-        chem_token_start = cfg.get('chem_token_start', DEFAULT_CHEM_TOKEN_START)
-        tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=cfg.vocab_file, 
-                                                    regex=regex, 
-                                                    chem_tokens_start_idx=chem_token_start)
+        tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=cfg.vocab_path, 
+                                                    regex=REGEX, # TODO fix this
+                                                    chem_tokens_start_idx=DEFAULT_CHEM_TOKEN_START)
         return tokenizer
 
     def setup_sampler(self, tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
@@ -279,7 +244,7 @@ class MegaMolBARTModel(ModelPT):
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         logging.info('Loading validation data')
         self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config, split_name='val')
-        # instantiate Torchmetric for each val dataloader
+        # Instantiate Torchmetric for each val dataloader
         if self._validation_dl is not None:
             for dataloader_idx in range(len(self._validation_dl)):
                 if dataloader_idx == 0:
@@ -321,20 +286,19 @@ class MegaMolBARTModel(ModelPT):
         dataset_paths = np.array(dataset_paths)
         num_dataset_paths = len(dataset_paths)
 
-        # split for data parallel
-        if torch.distributed.is_initialized():
-            world_size = torch.distributed.get_world_size()
+        # Split for data parallel
+        if dist.is_initialized():
+            world_size = dist.get_world_size()
             if world_size > num_dataset_paths:
                 logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
-            rank = torch.distributed.get_rank()
+            rank = dist.get_rank()
         else:
             world_size = 1
             rank = 0
         num_chunks = min(num_dataset_paths, world_size)
         split_dataset_paths = np.array_split(dataset_paths, num_chunks)
         index = rank % len(split_dataset_paths)
-        dataset_paths = split_dataset_paths[index]
-            
+        dataset_paths = split_dataset_paths[index]          
         return dataset_paths
 
     def _setup_dataset_from_config(self, cfg: DictConfig, split_name: str):
@@ -349,14 +313,14 @@ class MegaMolBARTModel(ModelPT):
         if len(datasets) == 1:
             datasets = datasets[0]
         else:
-            datasets = torch.utils.data.ConcatDataset(datasets)
+            datasets = pt_data.ConcatDataset(datasets)
 
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig, split_name: str):
         dataset = self._setup_dataset_from_config(cfg, split_name)
 
-        # TODO setup distributed sampler when data loding is improved
+        # TODO setup distributed sampler when data loading is improved
         if cfg.shuffle:
             sampler = pt_data.RandomSampler(dataset)
         else:
@@ -434,8 +398,6 @@ class MegaMolBARTModel(ModelPT):
         app_state = AppState()
         if app_state.model_parallel_size is None:
             self.complete_lazy_init()
-
-        # batch = get_batch(data_iterator)
         outputs = self.model(batch)
         return outputs
 
@@ -498,18 +460,6 @@ class MegaMolBARTModel(ModelPT):
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        # TODO is this needed for ddp?
-        # # if user specifies one validation dataloader, then PTL reverts to giving a list of dictionary instead of a list of list of dictionary
-        # if isinstance(outputs[0], dict):
-        #     outputs = [outputs]
-
-        # loss_list, perplexity_list = [], []
-        # for dataloader_idx, output in enumerate(outputs):
-        #             if dataloader_idx == 0:
-        #                 loss = getattr(self, 'val_loss').compute()
-        #             else:
-        #                 loss = getattr(self, f'val_loss_{dataloader_idx}').compute()
-
         loss = torch.tensor([x['val_loss'] for x in outputs]).mean().item()
         perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
         tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
@@ -519,49 +469,3 @@ class MegaMolBARTModel(ModelPT):
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
-
-
-if __name__ == '__main__':
-    seed = 42
-    pl.seed_everything(seed, workers=True)
-    
-    cfg = OmegaConf.load('/code/NeMo/examples/chem/conf/megamolbart_base.yaml')
-    logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
-    
-
-    # File "nemo/collections/chem/models/megatron_bart_nemo.py", line 539, in <module>
-    #     trainer.fit(model)
-    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 460, in fit
-    #     self._run(model)
-    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 758, in _run
-    #     self.dispatch()
-    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/trainer/trainer.py", line 799, in dispatch
-    #     self.accelerator.start_training(self)
-    # File "/opt/conda/lib/python3.8/site-packages/pytorch_lightning/accelerators/accelerator.py", line 96, in start_training
-    #     self.training_type_plugin.start_training(trainer)
-    # File "/code/NeMo/nemo/collections/nlp/parts/nlp_overrides.py", line 102, in start_training
-    nlpddp = NLPDDPPlugin(num_nodes=cfg.trainer.num_nodes)    
-    trainer = pl.Trainer(plugins=[nlpddp],
-                         **cfg.trainer, 
-                         limit_train_batches=10, 
-                         limit_val_batches=2, 
-                         limit_test_batches=2)
-    
-
-    exp_manager(trainer, cfg.get("exp_manager", None))
-    model = MegaMolBARTModel(cfg, trainer)
-    trainer.fit(model)
-
-
-    # @typecheck.disable_checks()
-    # def test_step(self, batch: Tuple, batch_idx: int) -> torch.Tensor:
-    #     """Lightning calls this inside the test loop with data from the test dataloader."""
-    #     input_ids, input_mask, decoder_input_ids, labels = batch
-    #     sequences = self.generate(input_ids=input_ids)
-    #     return sequences
-
-    # @typecheck.disable_checks()
-    # def test_epoch_end(self, outputs: List[torch.Tensor]) -> Dict[str, List[str]]:
-    #     """Called at the end of test to aggregate outputs and decode them."""
-    #     texts = [self.encoder_tokenizer.ids_to_text(seq) for batch in outputs for seq in batch]
-    #     return {"texts": texts}

@@ -4,9 +4,9 @@ do_testing: False # set to True to run evaluation on test data after training
 
 # TODO how / where to configure data and/or model parallelism? Pull from ENV for clusters?
 trainer:
-  gpus: 1
+  gpus: 2
   num_nodes: 1
-  max_steps: 1e6
+  max_steps: 1000000
   accumulate_grad_batches: 1
   accelerator: ddp
   gradient_clip_val: 0.0
@@ -16,40 +16,22 @@ trainer:
   # amp_level: O1 # O1/O2 for mixed precision
   # precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
 
-# TODO verify that optimizer and scheduler params set
-optim:
-  name: adam
-  lr: 1.0
-  weight_decay: 0.00
-  betas: [0.9, 0.999]
-
-  sched:
-    name: CosineAnnealing
-    warmup_steps: null
-    warmup_ratio: 0.01 # warmup
-    min_lr: 1.0e-5
-    last_epoch: -1
-    max_steps: 110000
-    monitor: loss
-    reduce_on_plateau: false
+tokenizer:
+  vocab_path: /code/NeMo/nemo/collections/chem/parts/megamolbart_vocab.txt
 
 model:
   name: *name
-  pretrained: false
-  checkpoint_file: null # /path/to/my/checkpoint/model_optim_rng.pt
-  hidden_size: 256
-  feedforward: 1024 # 4 * hidden_size
+  d_model: 256 # hidden_size
   num_layers: 4
-  num_attention_heads: 8
+  num_heads: 8
+  d_feedforward: 1024 # 4 * hidden_size
   max_seq_len: 512
   dropout: 0.1
-  data_dir: '/data/zinc_csv_small'
-
-  tokenizer:
-    vocab_file: /code/NeMo/nemo/collections/chem/tokenizer/bart_vocab.txt
+  pretrained: false
+  checkpoint_file: null # /path/to/my/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: "${model.data_dir}/x[000..001].csv"
+    filepath: "/data/zinc_csv_small/x000.csv"
     zinc: true
     pin_memory: true
     batch_size: 8
@@ -60,18 +42,35 @@ model:
 
   validation_ds: ${model.train_ds}
 
+  # TODO verify that optimizer and scheduler params set
+  optim:
+    name: adam
+    lr: 1.0
+    weight_decay: 0.00
+    betas: [0.9, 0.999]
+
+    sched:
+      name: CosineAnnealing
+      warmup_steps: null
+      warmup_ratio: 0.01 # warmup
+      min_lr: 1.0e-5
+      last_epoch: -1
+      max_steps: 110000
+      monitor: loss
+      reduce_on_plateau: false
+
 exp_manager:
   exp_dir: null  # exp_dir for experiment, defaults to "./nemo_experiments"
   name: *name
   create_tensorboard_logger: true
-  create_checkpoint_callback: true
+  create_checkpoint_callback: false # TODO will this disable checkpointing
   resume_ignore_no_checkpoint: true
   resume_if_exists: true
   checkpoint_callback_params:
     always_save_nemo: true
-    save_top_k: 1
+    save_top_k: 5
     mode: max
-  create_wandb_logger: true
-  wandb_logger_kwargs:
-    name: test
-    project: *name
+  create_wandb_logger: false
+  # wandb_logger_kwargs:
+  #   name: test
+  #   project: *name

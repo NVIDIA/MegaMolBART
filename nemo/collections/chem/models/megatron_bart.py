@@ -1,20 +1,26 @@
 # coding=utf-8
 
-try:
-    from megatron.module import MegatronModule # v 1.1.5
-except:
-    from megatron.model.module import MegatronModule
-    
+import math
+from functools import partial
+from typing import Optional, Tuple
 from apex.normalization import FusedLayerNorm
-from megatron import mpu
 from torch.nn import init
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-import math
-from functools import partial
 
+from megatron import mpu
+try:
+    from megatron.module import MegatronModule # v 1.1.5
+except:
+    from megatron.model.module import MegatronModule
 
+# from dataclasses import dataclass
+# from nemo.collections.chem.decoder import DecodeSamplerConfig
+# from nemo.core.config.modelPT import OptimConfig, SchedConfig
+# from nemo.core.config.modelPT import NemoConfig
+
+# TODO refactor model layers and encode/decode into thei rown classes
 class MultiheadAttention(MegatronModule):
 
     def __init__(
@@ -152,7 +158,6 @@ class MultiheadAttention(MegatronModule):
             / self.num_heads
         return (attn, attn_output_weights)
 
-
 class EncoderLayer(MegatronModule):
 
     def __init__(
@@ -222,7 +227,6 @@ class EncoderLayer(MegatronModule):
         x = self.attn_dropout(x)
         x = x + residual
         return x
-
 
 class DecoderLayer(MegatronModule):
 
@@ -320,7 +324,6 @@ class DecoderLayer(MegatronModule):
         x = x + residual
         return x
 
-
 class ParallelTransformerEncoder(MegatronModule):
 
     def __init__(
@@ -372,7 +375,6 @@ class ParallelTransformerEncoder(MegatronModule):
                          encoder_padding_mask=src_key_padding_mask)
         output = self.norm(output)
         return output
-
 
 class ParallelTransformerDecoder(MegatronModule):
 
@@ -433,6 +435,48 @@ class ParallelTransformerDecoder(MegatronModule):
         return output
 
 
+# Model parameters
+DEFAULT_D_MODEL = 256
+DEFAULT_NUM_LAYERS = 4
+DEFAULT_NUM_HEADS = 8
+DEFAULT_D_FEEDFORWARD = 4 * DEFAULT_D_MODEL
+DEFAULT_MAX_SEQ_LEN = 512
+DEFAULT_DROPOUT = 0.0
+
+# @dataclass
+# class MegatronBARTSchedConfig(SchedConfig):
+#     name: str = 'CosineAnnealing'
+#     last_epoch: int = -1
+#     warmup_ratio: Optional[float] = 0.01
+#     min_lr: Optional[float] = 1.0e-5
+#     max_steps: Optional[int] = 110000
+#     monitor: Optional[str] = 'loss'
+#     reduce_on_plateau: Optional[bool] = False
+
+
+# TODO: Refactor to support more optimizers (it pins the optimizer to Adam-like optimizers).
+
+# @dataclass
+# class MegatronBARTOptimConfig(OptimConfig):
+#     name: str = 'adam'
+#     lr: float = 1.0
+#     betas: Tuple[float, float] = (0.9, 0.999)
+#     weight_decay: float = 0.0
+#     sched: Optional[SchedConfig] = MegatronBARTSchedConfig()
+
+# @dataclass
+# class MegatronBARTConfig():
+#     decode_sampler: DecodeSamplerConfig = DecodeSamplerConfig()
+#     d_model: int = DEFAULT_D_MODEL
+#     num_layers: int = DEFAULT_NUM_LAYERS
+#     num_heads: int = DEFAULT_NUM_HEADS
+#     d_feedforward: int = DEFAULT_D_FEEDFORWARD
+#     max_seq_len: int = DEFAULT_MAX_SEQ_LEN
+#     dropout: float = DEFAULT_DROPOUT
+#     pretrained: Optional[bool] = False
+#     checkpoint_file: Optional[str] = None
+#     optim: Optional[OptimConfig] = MegatronBARTOptimConfig()
+
 class MegatronBART(MegatronModule):
 
     def __init__(
@@ -445,7 +489,7 @@ class MegatronBART(MegatronModule):
         num_heads,
         d_feedforward,
         max_seq_len,
-        dropout=0.0,
+        dropout
         ):
 
         super().__init__()

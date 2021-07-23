@@ -4,11 +4,71 @@ import re
 import torch
 import random
 from pathlib import Path
-from nemo.collections.chem.parts.util import (DEFAULT_BEGIN_TOKEN, DEFAULT_END_TOKEN, DEFAULT_PAD_TOKEN, \
-                  DEFAULT_UNK_TOKEN, DEFAULT_MASK_TOKEN, DEFAULT_SEP_TOKEN, \
-                  DEFAULT_MASK_PROB, DEFAULT_SHOW_MASK_TOKEN_PROB, DEFAULT_MASK_SCHEME, \
-                  DEFAULT_SPAN_LAMBDA, DEFAULT_VOCAB_PATH, DEFAULT_CHEM_TOKEN_START, REGEX)
+# from dataclasses import dataclass
+from typing import Optional, List, Tuple, Any
 
+# Defaults
+DEFAULT_MAX_SEQ_LEN = 512
+DEFAULT_CHEM_TOKEN_START = 272
+DEFAULT_BEGIN_TOKEN = "^"
+DEFAULT_END_TOKEN = "&"
+DEFAULT_PAD_TOKEN = "<PAD>"
+DEFAULT_UNK_TOKEN = "?"
+DEFAULT_MASK_TOKEN = "<MASK>"
+DEFAULT_SEP_TOKEN = "<SEP>"
+DEFAULT_MASK_PROB = 0.15
+DEFAULT_SHOW_MASK_TOKEN_PROB = 1.0
+DEFAULT_MASK_SCHEME = "span"
+DEFAULT_SPAN_LAMBDA = 3.0
+REGEX = r"""\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9]"""
+
+# @dataclass
+# class MolEncTokenizerBaseConfig():
+#     vocab: Tuple[str] = ('',)
+#     chem_token_idxs: Tuple[int] = (0,)
+#     prog: Any = ''
+#     begin_token: str = DEFAULT_BEGIN_TOKEN
+#     end_token: str = DEFAULT_END_TOKEN
+#     pad_token: str = DEFAULT_PAD_TOKEN
+#     unk_token: str = DEFAULT_UNK_TOKEN
+#     mask_token: str = DEFAULT_MASK_TOKEN
+#     sep_token: str = DEFAULT_SEP_TOKEN
+#     mask_prob: float = DEFAULT_MASK_PROB
+#     show_mask_token_prob: float = DEFAULT_SHOW_MASK_TOKEN_PROB
+#     mask_scheme: str = DEFAULT_MASK_SCHEME # TODO how to limit to possible options
+#     span_lambda: float = DEFAULT_SPAN_LAMBDA
+
+# @dataclass
+# class MolEncTokenizerFromVocabFileConfig():
+#     vocab_path: str = ''
+#     regex: str = REGEX
+#     chem_tokens_start_idx: int = DEFAULT_CHEM_TOKEN_START
+#     pad_token_idx: int = 0
+#     unk_token_idx: int = 1
+#     begin_token_idx: int = 2
+#     end_token_idx: int = 3
+#     mask_token_idx: int = 4
+#     sep_token_idx: int = 5
+#     mask_prob: float = 0.15
+#     show_mask_token_prob: float = DEFAULT_SHOW_MASK_TOKEN_PROB
+#     mask_scheme: str = DEFAULT_MASK_SCHEME # TODO how to limit to possible options
+#     span_lambda: float = DEFAULT_SPAN_LAMBDA
+
+# @dataclass
+# class MolEncTokenizerFromSmilesConfig():
+#     smiles: Tuple[str] = ('c',)
+#     regex: str = REGEX
+#     extra_tokens: Optional[List[str]] = None
+#     begin_token: str = DEFAULT_BEGIN_TOKEN
+#     end_token: str = DEFAULT_END_TOKEN
+#     pad_token: str = DEFAULT_PAD_TOKEN
+#     unk_token: str = DEFAULT_UNK_TOKEN
+#     mask_token: str = DEFAULT_MASK_TOKEN
+#     sep_token: str = DEFAULT_SEP_TOKEN
+#     mask_prob: float = DEFAULT_MASK_PROB
+#     show_mask_token_prob: float = DEFAULT_SHOW_MASK_TOKEN_PROB
+#     mask_scheme: str = DEFAULT_MASK_SCHEME # TODO how to limit to possible options
+#     span_lambda: float = DEFAULT_SPAN_LAMBDA
 
 class MolEncTokenizer:
     def __init__(
@@ -68,8 +128,8 @@ class MolEncTokenizer:
     @staticmethod
     def from_vocab_file(
         vocab_path,
-        regex,
-        chem_tokens_start_idx,
+        regex=REGEX,
+        chem_tokens_start_idx=DEFAULT_CHEM_TOKEN_START,
         pad_token_idx=0,
         unk_token_idx=1,
         begin_token_idx=2,
@@ -134,7 +194,7 @@ class MolEncTokenizer:
     @staticmethod
     def from_smiles(
         smiles,
-        regex,
+        regex=REGEX,
         extra_tokens=None,
         begin_token=DEFAULT_BEGIN_TOKEN,
         end_token=DEFAULT_END_TOKEN,
@@ -407,6 +467,6 @@ class MolEncTokenizer:
         return padded, masks
 
 
-def load_tokenizer(vocab_path=DEFAULT_VOCAB_PATH, chem_token_start=DEFAULT_CHEM_TOKEN_START, regex=REGEX):
-    tokenizer = MolEncTokenizer.from_vocab_file(vocab_path, regex, chem_token_start)
-    return tokenizer
+# def load_tokenizer(vocab_path=DEFAULT_VOCAB_PATH, chem_token_start=DEFAULT_CHEM_TOKEN_START, regex=REGEX):
+#     tokenizer = MolEncTokenizer.from_vocab_file(vocab_path, regex, chem_token_start)
+#     return tokenizer

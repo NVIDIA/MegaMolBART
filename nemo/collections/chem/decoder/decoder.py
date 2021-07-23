@@ -2,13 +2,19 @@
 
 import torch
 from rdkit import Chem, RDLogger
-from nemo.collections.chem.parts.util import DEFAULT_MAX_SEQ_LEN
+
+from dataclasses import dataclass
+from nemo.collections.chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
+
+# @dataclass
+# class DecodeSamplerConfig():
+#     max_seq_len: int = DEFAULT_MAX_SEQ_LEN
 
 class DecodeSampler:
     def __init__(
         self,
-        tokenizer,
-        max_seq_len=DEFAULT_MAX_SEQ_LEN
+        tokenizer: MolEncTokenizer,
+        max_seq_len: int = DEFAULT_MAX_SEQ_LEN
     ):
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
@@ -22,7 +28,6 @@ class DecodeSampler:
         self.bad_token_ll = -1e5
 
         RDLogger.DisableLog("rdApp.*")
-
 
     def decode(self, decode_fn, batch_size, sampling_alg="greedy", device="cpu", **kwargs):
         """ Sample a molecule from a model by calling the decode function argument
@@ -47,7 +52,6 @@ class DecodeSampler:
             raise ValueError(f"Unknown sampling algorithm {sampling_alg}")
 
         return output
-
 
     def greedy_decode(self, decode_fn, batch_size, device="cpu"):
         """ Sample molecules from the model using greedy search
@@ -107,7 +111,6 @@ class DecodeSampler:
 
         return mol_strs, log_lhs
 
-
     def beam_decode(self, decode_fn, batch_size, device="cpu", k=5):
         """ Sample molecules from the model using beam search
 
@@ -164,7 +167,6 @@ class DecodeSampler:
         sorted_mols, sorted_lls = self._sort_beams(new_mol_strs, new_log_lhs)
 
         return sorted_mols, sorted_lls
-
 
     def _update_beams_(self, i, decode_fn, token_ids_list, pad_mask_list, lls_list):
         """ Update beam tokens and pad mask in-place using a single decode step
