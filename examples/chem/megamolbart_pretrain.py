@@ -6,6 +6,7 @@ from typing import Optional, Union, Any, List
 from copy import deepcopy
 from dataclasses import dataclass
 from omegaconf import DictConfig, OmegaConf
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 
@@ -33,8 +34,10 @@ from IPython import embed
 
 if __name__ == '__main__':
 
-    config_path = '/code/NeMo/examples/chem/conf/megamolbart_pretrain.yaml'
     seed = 42
+    ngpus = torch.cuda.device_count()
+    config_path = f'/code/NeMo/examples/chem/conf/megamolbart_pretrain.yaml'
+
     pl.seed_everything(seed, workers=True)
 
     # Load configuration
@@ -43,14 +46,17 @@ if __name__ == '__main__':
     default_cfg = OmegaConf.structured(MegaMolBARTTrain())
     cfg = update_model_config(default_cfg, cfg)
 
-    cfg.trainer['limit_train_batches'] = 10
-    cfg.trainer['limit_val_batches'] = 2
-    cfg.trainer['limit_test_batches'] = 2
-    OmegaConf.set_struct(cfg, True)
+    cfg.trainer['gpus'] = ngpus
+    logging.info(f'Using {ngpus} GPUs ...')
 
+    if ngpus == 2:
+        cfg.trainer['limit_train_batches'] = 10
+        cfg.trainer['limit_val_batches'] = 2
+        cfg.trainer['limit_test_batches'] = 2
+    OmegaConf.set_struct(cfg, True)
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
 
-    # Make a dict because typechecking DDPPlugin is a nightmare
+    # Make a dict from trainer to add DDPPlugin because struct typechecking is a nightmare
     trainer_config = dict(deepcopy(cfg.trainer))
     trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
     trainer = pl.Trainer(**trainer_config)

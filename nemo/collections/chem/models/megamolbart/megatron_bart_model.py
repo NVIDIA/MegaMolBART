@@ -55,7 +55,7 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeCsvDataset
+from nemo.collections.chem.data import MoleculeCsvDataset, MoleculeCsvStreamingDataset, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
@@ -67,7 +67,6 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
@@ -76,7 +75,6 @@ class MegaMolBARTModel(ModelPT):
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
-        self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus if trainer is not None else 1
 
         if not os.path.exists(cfg.tokenizer.vocab_path):
             raise ValueError(f'Vocab file not found at {cfg.tokenizer.vocab_path}')
@@ -287,7 +285,8 @@ class MegaMolBARTModel(ModelPT):
 
         datasets = []
         for path in dataset_paths:
-            data = MoleculeCsvDataset(path, **cfg)
+            # TODO make dataset class selectable
+            data = MoleculeCsvStreamingDataset(path, **cfg)
             datasets.append(data)
 
         if len(datasets) == 1:
@@ -338,6 +337,9 @@ class MegaMolBARTModel(ModelPT):
     def collate_fn(self, batch):
         """ Used by DataLoader to concatenate/collate inputs."""
 
+        # TODO remove
+        logging.info(f'From collate function, the batch contains {len(batch)} items and is {batch}')
+
         encoder_smiles = [x['encoder_smiles'][0] for x in batch]
         decoder_smiles = [x['decoder_smiles'][0] for x in batch]
         enc_token_output = self.tokenizer.tokenize(encoder_smiles, mask=True, pad=True)
@@ -348,18 +350,22 @@ class MegaMolBARTModel(ModelPT):
         dec_tokens = dec_token_output['original_tokens']
         dec_mask = dec_token_output['original_pad_masks']
 
-        max_seq_len = self.max_seq_len
-        (enc_tokens, enc_mask) = self._check_seq_len(enc_tokens, enc_mask, max_seq_len)
-        (dec_tokens, dec_mask) = self._check_seq_len(dec_tokens, dec_mask, max_seq_len)
+        (enc_tokens, enc_mask) = self._check_seq_len(enc_tokens, enc_mask, self.max_seq_len)
+        (dec_tokens, dec_mask) = self._check_seq_len(dec_tokens, dec_mask, self.max_seq_len)
 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
         dec_token_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
+
         enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1)
         enc_pad_mask = torch.tensor(enc_mask,
                                     dtype=torch.int64).transpose(0, 1)
         dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
         dec_pad_mask = torch.tensor(dec_mask,
                                     dtype=torch.int64).transpose(0, 1)
+
+        # TODO remove
+        # shape_list = [x.shape for x in [enc_token_ids, enc_pad_mask, dec_token_ids, dec_pad_mask]]
+        # logging.info(f'From collate function {shape_list}')
 
         collate_output = {
             'encoder_input': enc_token_ids,
@@ -377,11 +383,20 @@ class MegaMolBARTModel(ModelPT):
     def forward(self, batch):
         app_state = AppState()
         if app_state.model_parallel_size is None:
+            logging.info('Completing lazy initialization of Megatron framework...')
             self.complete_lazy_init()
+
+        # TODO remove me
+        world_size = self.trainer.world_size
+        global_rank = self.trainer.global_rank
+        node_rank = self.trainer.node_rank
+        local_rank = self.trainer.local_rank
+        logging.info(f'On world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}, the batch is {batch}')
+
         outputs = self.model(batch)
         return outputs
 
-    def training_step(self, batch: Tuple, batch_idx: int) -> Dict:
+    def training_step(self, batch: dict, batch_idx: int) -> Dict:
         """
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
@@ -411,7 +426,7 @@ class MegaMolBARTModel(ModelPT):
     #                 global_step=self.global_step,
     #             )
 
-    def validation_step(self, batch: Tuple, batch_idx: int) -> Dict:
+    def validation_step(self, batch: dict, batch_idx: int) -> Dict:
         """
         Lightning calls this inside the validation loop with the data from the validation dataloader
         passed in as `batch`. 
@@ -451,35 +466,3 @@ class MegaMolBARTModel(ModelPT):
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
 
-
-def expand_dataset_paths(filepath: str) -> List[str]:
-    """Expand dataset paths from braces"""
-    # TODO this should go in a Nemo fileutils module or similar
-    filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # Replace '(', '[', '<' and '_OP_' with '{'
-    filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # Replace ')', ']', '>' and '_CL_' with '}'
-    dataset_paths = list(braceexpand.braceexpand(filepath))
-    return dataset_paths
-
-def shard_dataset_paths_for_ddp(self, dataset_paths):
-    """Shard dataset paths for ddp"""
-    dataset_paths = np.array(dataset_paths)
-    num_dataset_paths = len(dataset_paths)
-
-    # Split for data parallel
-    if dist.is_initialized():
-        world_size = dist.get_world_size()
-        if world_size > num_dataset_paths:
-            logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
-        rank = dist.get_rank()
-        logging.info(f'Torch distributed is initialized with world size {world_size} and rank {rank}.')
-    else:
-        world_size = 1
-        rank = 0
-        logging.info(f'Torch distributed is not initialized.')
-
-    num_chunks = min(num_dataset_paths, world_size)
-    split_dataset_paths = np.array_split(dataset_paths, num_chunks)
-    index = rank % num_chunks
-    logging.info(f'Selected dataset paths {split_dataset_paths} and index {index}')
-    dataset_paths = split_dataset_paths[index]          
-    return dataset_paths

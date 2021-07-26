@@ -6,10 +6,12 @@ import numpy as np
 import pandas as pd
 import csv
 from typing import Optional
+import linecache
 
 import torch
 from torch.utils.data import Dataset
 from nemo.core.classes.dataset import DatasetConfig
+from nemo.utils import logging
 from rdkit import Chem
 
 from dataclasses import dataclass
@@ -21,6 +23,13 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     molecule_column_name: str = 'smiles'
     num_samples: Optional[int] = None
+
+
+# @dataclass
+# class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
+#     filepath: str = 'data.csv'
+#     molecule_column_name: str = 'smiles'
+#     num_samples: Optional[int] = None
 
 
 @dataclass
@@ -65,14 +74,72 @@ class MoleculeCsvDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         mol = self.mols[idx]
-        try:
-            enc_smi = self.aug(mol)
-        except:
-            enc_smi = mol
-        try:
-            dec_smi = self.aug(mol)
-        except:
-            dec_smi = mol
+        # try:
+        #     enc_smi = self.aug(mol)
+        # except:
+        #     enc_smi = mol
+        # try:
+        #     dec_smi = self.aug(mol)
+        # except:
+        #     dec_smi = mol
+
+        # TODO add back augmenting
+        logging.info(f'USING UNMODIFIED MOLECULES')
+        enc_smi, dec_smi = mol, mol
+        output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
+        return output
+
+
+class MoleculeCsvStreamingDataset(Dataset):
+    """Molecule dataset that streams from pre-split CSV files."""
+    def __init__(self, filepath: str, molecule_column_name: str, num_samples: int = None, **kwargs):
+        """
+        Args:
+            filepath (str): path to dataset file with compounds contained as smiles
+        """
+        self.aug = SMILESAugmenter()
+
+        if not os.path.exists(filepath):
+            assert FileNotFoundError(f"Could not find CSV file {filepath}")
+        else:
+            self.filepath = filepath
+
+        # Figure out column and length
+        self.index = 0
+        mols = []
+        with open(filepath, 'r') as fh:
+            for row,line in enumerate(fh):
+                if row == 0:
+                    data = line.strip().split(',')
+                    assert molecule_column_name in data
+                    self.index = data.index(molecule_column_name)
+        
+        self.len = row # length of data is equivalent to row - 1
+        if num_samples:
+            if num_samples > 0:
+                self.len = min(num_samples, self.len)
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        
+        line = linecache.getline(self.filepath, idx+2)
+        mol = line.strip().split(',')[self.index]
+        # try:
+        #     enc_smi = self.aug(mol)
+        # except:
+        #     enc_smi = mol
+        # try:
+        #     dec_smi = self.aug(mol)
+        # except:
+        #     dec_smi = mol
+        
+        # TODO add back augmenting
+        logging.info(f'USING UNMODIFIED MOLECULES')
+        enc_smi, dec_smi = mol, mol
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
         return output
 

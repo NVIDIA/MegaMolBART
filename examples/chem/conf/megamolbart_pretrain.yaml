@@ -3,7 +3,7 @@ do_training: true # set to false to preprocess data
 do_testing: false # set to true to run evaluation on test data after training
 
 trainer:
-  gpus: 2
+  gpus: null
   num_nodes: 1
   max_steps: 1000000
   accumulate_grad_batches: 1
@@ -11,7 +11,7 @@ trainer:
   gradient_clip_val: 1.0
   checkpoint_callback: false # use exp_manager
   logger: false
-  val_check_interval: 10000
+  val_check_interval: 2 #10000
   # amp_level: O1 # O1/O2 for mixed precision
   # precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
 
@@ -31,17 +31,17 @@ model:
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /result/zinc_csv/train/x[000..146].csv
+    filepath: /result/zinc_csv/train/x000.csv #x[000..146].csv
     pin_memory: false 
-    batch_size: 512 # Ross 128
+    batch_size: 8 # Ross 128
     shuffle: false
     drop_last: false
     num_workers: 8
 
   validation_ds:
-    filepath: /result/zinc_csv/val/x[000..146].csv
+    filepath: /result/zinc_csv/val/x000.csv #x[000..146].csv
     pin_memory: false 
-    batch_size: 512 # Ross 128
+    batch_size: 8 # Ross 128
     shuffle: false
     drop_last: false
     num_workers: 8
@@ -55,8 +55,8 @@ model:
     weight_decay: 0.0
     sched:
       name: CosineAnnealing
-      warmup_steps: null # Ross 8000
-      warmup_ratio: 0.01 # Ross null
+      warmup_steps: 8000 # Ross 8000
+      warmup_ratio: null # Original MegaMolBART 0.01
       min_lr: 1.0e-5
       last_epoch: -1
       max_steps: 320000 #110000

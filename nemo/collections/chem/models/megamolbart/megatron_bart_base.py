@@ -36,9 +36,9 @@ DEFAULT_DROPOUT = 0.0
 class MegatronBARTSchedConfig(SchedConfig):
     name: str = 'CosineAnnealing'
     last_epoch: int = -1
-    warmup_ratio: Optional[float] = 0.01
+    warmup_steps: Optional[int] = 8000
     min_lr: Optional[float] = 1.0e-5
-    max_steps: Optional[int] = 110000
+    max_steps: Optional[int] = 110000 # TODO this is not in original paper
     monitor: Optional[str] = 'loss'
     reduce_on_plateau: Optional[bool] = False
 
@@ -46,7 +46,7 @@ class MegatronBARTSchedConfig(SchedConfig):
 @dataclass
 class MegatronBARTOptimConfig(OptimConfig):
     name: str = 'adam'
-    lr: float = 1.0
+    lr: float = 1.0 # TODO this is what was in the paper, I believe it is wrong
     betas: Tuple[float, float] = (0.9, 0.999)
     weight_decay: float = 0.0
     sched: Optional[SchedConfig] = MegatronBARTSchedConfig()
