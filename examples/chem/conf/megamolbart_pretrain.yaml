@@ -36,7 +36,7 @@ model:
     batch_size: 512 # Ross 128
     shuffle: false
     drop_last: false
-    num_workers: 20
+    num_workers: 8
 
   validation_ds:
     filepath: /data/val/x000.csv #x[000..146].csv
@@ -44,7 +44,7 @@ model:
     batch_size: 512 # Ross 128
     shuffle: false
     drop_last: false
-    num_workers: 20
+    num_workers: 8
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:

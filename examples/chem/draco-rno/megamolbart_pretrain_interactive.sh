@@ -14,7 +14,7 @@ STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
 PROJECT="MegaMolBART" # exp_manager and wandb
 EXPNAME="Draco-RNO" # exp_manager and wandb
 
-WANDB=$(grep API_KEY ~/.config/wandb | cut -d' ' -f3)
+WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
@@ -37,8 +37,8 @@ echo "*******STARTING********" \
 && wandb login ${WANDB} \
 && echo "Starting training" \
 && cd ${CODE_MOUNT} \
-&& export PYTHONPATH=/code:'$PYTHONPATH' \
-&& python ${CODE_MOUNT}/examples/chem/megamolbart_pretrain.py \
+&& export PYTHONPATH=${CODE_MOUNT}:'$PYTHONPATH' \
+&& conda run -n base python ${CODE_MOUNT}/examples/chem/megamolbart_pretrain.py \
     --config-path=${CODE_MOUNT}/examples/chem/conf \
     --config-name=megamolbart_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
