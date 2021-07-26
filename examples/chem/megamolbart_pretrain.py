@@ -1,7 +1,3 @@
-import sys
-sys.path.insert(0, '/workspace') # TODO remove this
-sys.path.insert(0, '/code/NeMo') # TODO remove this
-
 from typing import Optional, Union, Any, List
 from copy import deepcopy
 from dataclasses import dataclass

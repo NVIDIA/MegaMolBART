@@ -25,15 +25,15 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     num_samples: Optional[int] = None
 
 
-# @dataclass
-# class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
-#     filepath: str = 'data.csv'
-#     molecule_column_name: str = 'smiles'
-#     num_samples: Optional[int] = None
+@dataclass
+class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
+    filepath: str = 'data.csv'
+    zinc: bool = False
+    num_samples: Optional[int] = None
 
 
 @dataclass
-class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
+class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     zinc: bool = False
     num_samples: Optional[int] = None
@@ -74,18 +74,15 @@ class MoleculeCsvDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         mol = self.mols[idx]
-        # try:
-        #     enc_smi = self.aug(mol)
-        # except:
-        #     enc_smi = mol
-        # try:
-        #     dec_smi = self.aug(mol)
-        # except:
-        #     dec_smi = mol
+        try:
+            enc_smi = self.aug(mol)
+        except:
+            enc_smi = mol
+        try:
+            dec_smi = self.aug(mol)
+        except:
+            dec_smi = mol
 
-        # TODO add back augmenting
-        logging.info(f'USING UNMODIFIED MOLECULES')
-        enc_smi, dec_smi = mol, mol
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
         return output
 
@@ -128,25 +125,21 @@ class MoleculeCsvStreamingDataset(Dataset):
         
         line = linecache.getline(self.filepath, idx+2)
         mol = line.strip().split(',')[self.index]
-        # try:
-        #     enc_smi = self.aug(mol)
-        # except:
-        #     enc_smi = mol
-        # try:
-        #     dec_smi = self.aug(mol)
-        # except:
-        #     dec_smi = mol
-        
-        # TODO add back augmenting
-        logging.info(f'USING UNMODIFIED MOLECULES')
-        enc_smi, dec_smi = mol, mol
+        try:
+            enc_smi = self.aug(mol)
+        except:
+            enc_smi = mol
+        try:
+            dec_smi = self.aug(mol)
+        except:
+            dec_smi = mol
+
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
         return output
 
 
 class MoleculeCsvCombinedDataset(Dataset):
     """Molecule dataset that reads train/val/testfrom a single DataFrame."""
-    # TODO remove pandas
 
     def __init__(self, filepath: str, split: str, zinc: bool = False, **kwargs):
         """
@@ -156,7 +149,7 @@ class MoleculeCsvCombinedDataset(Dataset):
         assert split in ['train', 'val', 'test']
         self.aug = SMILESAugmenter()
 
-        # TODO: switch to line by line parsing
+    # TODO remove pandas
         df = pd.read_csv(filepath)
         col = 'smiles' if zinc else 'canonical_smiles'
         mask = df['set'] == split

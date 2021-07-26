@@ -37,11 +37,13 @@ echo "*******STARTING********" \
 && wandb login ${WANDB} \
 && echo "Starting training" \
 && cd ${CODE_MOUNT} \
-&& python examples/chem/draco-rno/megamolbart_pretrain_interactive.sh \
+&& export PYTHONPATH=/code:'$PYTHONPATH' \
+&& python examples/chem/megamolbart_pretrain.py \
     --config-path=examples/chem/conf \
     --config-name=megatron_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
+    tokenizer.vocab_path=/code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \

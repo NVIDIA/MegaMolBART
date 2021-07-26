@@ -338,7 +338,7 @@ class MegaMolBARTModel(ModelPT):
         """ Used by DataLoader to concatenate/collate inputs."""
 
         # TODO remove
-        logging.info(f'From collate function, the batch contains {len(batch)} items and is {batch}')
+        # logging.info(f'From collate function, the batch contains {len(batch)} items and is {batch}')
 
         encoder_smiles = [x['encoder_smiles'][0] for x in batch]
         decoder_smiles = [x['decoder_smiles'][0] for x in batch]
@@ -386,12 +386,12 @@ class MegaMolBARTModel(ModelPT):
             logging.info('Completing lazy initialization of Megatron framework...')
             self.complete_lazy_init()
 
-        # TODO remove me
-        world_size = self.trainer.world_size
-        global_rank = self.trainer.global_rank
-        node_rank = self.trainer.node_rank
-        local_rank = self.trainer.local_rank
-        logging.info(f'On world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}, the batch is {batch}')
+        # TODO remove
+        # world_size = self.trainer.world_size
+        # global_rank = self.trainer.global_rank
+        # node_rank = self.trainer.node_rank
+        # local_rank = self.trainer.local_rank
+        # logging.info(f'On world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}, the batch is {batch}')
 
         outputs = self.model(batch)
         return outputs
