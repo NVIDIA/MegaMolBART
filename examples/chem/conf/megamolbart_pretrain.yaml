@@ -31,7 +31,7 @@ model:
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /result/zinc_csv/train/x000.csv #x[000..146].csv
+    filepath: /data/train/x000.csv #x[000..146].csv
     pin_memory: false 
     batch_size: 512 # Ross 128
     shuffle: false
@@ -39,7 +39,7 @@ model:
     num_workers: 20
 
   validation_ds:
-    filepath: /result/zinc_csv/val/x000.csv #x[000..146].csv
+    filepath: /data/val/x000.csv #x[000..146].csv
     pin_memory: false 
     batch_size: 512 # Ross 128
     shuffle: false

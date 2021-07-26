@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     seed = 42
     ngpus = torch.cuda.device_count()
-    config_path = f'/code/NeMo/examples/chem/conf/megamolbart_pretrain.yaml'
+    config_path = f'/code/examples/chem/conf/megamolbart_pretrain.yaml'
 
     pl.seed_everything(seed, workers=True)
 
