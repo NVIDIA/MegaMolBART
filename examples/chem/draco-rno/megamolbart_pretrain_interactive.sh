@@ -9,7 +9,7 @@ SLURM_JOB_NUM_NODES=1
 SLURM_GPUS_PER_NODE=2
 WANDB=$(grep API_KEY ~/.config/wandb | cut -d' ' -f3)
 
-CONTAINER="nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
 PROJECT="MegaMolBART" # exp_manager and wandb
 EXPNAME="Draco-RNO" # exp_manager and wandb
@@ -39,15 +39,15 @@ echo "*******STARTING********" \
 && echo "Starting training" \
 && cd ${CODE_MOUNT} \
 && python examples/chem/draco-rno/megamolbart_pretrain_interactive.sh \
-	--config-path=examples/chem/conf \
-	--config-name=megatron_pretrain \
-	trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
-	trainer.gpus=${SLURM_GPUS_PER_NODE} \
-	model.train_ds.filepath='/data/train/x_OP_000..001_CL_.csv \
-	model.validation_ds.filepath='/data/val/x_OP_000..001_CL_.csv \
-	exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
-	exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-	exp_manager.exp_dir=${OUTPUT_MOUNT}
+    --config-path=examples/chem/conf \
+    --config-name=megatron_pretrain \
+    trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
+    trainer.gpus=${SLURM_GPUS_PER_NODE} \
+    model.train_ds.filepath='/data/train/x_OP_000..001_CL_.csv \
+    model.validation_ds.filepath='/data/val/x_OP_000..001_CL_.csv \
+    exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
+    exp_manager.wandb_logger_kwargs.project=${PROJECT} \
+    exp_manager.exp_dir=${OUTPUT_MOUNT}
 EOF
 
 srun \
