@@ -39,7 +39,7 @@ mkdir -p ${RESULTS_DIR}
 DATA_MOUNT=/data
 CODE_MOUNT=/code
 OUTPUT_MOUNT=/output
-WORKDIR=${CODE_DIR}
+WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 OUTFILE="${OUTPUT_DIR}/slurm-%j-%n.out"
 ERRFILE="${OUTPUT_DIR}/error-%j-%n.out"
@@ -56,8 +56,8 @@ echo "*******STARTING********" \
     --config-name=megatron_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
-    model.train_ds.filepath=/data/train/x_OP_000..001_CL_.csv \
-    model.validation_ds.filepath=/data/val/x_OP_000..001_CL_.csv \
+    model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
+    model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     exp_manager.exp_dir=${OUTPUT_MOUNT}
@@ -70,6 +70,7 @@ srun \
 --container-workdir ${WORKDIR} \
 --export PYTHONPATH="$PYTHONPATH"':$PYTHONPATH' \
 --export RUN_COMMAND="$RUN_COMMAND" \
+--export WANDB="$WANDB" \
 --output $OUTFILE \
 --error $ERRFILE \
 bash -c "${RUN_COMMAND}"
