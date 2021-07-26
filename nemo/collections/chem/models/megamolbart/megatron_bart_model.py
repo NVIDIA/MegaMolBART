@@ -130,6 +130,7 @@ class MegaMolBARTModel(ModelPT):
     def complete_lazy_init(self) -> None:
         # Finish megatron-lm initialization
         if hasattr(self, "_lazy_init_fn") and self._lazy_init_fn is not None:
+            logging.info('Completing lazy initialization of Megatron framework...')
             self._lazy_init_fn()
             self._lazy_init_fn = None
 
@@ -375,7 +376,6 @@ class MegaMolBARTModel(ModelPT):
     def forward(self, batch):
         app_state = AppState()
         if app_state.model_parallel_size is None:
-            logging.info('Completing lazy initialization of Megatron framework...')
             self.complete_lazy_init()
 
         # TODO remove
