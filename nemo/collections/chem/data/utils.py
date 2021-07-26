@@ -1,3 +1,4 @@
+from typing import List
 import re
 import braceexpand
 import numpy as np

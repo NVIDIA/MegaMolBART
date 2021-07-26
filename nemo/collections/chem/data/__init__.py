@@ -5,4 +5,4 @@ from .csv_data import (MoleculeCsvDatasetConfig,
                        MoleculeCsvStreamingDataset, 
                        MoleculeCsvCombinedDataset)
 
-from utils import expand_dataset_paths, shard_dataset_paths_for_ddp
+from .utils import expand_dataset_paths, shard_dataset_paths_for_ddp
