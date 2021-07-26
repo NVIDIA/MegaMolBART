@@ -63,8 +63,6 @@ srun \
 --ntasks ${SLURM_GPUS_PER_NODE} \
 --ntasks-per-node ${SLURM_GPUS_PER_NODE} \
 --gpus-per-node ${SLURM_GPUS_PER_NODE} \
---output $OUTFILE \
---error $ERRFILE \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \

@@ -11,102 +11,76 @@
 #SBATCH --ntasks-per-node=16    # n tasks per machine (one task per gpu) <required>
 #SBATCH --overcommit            # Needed for pytorch
 #SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
+
 set -x
-SLURM_ACCOUNT_DIR='ent_aiapps'  # <Make sure you dont override SLURM_ACCOUNT!>
-USERID='eharper'
-# << CHANGE THIS >>
-CONTAINER="gitlab-master.nvidia.com/eharper/nemo_containers:nmt_megatron"
 
-# Hyperparams
-TOKENS_IN_BATCH=1000
-LEARNING_RATE=1e-5
-STEPS=150000
-WARMUP_STEPS=15000
+##### Interactive training / development on a cluster with SLURM
+# Tested only with single node, single GPU configuration
 
-# Directories for manifests, data, etc.
-# << CHANGE THIS >>
-EXPNAME="megatron_en_de_3.9B" # exp_manager and wandb
-PROJECT="nemo_nmt_enc_dec" # exp_manager and wandb
+### CONFIG ###
+SLURM_JOB_NUM_NODES=1
+SLURM_GPUS_PER_NODE=2
+WANDB=$(grep API_KEY ~/.config/wandb | cut -d' ' -f3)
 
-DATA="/gpfs/fs1/projects/ent_aiapps/users/eharper/data/68792"
-PREPROC_DATA="/gpfs/fs1/projects/ent_aiapps/users/eharper/data/preproc_${EXPNAME}_tokens_${TOKENS_IN_BATCH}"
-RESULTS_DIR="/gpfs/fs1/projects/${SLURM_ACCOUNT_DIR}/users/${USERID}/results/${EXPNAME}_tokens_${TOKENS_IN_BATCH}_nodes_${SLURM_JOB_NUM_NODES}"
-CODE="/gpfs/fs1/projects/${SLURM_ACCOUNT_DIR}/users/${USERID}/repos/NeMo"
-CHECKPOINT_FILE="/gpfs/fs1/projects/ent_aiapps/users/eharper/megatron/3.9b_bert_no_rng"
+CONTAINER="nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
+STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
+PROJECT="MegaMolBART" # exp_manager and wandb
+EXPNAME="Draco-RNO" # exp_manager and wandb
 
-mkdir -p ${RESULTS_DIR}
-mkdir -p ${PREPROC_DATA}
+DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
+CODE_DIR=${STORAGE_DIR}/code/NeMo
+OUTPUT_DIR=${STORAGE_DIR}/nemo
 
-WANDB="c88d7d4769d01a5d43c5369f7f6759c2c02a78f2"
-MOUNTS="--container-mounts=$CODE:/code,$RESULTS_DIR:/results,$DATA:/data,$PREPROC_DATA:/preproc_data,$CHECKPOINT_FILE:/checkpoint_file"
-
-# Necessary Exports
-export HYDRA_FULL_ERROR=1
-# Make results dir
+### 
+RESULTS_DIR="${OUTPUT_DIR}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}"
+mkdir -p ${OUTPUT_DIR}
 mkdir -p ${RESULTS_DIR}
 
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out"
-ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
+DATA_MOUNT=/data
+CODE_MOUNT=/code
+OUTPUT_MOUNT=/output
+WORKDIR=${CODE_DIR}
+MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
+OUTFILE="${OUTPUT_DIR}/slurm-%j-%n.out"
+ERRFILE="${OUTPUT_DIR}/error-%j-%n.out"
 
-
-read -r -d '' cmd <<EOF
+#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+read -r -d '' RUN_COMMAND <<EOF
 echo "*******STARTING********" \
 && echo "---------------" \
 && wandb login ${WANDB} \
 && echo "Starting training" \
-&& CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 python /code/examples/nlp/machine_translation/enc_dec_nmt.py \
-	--config-path=conf \
-	--config-name=megatron \
-	do_training=true \
+&& cd ${CODE_MOUNT} \
+&& python examples/chem/draco-rno/megamolbart_pretrain_interactive.sh \
+	--config-path=examples/chem/conf \
+	--config-name=megatron_pretrain \
 	trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
 	trainer.gpus=${SLURM_GPUS_PER_NODE} \
-	~trainer.max_epochs \
-	+trainer.max_steps=${STEPS} \
-	+trainer.val_check_interval=1000 \
-	+trainer.accumulate_grad_batches=1 \
-	model.src_language=en \
-	model.tgt_language=de \
-	model.beam_size=3 \
-	model.max_generation_delta=3 \
-	model.label_smoothing=0.1 \
-	model.preproc_out_dir=/preproc_data \
-	model.encoder.checkpoint_file=/checkpoint_file \
-	model.encoder.hidden_size=2560 \
-	model.encoder.num_attention_heads=40 \
-	model.encoder.num_layers=48 \
-	model.encoder.max_position_embeddings=512 \
-	model.decoder_tokenizer.library=yttm \
-	model.decoder_tokenizer.vocab_size=32000 \
-	model.decoder.library=nemo \
-	model.decoder.pre_ln=True \
-	model.decoder.num_layers=2 \
-	model.decoder.hidden_size=3072 \
-	model.decoder.inner_size=3072 \
-	model.decoder.num_attention_heads=32 \
-	model.decoder.ffn_dropout=0.1 \
-	model.train_ds.use_tarred_dataset=true \
-	model.train_ds.shard_strategy=replicate \
-	model.train_ds.src_file_name=/data/train.clean.en.shuffled \
-	model.train_ds.tgt_file_name=/data/train.clean.de.shuffled \
-	model.train_ds.tokens_in_batch=${TOKENS_IN_BATCH} \
-	model.validation_ds.src_file_name=[/data/wmt14-en-de.src,/data/wmt13-en-de.src] \
-	model.validation_ds.tgt_file_name=[/data/wmt14-en-de.ref,/data/wmt13-en-de.ref] \
-	~model.test_ds \
-	model.optim.lr=$LEARNING_RATE  \
-	model.optim.sched.name=WarmupAnnealing \
-	+model.optim.sched.warmup_steps=$WARMUP_STEPS \
-	~model.optim.sched.warmup_ratio \
-	+exp_manager.create_wandb_logger=True \
-	+exp_manager.wandb_logger_kwargs.name=${EXPNAME}_tokens_${TOKENS_IN_BATCH}_nodes_${SLURM_JOB_NUM_NODES} \
-	+exp_manager.wandb_logger_kwargs.project=$PROJECT \
-	+exp_manager.explicit_log_dir=/results \
-	+exp_manager.resume_if_exists=True \
-	+exp_manager.resume_ignore_no_checkpoint=True \
-	+exp_manager.create_checkpoint_callback=True \
-	+exp_manager.checkpoint_callback_params.monitor=val_sacreBLEU \
-	+exp_manager.checkpoint_callback_params.save_top_k=1 \
-	+exp_manager.checkpoint_callback_params.mode=max
+	model.train_ds.filepath='/data/train/x_OP_000..001_CL_.csv \
+	model.validation_ds.filepath='/data/val/x_OP_000..001_CL_.csv \
+	exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
+	exp_manager.wandb_logger_kwargs.project=${PROJECT} \
+	exp_manager.exp_dir=${OUTPUT_MOUNT}
 EOF
 
-srun -o $OUTFILE -e $ERRFILE --container-image="$CONTAINER" $MOUNTS bash -c "${cmd}"
+srun -o $OUTFILE -e $ERRFILE --container-image="$CONTAINER" $MOUNTS bash #-c "${RUN_COMMAND}"
+
+srun \
+--pty \
+--account ent_joc_model_mpnn_pyt \
+--partition interactive \
+--export=PYTHONPATH="$PYTHONPATH"':$PYTHONPATH' \
+--export=RUN_COMMAND="$RUN_COMMAND" \
+--mpi=pmix \
+--nodes ${SLURM_JOB_NUM_NODES} \
+--ntasks ${SLURM_GPUS_PER_NODE} \
+--ntasks-per-node ${SLURM_GPUS_PER_NODE} \
+--gpus-per-node ${SLURM_GPUS_PER_NODE} \
+--output $OUTFILE \
+--error $ERRFILE \
+--container-image ${CONTAINER} \
+--container-mounts ${MOUNTS} \
+--container-workdir ${WORKDIR} \
+bash
+
 set +x
