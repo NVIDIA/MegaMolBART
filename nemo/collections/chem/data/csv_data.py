@@ -22,6 +22,7 @@ from pysmilesutils.augment import SMILESAugmenter
 class MoleculeCsvDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     molecule_column_name: str = 'smiles'
+    num_workers: int = 0
     num_samples: Optional[int] = None
 
 
@@ -29,6 +30,7 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
 class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     zinc: bool = False
+    num_workers: int = 0
     num_samples: Optional[int] = None
 
 
@@ -36,6 +38,7 @@ class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
 class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     zinc: bool = False
+    num_workers: int = 0
     num_samples: Optional[int] = None
 
 class MoleculeCsvDataset(Dataset):

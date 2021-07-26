@@ -59,8 +59,6 @@ from nemo.collections.chem.data import MoleculeCsvDataset, MoleculeCsvStreamingD
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
-# from megatron.data.samplers import DistributedBatchSampler
-# from torch.utils.data.distributed import DistributedSampler
 
 __all__ = ["MegaMolBARTModel"]
 
@@ -81,9 +79,8 @@ class MegaMolBARTModel(ModelPT):
         self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
         self._vocab_size = len(self.tokenizer)
 
-        _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded
+        _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg.model, trainer=trainer)
-
         self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
 
         # Load model
@@ -285,8 +282,7 @@ class MegaMolBARTModel(ModelPT):
 
         datasets = []
         for path in dataset_paths:
-            # TODO make dataset class selectable
-            data = MoleculeCsvStreamingDataset(path, **cfg)
+            data = MoleculeCsvStreamingDataset(path, **cfg) # TODO make dataset class selectable
             datasets.append(data)
 
         if len(datasets) == 1:
@@ -297,17 +293,13 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
         dataset = self._setup_dataset_from_config(cfg)
-
-        # TODO setup distributed sampler when data loading is improved
-        if cfg.shuffle:
-            sampler = pt_data.RandomSampler(dataset)
-        else:
-            sampler = pt_data.SequentialSampler(dataset)
+        sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
+        sampler = sampler_name(dataset)
 
         dataloader = pt_data.DataLoader(dataset,
             batch_size=cfg.batch_size,
             sampler=sampler,
-            num_workers=cfg.get("num_workers", 1),
+            num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
             collate_fn=self.collate_fn)

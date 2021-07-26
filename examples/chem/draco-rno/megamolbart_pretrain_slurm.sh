@@ -47,14 +47,16 @@ echo "*******STARTING********" \
 && echo "---------------" \
 && wandb login ${WANDB} \
 && echo "Starting training" \
-&& cd ${CODE_MOUNT} \
-&& export PYTHONPATH=${CODE_MOUNT}:'$PYTHONPATH' \
-&& conda run -n base python ${CODE_MOUNT}/examples/chem/megamolbart_pretrain.py \
-    --config-path=${CODE_MOUNT}/examples/chem/conf \
+export CODE_BASE_DIR=/code && \
+export PYTHONPATH=${CODE_BASE_DIR}:$PYTHONPATH && \
+export HYDRA_FULL_ERROR=1 && \
+cd ${CODE_BASE_DIR}/examples/chem && \
+python megamolbart_pretrain.py \
+    --config-path=conf \
     --config-name=megamolbart_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
-    tokenizer.vocab_path=/code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
+    tokenizer.vocab_path=${CODE_BASE_DIR}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \

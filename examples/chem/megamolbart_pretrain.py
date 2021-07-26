@@ -8,16 +8,17 @@ from pytorch_lightning.plugins import DDPPlugin
 
 from nemo.utils import logging
 from nemo.utils.config_utils import update_model_config
+from nemo.core.config import hydra_runner
 from nemo.core.config.modelPT import NemoConfig
 from nemo.core.config.pytorch_lightning import TrainerConfig
 from nemo.utils.exp_manager import exp_manager, ExpManagerConfig
 
 from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
 from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
-from nemo.collections.chem.decoder import DecodeSamplerConfig
+from nemo.collections.chem.decoder import DecodeSamplerConfig  
 
 @dataclass
-class MegaMolBARTTrain(NemoConfig):
+class MegaMolBARTPretrain(NemoConfig):
     name: Optional[str] = 'MegaMolBART'
     do_training: bool = False
     do_testing: bool = False
@@ -25,40 +26,46 @@ class MegaMolBARTTrain(NemoConfig):
     tokenizer: MolEncTokenizerFromVocabFileConfig = MolEncTokenizerFromVocabFileConfig()
     trainer: Optional[TrainerConfig] = TrainerConfig()
     exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MegaMolBART', files_to_copy=[])
+    random_seed: Optional[int] = None
+
+@hydra_runner(config_path="conf", config_name="megamolbart_pretrain")
+def main(cfg: MegaMolBARTPretrain) -> None:
+    # Load configuration
+    default_cfg = OmegaConf.structured(MegaMolBARTPretrain())
+    OmegaConf.set_struct(cfg, False)
+    cfg = update_model_config(default_cfg, cfg)
+    cfg.trainer['limit_val_batches'] = 2
+    # cfg.trainer['limit_train_batches'] = 10
+    # cfg.trainer['limit_test_batches'] = 2
+    OmegaConf.set_struct(cfg, True)
+    logging.info("\n\n************** Experiment configuration ***********")
+    logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
+
+    # Make dict from trainer to add DDPPlugin because typechecking it is a nightmare
+    trainer_config = dict(deepcopy(cfg.trainer))
+    trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
+
+    if cfg.random_seed:
+        pl.seed_everything(cfg.random_seed, workers=True)
+    trainer = pl.Trainer(**trainer_config)
+    exp_manager(trainer, cfg.get("exp_manager", None))
+    
+    model = MegaMolBARTModel(cfg, trainer)
+    logging.info("\n\n************** Model parameters and their sizes ***********")
+    for name, param in model.named_parameters():
+        logging.info(f'{name}: {param.size()}')
+    logging.info("***********************************************************\n\n")
+
+    if cfg.do_training:
+        trainer.fit(model)
+
+    if cfg.do_testing:
+        trainer.test(model)
 
 from IPython import embed
 
 if __name__ == '__main__':
 
-    seed = 42
-    ngpus = torch.cuda.device_count()
-    config_path = f'/code/examples/chem/conf/megamolbart_pretrain.yaml'
-
-    pl.seed_everything(seed, workers=True)
-
-    # Load configuration
-    cfg = OmegaConf.load(config_path) 
-    OmegaConf.set_struct(cfg, False)
-    default_cfg = OmegaConf.structured(MegaMolBARTTrain())
-    cfg = update_model_config(default_cfg, cfg)
-
-    cfg.trainer['gpus'] = ngpus
-    logging.info(f'Using {ngpus} GPUs ...')
-
-    if ngpus == 2:
-        cfg.trainer['limit_train_batches'] = 10
-        cfg.trainer['limit_val_batches'] = 2
-        cfg.trainer['limit_test_batches'] = 2
-    OmegaConf.set_struct(cfg, True)
-    logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
-
-    # Make a dict from trainer to add DDPPlugin because struct typechecking is a nightmare
-    trainer_config = dict(deepcopy(cfg.trainer))
-    trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
-    trainer = pl.Trainer(**trainer_config)
-
-    exp_manager(trainer, cfg.get("exp_manager", None))
-    model = MegaMolBARTModel(cfg, trainer)
-    trainer.fit(model)
+    main()
 
     

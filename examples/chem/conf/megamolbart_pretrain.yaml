@@ -1,6 +1,7 @@
 name: &name MegaMolBART
 do_training: true # set to false to preprocess data
 do_testing: false # set to true to run evaluation on test data after training
+random_seed: 42
 
 trainer:
   gpus: null
@@ -36,7 +37,7 @@ model:
     batch_size: 512 # Ross 128
     shuffle: false
     drop_last: false
-    num_workers: 8
+    num_workers: 0
 
   validation_ds:
     filepath: /data/val/x000.csv #x[000..146].csv
@@ -44,7 +45,7 @@ model:
     batch_size: 512 # Ross 128
     shuffle: false
     drop_last: false
-    num_workers: 8
+    num_workers: 0
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:
