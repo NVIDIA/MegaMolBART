@@ -50,8 +50,6 @@ echo "*******STARTING********" \
 	exp_manager.exp_dir=${OUTPUT_MOUNT}
 EOF
 
-srun -o $OUTFILE -e $ERRFILE --container-image="$CONTAINER" $MOUNTS bash #-c "${RUN_COMMAND}"
-
 srun \
 --pty \
 --account ent_joc_model_mpnn_pyt \
@@ -66,6 +64,6 @@ srun \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
-bash
+bash #-c "${RUN_COMMAND}"
 
 set +x

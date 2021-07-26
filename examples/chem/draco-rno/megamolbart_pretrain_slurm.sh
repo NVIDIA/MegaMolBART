@@ -81,6 +81,7 @@ srun \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
+--no-container-entrypoint \
 bash
 
 set +x
