@@ -49,12 +49,12 @@ echo "*******STARTING********" \
 && echo "Starting training" \
 && cd ${CODE_MOUNT} \
 && export PYTHONPATH=/code:'$PYTHONPATH' \
-&& python examples/chem/megamolbart_pretrain.py \
-    --config-path=examples/chem/conf \
-    --config-name=megatron_pretrain \
+&& python ${CODE_MOUNT}/examples/chem/megamolbart_pretrain.py \
+    --config-path=${CODE_MOUNT}/examples/chem/conf \
+    --config-name=megamolbart_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
-	tokenizer.vocab_path=/code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
+    tokenizer.vocab_path=/code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \

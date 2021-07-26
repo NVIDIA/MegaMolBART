@@ -38,9 +38,9 @@ echo "*******STARTING********" \
 && echo "Starting training" \
 && cd ${CODE_MOUNT} \
 && export PYTHONPATH=/code:'$PYTHONPATH' \
-&& python examples/chem/megamolbart_pretrain.py \
-    --config-path=examples/chem/conf \
-    --config-name=megatron_pretrain \
+&& python ${CODE_MOUNT}/examples/chem/megamolbart_pretrain.py \
+    --config-path=${CODE_MOUNT}/examples/chem/conf \
+    --config-name=megamolbart_pretrain \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=/code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
