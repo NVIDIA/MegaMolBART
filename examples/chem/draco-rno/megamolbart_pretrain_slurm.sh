@@ -15,9 +15,6 @@
 
 set -x
 
-##### Interactive training / development on a cluster with SLURM
-# Tested only with single node, single GPU configuration
-
 ### CONFIG ###
 DATA_FILES_SELECTED="x_OP_000..050_CL_.csv"
 
@@ -41,8 +38,8 @@ CODE_MOUNT=/code
 OUTPUT_MOUNT=/output
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-OUTFILE="${OUTPUT_DIR}/slurm-%j-%n.out"
-ERRFILE="${OUTPUT_DIR}/error-%j-%n.out"
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out"
+ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 read -r -d '' RUN_COMMAND <<EOF
