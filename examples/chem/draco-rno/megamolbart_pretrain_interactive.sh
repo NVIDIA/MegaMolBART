@@ -49,7 +49,7 @@ echo "*******STARTING********" \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}
+    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 EOF
 
 srun \
