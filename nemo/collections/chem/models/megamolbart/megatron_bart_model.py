@@ -286,8 +286,7 @@ class MegaMolBARTModel(ModelPT):
                         GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
                     )
 
-    @staticmethod
-    def _setup_dataset_from_config(cfg: DictConfig):
+    def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg)
         filepath = cfg.pop('filepath', None)
         dataset_paths = expand_dataset_paths(filepath)
@@ -307,7 +306,7 @@ class MegaMolBARTModel(ModelPT):
                     datasets=datasets,
                     sampling_technique='temperature',
                     sampling_temperature=1,
-                    sampling_probabilities=null,
+                    sampling_probabilities=[1.0],
                     global_rank=self.global_rank,
                     world_size=self.world_size,
                 )
