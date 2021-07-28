@@ -331,7 +331,12 @@ class MegaMolBARTModel(ModelPT):
         """ Used by DataLoader to concatenate/collate inputs."""
 
         # TODO remove
-        # logging.info(f'From collate function, the batch contains {len(batch)} items and is {batch}')
+        world_size = self.trainer.world_size
+        global_rank = self.trainer.global_rank
+        node_rank = self.trainer.node_rank
+        local_rank = self.trainer.local_rank
+        logging.info(f'Batch contains {len(batch)} items and is {batch}')
+        logging.info(f'World size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}')
 
         encoder_smiles = [x['encoder_smiles'][0] for x in batch]
         decoder_smiles = [x['decoder_smiles'][0] for x in batch]
@@ -355,10 +360,6 @@ class MegaMolBARTModel(ModelPT):
         dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
         dec_pad_mask = torch.tensor(dec_mask,
                                     dtype=torch.int64).transpose(0, 1)
-
-        # TODO remove
-        # shape_list = [x.shape for x in [enc_token_ids, enc_pad_mask, dec_token_ids, dec_pad_mask]]
-        # logging.info(f'From collate function {shape_list}')
 
         collate_output = {
             'encoder_input': enc_token_ids,
