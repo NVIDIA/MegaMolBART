@@ -9,7 +9,8 @@ from typing import Optional
 import linecache
 
 import torch
-from torch.utils.data import Dataset
+# from torch.utils.data import Dataset
+from nemo.core import Dataset
 from nemo.core.classes.dataset import DatasetConfig
 from nemo.utils import logging
 from rdkit import Chem

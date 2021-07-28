@@ -32,6 +32,7 @@ import torch.utils.data as pt_data
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_only
 
+from nemo.collections.common.data import ConcatDataset
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
@@ -41,6 +42,7 @@ from nemo.core.classes.modelPT import ModelPT
 from nemo.core.neural_types import ChannelType, LossType, MaskType, NeuralType
 from nemo.utils.env_var_parsing import get_envint
 from nemo.collections.common.metrics import GlobalAverageLossMetric
+from nemo.utils import logging, model_utils
 
 from megatron import get_args, initialize_megatron
 from megatron.model.bert_model import bert_attention_mask_func
@@ -65,14 +67,24 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
+
+        # TODO are the model utils calls needed?
+        cfg = model_utils.convert_model_config_to_dict_config(cfg)
+        # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
+        # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
+        self.world_size = 1
+        if trainer is not None:
+            self.world_size = trainer.num_nodes * trainer.num_gpus
+        cfg = model_utils.maybe_update_config_version(cfg)
+
+        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
+        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
+        
         self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
         self._hidden_size = cfg.model.d_model
         self.max_seq_len = cfg.model.max_seq_len
-
-        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
-        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
 
         if not os.path.exists(cfg.tokenizer.vocab_path):
             raise ValueError(f'Vocab file not found at {cfg.tokenizer.vocab_path}')
@@ -286,10 +298,19 @@ class MegaMolBARTModel(ModelPT):
             data = MoleculeCsvStreamingDataset(path, **cfg) # TODO make dataset class selectable
             datasets.append(data)
 
-        if len(datasets) == 1:
-            datasets = datasets[0]
-        else:
-            datasets = pt_data.ConcatDataset(datasets)
+        # if len(datasets) == 1:
+        #     datasets = datasets[0]
+        # else:
+        #     datasets = pt_data.ConcatDataset(datasets)
+        # TODO fix sampling
+        dataset = ConcatDataset(
+                    datasets=datasets,
+                    sampling_technique='temperature',
+                    sampling_temperature=1,
+                    sampling_probabilities=null,
+                    global_rank=self.global_rank,
+                    world_size=self.world_size,
+                )
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
