@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes 1
-#SBATCH --ntasks 2 
-#SBATCH --ntasks-per-node 2 
-#SBATCH --gpus-per-node 2 
-#SBATCH --time=1:00:00
-#SBATCH --partition interactive
+#SBATCH --nodes 2
+#SBATCH --ntasks 16 
+#SBATCH --ntasks-per-node 8 
+#SBATCH --gpus-per-node 8 
+#SBATCH --time=8:00:00
+#SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
 #SBATCH --job-name megamolbart
 #SBATCH --exclusive             # exclusive node access
@@ -13,19 +13,10 @@
 #SBATCH --overcommit            # Needed for pytorch
 #SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
 
-
-# SBATCH --nodes 4
-# SBATCH --ntasks 32 
-# SBATCH --ntasks-per-node 8 
-# SBATCH --gpus-per-node 8 
-# SBATCH --time=8:00:00
-# SBATCH --partition batch
-
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
-# DATA_FILES_SELECTED="x_OP_000..050_CL_.csv"
+DATA_FILES_SELECTED="x_OP_000..050_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -43,20 +34,23 @@ mkdir -p ${RESULTS_DIR}
 
 DATA_MOUNT=/data
 CODE_MOUNT=/code
-OUTPUT_MOUNT=/output
+OUTPUT_MOUNT=/result
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out"
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
 ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
-#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
-read -r -d '' RUN_COMMAND <<EOF
-echo "*******STARTING********" \
-&& echo "---------------" \
+GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
+SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
+SCRIPT_PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH'
+
+read -r -d '' RUN_COMMAND << EOF
+echo '*******STARTING********' \
+&& echo '---------------' \
 && wandb login ${WANDB} \
-&& echo "Starting training" \
-&& export CODE_MOUNT=/code \
-&& export PYTHONPATH=${CODE_MOUNT}:'$PYTHONPATH' \
+&& echo 'Starting training' \
+&& export CUDA_VISIBLE_DEVICES=${SCRIPT_CUDA_VISIBLE_DEVICES} \
+&& export PYTHONPATH=${SCRIPT_PYTHONPATH} \
 && export HYDRA_FULL_ERROR=1 \
 && cd ${CODE_MOUNT}/examples/chem \
 && python megamolbart_pretrain.py \
@@ -69,19 +63,22 @@ echo "*******STARTING********" \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}
+    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 EOF
 
+echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
+
 srun \
+--output $OUTFILE \
+--error $ERRFILE \
 --mpi=pmix \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
---export PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH' \
---export RUN_COMMAND=${RUN_COMMAND} \
 --export WANDB=${WANDB} \
---output $OUTFILE \
---error $ERRFILE \
-bash -c ${RUN_COMMAND}
+--export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
+--export RUN_COMMAND="${RUN_COMMAND}" \
+bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
+# bash -c "${RUN_COMMAND}"
 
 set +x

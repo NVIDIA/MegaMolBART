@@ -2,7 +2,7 @@
 set -x
 
 ##### Interactive training / development on a cluster with SLURM
-# Tested with single node, single GPU configuration
+# Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
 SLURM_JOB_NUM_NODES=1
@@ -28,8 +28,8 @@ CODE_MOUNT=/code
 OUTPUT_MOUNT=/result
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
-ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
+# OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
+# ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
 GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
@@ -52,8 +52,6 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
-    model.train_ds.num_workers=20 \
-    model.validation_ds.num_workers=20 \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
@@ -61,10 +59,8 @@ EOF
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 
-#srun --pty \
-srun \
---output $OUTFILE \
---error $ERRFILE \
+# srun --output $OUTFILE --error $ERRFILE \
+srun --pty \
 --account ent_joc_model_mpnn_pyt \
 --partition interactive \
 --mpi pmix \
@@ -78,7 +74,8 @@ srun \
 --export WANDB=${WANDB} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
-bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
-#bash -c "${RUN_COMMAND}"
+bash
+# bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
+# bash -c "${RUN_COMMAND}"
 
 set +x
