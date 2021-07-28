@@ -2,7 +2,7 @@
 set -x
 
 ##### Interactive training / development on a cluster with SLURM
-# Tested only with single node, single GPU configuration
+# Tested with single node, single GPU configuration
 
 ### CONFIG ###
 SLURM_JOB_NUM_NODES=1
@@ -28,15 +28,20 @@ CODE_MOUNT=/code
 OUTPUT_MOUNT=/result
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
+ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
-#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
-read -r -d '' RUN_COMMAND <<EOF
-echo "*******STARTING********" \
-&& echo "---------------" \
+GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
+SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
+SCRIPT_PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH'
+
+read -r -d '' RUN_COMMAND << EOF
+echo '*******STARTING********' \
+&& echo '---------------' \
 && wandb login ${WANDB} \
-&& echo "Starting training" \
-&& export CODE_MOUNT=/code \
-&& export PYTHONPATH=${CODE_MOUNT}:'$PYTHONPATH' \
+&& echo 'Starting training' \
+&& export CUDA_VISIBLE_DEVICES=${SCRIPT_CUDA_VISIBLE_DEVICES} \
+&& export PYTHONPATH=${SCRIPT_PYTHONPATH} \
 && export HYDRA_FULL_ERROR=1 \
 && cd ${CODE_MOUNT}/examples/chem \
 && python megamolbart_pretrain.py \
@@ -47,18 +52,21 @@ echo "*******STARTING********" \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
+    model.train_ds.num_workers=20 \
+    model.validation_ds.num_workers=20 \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 EOF
 
+echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
+
+#srun --pty \
 srun \
---pty \
+--output $OUTFILE \
+--error $ERRFILE \
 --account ent_joc_model_mpnn_pyt \
 --partition interactive \
---export PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH' \
---export RUN_COMMAND=${RUN_COMMAND} \
---export WANDB=$WANDB \
 --mpi pmix \
 --nodes ${SLURM_JOB_NUM_NODES} \
 --ntasks ${SLURM_GPUS_PER_NODE} \
@@ -67,6 +75,10 @@ srun \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
-bash #-c "${RUN_COMMAND}"
+--export WANDB=${WANDB} \
+--export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
+--export RUN_COMMAND="${RUN_COMMAND}" \
+bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
+#bash -c "${RUN_COMMAND}"
 
 set +x
