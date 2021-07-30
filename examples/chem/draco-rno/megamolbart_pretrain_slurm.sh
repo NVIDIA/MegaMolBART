@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --nodes 2
-#SBATCH --ntasks 16 
+#SBATCH --nodes 1 
+#SBATCH --ntasks 8 
 #SBATCH --ntasks-per-node 8 
 #SBATCH --gpus-per-node 8 
 #SBATCH --time=8:00:00
@@ -63,7 +63,9 @@ echo '*******STARTING********' \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
+    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
+    model.train_ds.batch_size=128 \
+    model.validation_ds.batch_size=128
 EOF
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh

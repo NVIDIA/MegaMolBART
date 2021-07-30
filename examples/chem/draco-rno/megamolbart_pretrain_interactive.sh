@@ -54,10 +54,13 @@ echo '*******STARTING********' \
     model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
+    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
+    model.train_ds.batch_size=128 \
+    model.validation_ds.batch_size=128
 EOF
 
-echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
+export SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
+echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
 
 # srun --output $OUTFILE --error $ERRFILE \
 srun --pty \
@@ -74,6 +77,7 @@ srun --pty \
 --export WANDB=${WANDB} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
+--export SCRIPT_PATH="${SCRIPT_PATH}" \
 bash
 # bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
 # bash -c "${RUN_COMMAND}"

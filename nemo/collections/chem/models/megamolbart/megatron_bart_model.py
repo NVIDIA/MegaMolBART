@@ -1,19 +1,3 @@
-# Copyright 2018 The Google AI Language Team Authors and
-# The HuggingFace Inc. team.
-# Copyright (c) 2020, MeetKai Inc.  All rights reserved.
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import os
 from typing import Dict, List, Optional, Tuple, Union
@@ -57,7 +41,7 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeCsvDataset, MoleculeCsvStreamingDataset, expand_dataset_paths
+from nemo.collections.chem.data import MoleculeCsvDataset, MoleculeCsvStreamingDataset, expand_dataset_paths, ConcatMapDataset
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
@@ -302,14 +286,12 @@ class MegaMolBARTModel(ModelPT):
         # else:
         #     datasets = pt_data.ConcatDataset(datasets)
         # TODO fix sampling
-        dataset = ConcatDataset(
-                    datasets=datasets,
-                    sampling_technique='temperature',
-                    sampling_temperature=1,
-                    sampling_probabilities=[1.0],
-                    global_rank=self.global_rank,
-                    world_size=self.world_size,
-                )
+        datasets = ConcatMapDataset(
+                   datasets=datasets, 
+                   sampling_technique='round-robin', 
+                   global_rank=self.global_rank, 
+                   world_size=self.world_size, 
+               )
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
