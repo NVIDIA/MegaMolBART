@@ -23,24 +23,25 @@ from pysmilesutils.augment import SMILESAugmenter
 class MoleculeCsvDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     molecule_column_name: str = 'smiles'
-    num_workers: int = 0
-    num_samples: Optional[int] = None
-
-
-@dataclass
-class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
-    filepath: str = 'data.csv'
     zinc: bool = False
-    num_workers: int = 0
+    data_parallel_size: int = 1
+    world_size: Optional[int] = 1
     num_samples: Optional[int] = None
 
+# TODO remove
+# @dataclass
+# class MoleculeCsvCombinedDatasetConfig(DatasetConfig):
+#     filepath: str = 'data.csv'
+#     metadata_path: Optional[str] = None
+#     zinc: bool = False
+#     num_samples: Optional[int] = None
 
-@dataclass
-class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
-    filepath: str = 'data.csv'
-    zinc: bool = False
-    num_workers: int = 0
-    num_samples: Optional[int] = None
+# @dataclass
+# class MoleculeCsvStreamingDatasetConfig(DatasetConfig):
+#     filepath: str = 'data.csv'
+#     metadata_path: Optional[str] = None
+#     zinc: bool = False
+#     num_samples: Optional[int] = None
 
 class MoleculeCsvDataset(Dataset):
     """Molecule dataset that reads from pre-split CSV files."""
@@ -93,7 +94,7 @@ class MoleculeCsvDataset(Dataset):
 
 class MoleculeCsvStreamingDataset(Dataset):
     """Molecule dataset that streams from pre-split CSV files."""
-    def __init__(self, filepath: str, molecule_column_name: str, num_samples: int = None, **kwargs):
+    def __init__(self, filepath: str, molecule_column_name: str, num_samples: int = None, metadata_path: str = None, world_size: int = 1, **kwargs):
         """
         Args:
             filepath (str): path to dataset file with compounds contained as smiles
@@ -105,17 +106,18 @@ class MoleculeCsvStreamingDataset(Dataset):
         else:
             self.filepath = filepath
 
-        # Figure out column and length
+        # Figure out column index
         self.index = 0
-        mols = []
         with open(filepath, 'r') as fh:
-            for row,line in enumerate(fh):
-                if row == 0:
-                    data = line.strip().split(',')
-                    assert molecule_column_name in data
-                    self.index = data.index(molecule_column_name)
-        
-        self.len = row # length of data is equivalent to row - 1
+            line = next(fh)
+        data = line.strip().split(',')
+        assert molecule_column_name in data
+        self.index = data.index(molecule_column_name)
+
+        # Set length of dataset
+        self.world_size = world_size
+        self.global_rank = None
+        self.len = self.get_datasize(metadata_path) // world_size
         if num_samples:
             if num_samples > 0:
                 self.len = min(num_samples, self.len)
@@ -126,8 +128,29 @@ class MoleculeCsvStreamingDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
+
+        if self.global_rank is None:
+            env = os.environ.copy()
+            if env.get('PL_IN_DDP_SUBPROCESS', False):
+                num_gpus = len(env['PL_TRAINER_GPUS'].split(','))
+                self.node_rank = int(env['NODE_RANK'])
+                self.local_rank = int(env['LOCAL_RANK'])
+                self.global_rank = (self.node_rank * num_gpus) + self.local_rank
+                self.begin_idx = self.len * self.global_rank
+                # self.end_idx = self.begin_idx + self.len
+            else:
+                self.node_rank = 0
+                self.local_rank = 0
+                self.global_rank = 0
+                self.begin_idx = 0
+
+        # TODO remove
+        # node_rank, local_rank, world_size = env_cp['NODE_RANK'], env_cp['LOCAL_RANK'], env_cp['WORLD_SIZE']
+        # is_in_ddp_subprocess = env_cp['PL_IN_DDP_SUBPROCESS']
+        # pl_trainer_gpus = env_cp['PL_TRAINER_GPUS']
+        logging.info(f'LOADING DATA world_size {self.world_size} local_rank {self.local_rank} node_rank {self.node_rank} begin index {self.begin_idx}')
         
-        line = linecache.getline(self.filepath, idx+2)
+        line = linecache.getline(self.filepath, idx + self.begin_idx + 2)
         mol = line.strip().split(',')[self.index]
         try:
             enc_smi = self.aug(mol)
@@ -140,6 +163,28 @@ class MoleculeCsvStreamingDataset(Dataset):
 
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
         return output
+
+    def get_datasize(self, metadata_path: Optional[str] = None):
+        # Get datasize
+        length = 0
+
+        if metadata_path:
+            if not os.path.exists(metadata_path):
+                assert FileNotFoundError(f"Could not find metadata file {metadata_path}")
+            else:
+                base_filepath = os.path.splitext(os.path.basename(self.filepath))
+                with open(metadata_path, 'r') as fh:
+                    data = line.strip().split(',')
+                    if data[0] == base_filepath:
+                        length = int(data[1])
+        
+        if length == 0:
+            logging.info('Unable to determine dataset size from metadata. Falling back to line counting.')
+            with open(self.filepath, 'r') as fh:
+                for row,line in enumerate(fh):
+                    pass
+            length = row
+        return length
 
 
 class MoleculeCsvCombinedDataset(Dataset):

@@ -56,9 +56,10 @@ class MegaMolBARTModel(ModelPT):
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
         # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
         # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
-        self.world_size = 1
         if trainer is not None:
-            self.world_size = trainer.num_nodes * trainer.num_gpus
+            self.world_size = trainer.num_nodes * trainer.gpus
+        else:
+            self.world_size = 1
         cfg = model_utils.maybe_update_config_version(cfg)
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
@@ -276,22 +277,33 @@ class MegaMolBARTModel(ModelPT):
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
 
+        # TODO DELETE
+        # world_size = self.trainer.world_size
+        # global_rank = self.trainer.global_rank
+        # node_rank = self.trainer.node_rank
+        # local_rank = self.trainer.local_rank
+        # logging.info(f'DATASET1: world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}')
+        # global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
+        # node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
+        # world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
+        # logging.info(f'DATASET2: world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
+
         datasets = []
         for path in dataset_paths:
             data = MoleculeCsvStreamingDataset(path, **cfg) # TODO make dataset class selectable
             datasets.append(data)
 
-        # if len(datasets) == 1:
-        #     datasets = datasets[0]
-        # else:
-        #     datasets = pt_data.ConcatDataset(datasets)
+        if len(datasets) == 1:
+            datasets = datasets[0]
+        else:
+            datasets = pt_data.ConcatDataset(datasets)
         # TODO fix sampling
-        datasets = ConcatMapDataset(
-                   datasets=datasets, 
-                   sampling_technique='round-robin', 
-                   global_rank=self.global_rank, 
-                   world_size=self.world_size, 
-               )
+        # datasets = ConcatDataset(
+        #            datasets=datasets, 
+        #            global_rank=self.global_rank, 
+        #            world_size=self.world_size, 
+        #        )
+        # #                    sampling_technique='round-robin', 
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
@@ -299,9 +311,9 @@ class MegaMolBARTModel(ModelPT):
         sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
         sampler = sampler_name(dataset)
 
+        # sampler=sampler,
         dataloader = pt_data.DataLoader(dataset,
             batch_size=cfg.batch_size,
-            sampler=sampler,
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
@@ -333,12 +345,15 @@ class MegaMolBARTModel(ModelPT):
         """ Used by DataLoader to concatenate/collate inputs."""
 
         # TODO remove
-        world_size = self.trainer.world_size
-        global_rank = self.trainer.global_rank
-        node_rank = self.trainer.node_rank
-        local_rank = self.trainer.local_rank
-        logging.info(f'Batch contains {len(batch)} items and is {batch}')
-        logging.info(f'World size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}')
+        # world_size = self.trainer.world_size
+        #global_rank = self.trainer.global_rank
+        #node_rank = self.trainer.node_rank
+        #local_rank = self.trainer.local_rank
+        # node_rank = get_node_rank()
+        # local_rank = get_envint("LOCAL_RANK", 0)
+        # rank = get_envint("RANK", None)
+        #logging.info(f'Batch contains {len(batch)} items and is {batch}')
+        # logging.info(f'COLLATE: world size {world_size}, rank {rank}, node rank {node_rank}, local rank {local_rank}')
 
         encoder_smiles = [x['encoder_smiles'][0] for x in batch]
         decoder_smiles = [x['decoder_smiles'][0] for x in batch]
@@ -381,13 +396,6 @@ class MegaMolBARTModel(ModelPT):
         if app_state.model_parallel_size is None:
             self.complete_lazy_init()
 
-        # TODO remove
-        # world_size = self.trainer.world_size
-        # global_rank = self.trainer.global_rank
-        # node_rank = self.trainer.node_rank
-        # local_rank = self.trainer.local_rank
-        # logging.info(f'On world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}, the batch is {batch}')
-
         outputs = self.model(batch)
         return outputs
 
@@ -396,8 +404,15 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
         """
-        outputs = self.forward(batch)
+        # TODO delete
+        global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
+        node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
+        world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
+        logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
+        # num_gpus, num_nodes, num_processes = self.trainer.num_gpus, self.trainer.num_nodes, self.trainer.num_processes
+        # logging.info(f'TRAIN num_gpus {num_gpus} num_nodes {num_nodes} num_processes {num_processes}')
 
+        outputs = self.forward(batch)
         loss = self.model._calc_loss(batch, outputs)
         char_acc = self.model._calc_char_acc(batch, outputs)
         lr = self._optimizer.param_groups[0]["lr"]
@@ -461,3 +476,22 @@ class MegaMolBARTModel(ModelPT):
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
 
+
+# If not set by pytorch, we need to determine node_rank
+def get_node_rank():
+    # Use an equivalent of pytorch lightning's determine_ddp_node_rank()
+    node_rank = 0
+    # First check if running on a slurm cluster
+    # TODO: This check could probably be better
+    num_slurm_tasks = get_envint("SLURM_NTASKS", 0)
+    if num_slurm_tasks > 0:
+        node_rank = get_envint("SLURM_NODEID", 0)
+    else:
+        node_rank_env = get_envint("NODE_RANK", None)
+        group_rank = get_envint("GROUP_RANK", None)
+        if group_rank:
+            node_rank = group_rank
+        # Take from NODE_RANK whenever available
+        if node_rank_env:
+            node_rank = node_rank_env
+    return node_rank

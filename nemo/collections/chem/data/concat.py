@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, List
+from typing import Any, List, Iterable
 
 import numpy as np
 import torch.utils.data as pt_data
 from torch.utils.data import IterableDataset
 from nemo.core import Dataset
+from nemo.utils import logging
 
 __all__ = ['ConcatMapDataset']
 
 
-class ConcatMapDataset(Dataset[T_co]):
+class ConcatMapDataset(Dataset):
     r"""Dataset as a concatenation of multiple datasets.
 
     This class is useful to assemble different existing datasets.
@@ -30,7 +31,7 @@ class ConcatMapDataset(Dataset[T_co]):
     Args:
         datasets (sequence): List of datasets to be concatenated
     """
-    datasets: List[Dataset[T_co]]
+    datasets: List[Dataset]
     cumulative_sizes: List[int]
 
     @staticmethod
