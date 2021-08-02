@@ -7,7 +7,8 @@ set -x
 ### CONFIG ###
 SLURM_JOB_NUM_NODES=1
 SLURM_GPUS_PER_NODE=2
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
+DATA_FILES_SELECTED="x_OP_000..009_CL_.csv"
+NUM_WORKERS=0
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -26,6 +27,7 @@ mkdir -p ${RESULTS_DIR}
 DATA_MOUNT=/data
 CODE_MOUNT=/code
 OUTPUT_MOUNT=/result
+RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 # OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
@@ -50,17 +52,20 @@ echo '*******STARTING********' \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
-    model.train_ds.filepath=/data/train/${DATA_FILES_SELECTED} \
-    model.validation_ds.filepath=/data/val/${DATA_FILES_SELECTED} \
+    model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
+    model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
+    model.train_ds.num_workers=${NUM_WORKERS} \
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
+    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
+    model.validation_ds.num_workers=${NUM_WORKERS} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
-    model.train_ds.batch_size=128 \
-    model.validation_ds.batch_size=128
+    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 EOF
 
-export SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
+SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
 echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
+export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
 # srun --output $OUTFILE --error $ERRFILE \
 srun --pty \
@@ -77,7 +82,7 @@ srun --pty \
 --export WANDB=${WANDB} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
---export SCRIPT_PATH="${SCRIPT_PATH}" \
+--export SCRIPT_PATH="${SCRIPT_MOUNT}" \
 bash
 # bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
 # bash -c "${RUN_COMMAND}"
