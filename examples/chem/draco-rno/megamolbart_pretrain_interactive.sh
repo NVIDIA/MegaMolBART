@@ -5,9 +5,9 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-SLURM_JOB_NUM_NODES=1
-SLURM_GPUS_PER_NODE=2
-DATA_FILES_SELECTED="x_OP_000..009_CL_.csv"
+SLURM_JOB_NUM_NODES=2
+SLURM_GPUS_PER_NODE=8
+DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
 NUM_VAL_WORKERS=2
 NUM_TRAIN_WORKERS=5
 
@@ -22,6 +22,7 @@ CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### 
+NTASKS=$((${SLURM_JOB_NUM_NODES}*${SLURM_GPUS_PER_NODE}))
 RESULTS_DIR="${OUTPUT_DIR}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}"
 mkdir -p ${RESULTS_DIR}
 
@@ -34,7 +35,7 @@ MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 # OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
 # ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
-GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
+GPU_LIMIT="$(($NTASKS-1))"
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
 SCRIPT_PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH'
 
@@ -74,7 +75,7 @@ srun --pty \
 --partition interactive \
 --mpi pmix \
 --nodes ${SLURM_JOB_NUM_NODES} \
---ntasks ${SLURM_GPUS_PER_NODE} \
+--ntasks ${NTASKS} \
 --ntasks-per-node ${SLURM_GPUS_PER_NODE} \
 --gpus-per-node ${SLURM_GPUS_PER_NODE} \
 --container-image ${CONTAINER} \

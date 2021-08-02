@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --nodes 4 
-#SBATCH --ntasks 32 
+#SBATCH --nodes 2 
+#SBATCH --ntasks 16 
 #SBATCH --ntasks-per-node 8 
 #SBATCH --gpus-per-node 8 
 #SBATCH --time=8:00:00
@@ -16,7 +16,7 @@
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..146_CL_.csv"
+DATA_FILES_SELECTED="x_OP_000..063_CL_.csv"
 NUM_VAL_WORKERS=2
 NUM_TRAIN_WORKERS=10
 
@@ -43,7 +43,7 @@ MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
 ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
-GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
+GPU_LIMIT="$(($SLURM_NTASKS-1))"
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
 SCRIPT_PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH'
 

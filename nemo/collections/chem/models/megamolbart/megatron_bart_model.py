@@ -54,6 +54,7 @@ class MegaMolBARTModel(ModelPT):
 
         # TODO are the model utils calls needed?
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
+
         # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
         # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
         if trainer is not None:
@@ -61,6 +62,7 @@ class MegaMolBARTModel(ModelPT):
         else:
             self.world_size = 1
         cfg = model_utils.maybe_update_config_version(cfg)
+        logging.info(f'CONFIG: {cfg}')
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
@@ -273,7 +275,6 @@ class MegaMolBARTModel(ModelPT):
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg)
-        _ = cfg.pop('world_size', None) # TODO this seems to be set by DDP to be one, perhaps since all processes are separate
         filepath = cfg.pop('filepath', None)
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')

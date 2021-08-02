@@ -25,7 +25,6 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     molecule_column_name: str = 'smiles'
     metadata_path: Optional[str] = None
     data_parallel_size: int = 1
-    world_size: Optional[int] = 1
     num_samples: Optional[int] = None
     num_workers: int = 0
     cache_data: bool = False
@@ -88,6 +87,7 @@ class MoleculeCsvStreamingDataset(Dataset):
         Args:
             filepath (str): path to dataset file with compounds contained as smiles
         """
+        # TODO remove excess logging
         self.world_size = world_size
         self.global_rank = None
         self.cache_data = cache_data
@@ -108,7 +108,10 @@ class MoleculeCsvStreamingDataset(Dataset):
         self.index = data.index(molecule_column_name)
 
         # Set length of dataset
-        self.len = self.get_data_length(metadata_path) // world_size
+        self.full_len = self.get_data_length(metadata_path) 
+        self.len = self.full_len // self.world_size
+        assert self.len * self.world_size <= self.full_len
+        logging.info(f'DATASET world_size {self.world_size} full_len {self.full_len} len {self.len} total {self.len*self.world_size}')
         if num_samples:
             if num_samples > 0:
                 self.len = min(num_samples, self.len)
@@ -137,16 +140,22 @@ class MoleculeCsvStreamingDataset(Dataset):
                 self.local_rank = int(env['LOCAL_RANK'])
                 self.global_rank = (self.node_rank * num_gpus) + self.local_rank
                 self.begin_idx = self.len * self.global_rank
+                logging.info(f'DATASET DDP is running')
             else:
+                num_gpus = 1
                 self.node_rank = 0
                 self.local_rank = 0
                 self.global_rank = 0
                 self.begin_idx = 0
+                logging.info(f'DATASET DDP is NOT running')
+
+            logging.info(f'DATASET world_size {self.world_size} num_gpus {num_gpus} node_rank {self.node_rank} local_rank {self.local_rank} global_rank {self.global_rank}')
+            logging.info(f'DATASET full_len {self.full_len} len {self.len} beg_idx {self.begin_idx} end_idx {self.begin_idx+self.len}')
+        
 
         if self.cache_data:
             if not self.cache:
                 self._make_data_cache()
-                logging.info(f'LOADING CACHED DATA for {self.filepath} {len(self.cache)} {self.cache[:10]}')
             mol = self.cache[idx]
         else:
             mol = self._get_mol_from_file(idx)
