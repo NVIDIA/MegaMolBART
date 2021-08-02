@@ -57,7 +57,7 @@ class MegaMolBARTModel(ModelPT):
         # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
         # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
         if trainer is not None:
-            self.world_size = trainer.num_nodes * trainer.gpus
+            self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
         else:
             self.world_size = 1
         cfg = model_utils.maybe_update_config_version(cfg)
@@ -273,11 +273,12 @@ class MegaMolBARTModel(ModelPT):
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg)
+        _ = cfg.pop('world_size', None) # TODO this seems to be set by DDP to be one, perhaps since all processes are separate
         filepath = cfg.pop('filepath', None)
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
-
-        # TODO DELETE
+        
+        # TODO remove
         # world_size = self.trainer.world_size
         # global_rank = self.trainer.global_rank
         # node_rank = self.trainer.node_rank
@@ -290,20 +291,13 @@ class MegaMolBARTModel(ModelPT):
 
         datasets = []
         for path in dataset_paths:
-            data = MoleculeCsvStreamingDataset(path, **cfg) # TODO make dataset class selectable
+            data = MoleculeCsvStreamingDataset(filepath=path, world_size=self.world_size, **cfg) # TODO make dataset class configurable
             datasets.append(data)
 
         if len(datasets) == 1:
             datasets = datasets[0]
         else:
             datasets = pt_data.ConcatDataset(datasets)
-        # TODO fix sampling
-        # datasets = ConcatDataset(
-        #            datasets=datasets, 
-        #            global_rank=self.global_rank, 
-        #            world_size=self.world_size, 
-        #        )
-        # #                    sampling_technique='round-robin', 
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
@@ -311,8 +305,8 @@ class MegaMolBARTModel(ModelPT):
         sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
         sampler = sampler_name(dataset)
 
-        # sampler=sampler,
         dataloader = pt_data.DataLoader(dataset,
+            sampler=sampler,
             batch_size=cfg.batch_size,
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
@@ -404,11 +398,11 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
         """
-        # TODO delete
-        global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
-        node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
-        world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
-        logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
+        # TODO remove
+        # global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
+        # node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
+        # world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
+        # logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
         # num_gpus, num_nodes, num_processes = self.trainer.num_gpus, self.trainer.num_nodes, self.trainer.num_processes
         # logging.info(f'TRAIN num_gpus {num_gpus} num_nodes {num_nodes} num_processes {num_processes}')
 
@@ -425,16 +419,16 @@ class MegaMolBARTModel(ModelPT):
                 'log': tensorboard_logs}
 
     # TODO is this needed for ddp?
-    # @rank_zero_only
-    # def log_param_stats(self):
-    #     for name, p in self.named_parameters():
-    #         if p.requires_grad:
-    #             self.trainer.logger.experiment.add_histogram(name + '_hist', p, global_step=self.global_step)
-    #             self.trainer.logger.experiment.add_scalars(
-    #                 name,
-    #                 {'mean': p.mean(), 'stddev': p.std(), 'max': p.max(), 'min': p.min()},
-    #                 global_step=self.global_step,
-    #             )
+    @rank_zero_only
+    def log_param_stats(self):
+        for name, p in self.named_parameters():
+            if p.requires_grad:
+                self.trainer.logger.experiment.add_histogram(name + '_hist', p, global_step=self.global_step)
+                self.trainer.logger.experiment.add_scalars(
+                    name,
+                    {'mean': p.mean(), 'stddev': p.std(), 'max': p.max(), 'min': p.min()},
+                    global_step=self.global_step,
+                )
 
     def validation_step(self, batch: dict, batch_idx: int) -> Dict:
         """
@@ -477,21 +471,21 @@ class MegaMolBARTModel(ModelPT):
         pass
 
 
-# If not set by pytorch, we need to determine node_rank
-def get_node_rank():
-    # Use an equivalent of pytorch lightning's determine_ddp_node_rank()
-    node_rank = 0
-    # First check if running on a slurm cluster
-    # TODO: This check could probably be better
-    num_slurm_tasks = get_envint("SLURM_NTASKS", 0)
-    if num_slurm_tasks > 0:
-        node_rank = get_envint("SLURM_NODEID", 0)
-    else:
-        node_rank_env = get_envint("NODE_RANK", None)
-        group_rank = get_envint("GROUP_RANK", None)
-        if group_rank:
-            node_rank = group_rank
-        # Take from NODE_RANK whenever available
-        if node_rank_env:
-            node_rank = node_rank_env
-    return node_rank
+# TODO remove
+# # If not set by pytorch, we need to determine node_rank
+# def get_node_rank():
+#     # Use an equivalent of pytorch lightning's determine_ddp_node_rank()
+#     node_rank = 0
+#     # First check if running on a slurm cluster
+#     num_slurm_tasks = get_envint("SLURM_NTASKS", 0)
+#     if num_slurm_tasks > 0:
+#         node_rank = get_envint("SLURM_NODEID", 0)
+#     else:
+#         node_rank_env = get_envint("NODE_RANK", None)
+#         group_rank = get_envint("GROUP_RANK", None)
+#         if group_rank:
+#             node_rank = group_rank
+#         # Take from NODE_RANK whenever available
+#         if node_rank_env:
+#             node_rank = node_rank_env
+#     return node_rank

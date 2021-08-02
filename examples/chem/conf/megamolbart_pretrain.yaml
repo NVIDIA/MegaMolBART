@@ -4,24 +4,24 @@ do_testing: false # set to true to run evaluation on test data after training
 random_seed: 42
 
 trainer:
-  gpus: 1
+  gpus: 2
   num_nodes: 1
   max_steps: 1000000
   accumulate_grad_batches: 1
   accelerator: ddp
   gradient_clip_val: 1.0
   checkpoint_callback: false # use exp_manager
-  logger: false
-  val_check_interval: 1000 #10000
-  num_sanity_val_steps: 0
-  replace_sampler_ddp: true
-  # prepare_data_per_node: true
+  logger: false # use nemo
+  # limit_val_batches: 0.0 # set to 0.0 to disable validation
+  val_check_interval: 0.5 # fractions indicate epoch fractions
+  num_sanity_val_steps: 2
+  replace_sampler_ddp: false
+  prepare_data_per_node: true
   # amp_level: O1 # O1/O2 for mixed precision
   # precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
 
 tokenizer:
   vocab_path: /code/NeMo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
-  #vocab_path: /code/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
   mask_prob: 0.15
 
 model:
@@ -36,19 +36,23 @@ model:
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /data/zinc_csv/val/x000.csv #x[000..001].csv
+    filepath: /data/zinc_csv/train/x[000..008].csv
+    metadata_path: /data/zinc_csv/train/metadata.txt
     pin_memory: false 
-    batch_size: 8 # Ross 128
+    batch_size: 256 # Chemformer 128
     shuffle: false
     drop_last: false
+    cache_data: true
     num_workers: 20
 
   validation_ds:
-    filepath: /data/zinc_csv/val/x000.csv #x[000..001].csv
+    filepath: /data/zinc_csv/val/x[000..008].csv
+    metadata_path: /data/zinc_csv/val/metadata.txt
     pin_memory: false 
-    batch_size: 8 # Ross 128
+    batch_size: 256 # Chemformer 128
     shuffle: false
     drop_last: false
+    cache_data: true
     num_workers: 20
 
   # TODO verify that optimizer and scheduler params set correctly
@@ -79,9 +83,9 @@ exp_manager:
     monitor: 'val_loss'
     always_save_nemo: true
     save_last: true
-    save_top_k: 3
+    save_top_k: 5
     mode: max
-  create_wandb_logger: false
+  create_wandb_logger: true
   wandb_logger_kwargs:
     name: small_model_testing
     project: *name

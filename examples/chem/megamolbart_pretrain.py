@@ -34,9 +34,6 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     default_cfg = OmegaConf.structured(MegaMolBARTPretrain())
     OmegaConf.set_struct(cfg, False)
     cfg = update_model_config(default_cfg, cfg)
-    cfg.trainer['limit_val_batches'] = 2
-    # cfg.trainer['limit_train_batches'] = 10
-    # cfg.trainer['limit_test_batches'] = 2
     OmegaConf.set_struct(cfg, True)
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
@@ -62,7 +59,6 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     if cfg.do_testing:
         trainer.test(model)
 
-from IPython import embed
 
 if __name__ == '__main__':
 
