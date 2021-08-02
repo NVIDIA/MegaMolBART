@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --nodes 4 
-#SBATCH --ntasks 8 
+#SBATCH --ntasks 32 
 #SBATCH --ntasks-per-node 8 
 #SBATCH --gpus-per-node 8 
 #SBATCH --time=8:00:00
@@ -17,7 +17,8 @@ set -x
 
 ### CONFIG ###
 DATA_FILES_SELECTED="x_OP_000..146_CL_.csv"
-NUM_WORKERS=0
+NUM_VAL_WORKERS=2
+NUM_TRAIN_WORKERS=10
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -63,10 +64,10 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
-    model.train_ds.num_workers=${NUM_WORKERS} \
+    model.train_ds.num_workers=${NUM_TRAIN_WORKERS} \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
-    model.validation_ds.num_workers=${NUM_WORKERS} \
+    model.validation_ds.num_workers=${NUM_VAL_WORKERS} \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
