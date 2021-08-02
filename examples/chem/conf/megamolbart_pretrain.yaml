@@ -12,7 +12,7 @@ trainer:
   gradient_clip_val: 1.0
   checkpoint_callback: false # use exp_manager
   logger: false # use nemo
-  # limit_val_batches: 0.0 # set to 0.0 to disable validation
+  limit_val_batches: 10 # set to 0.0 to disable validation
   val_check_interval: 0.5 # fractions indicate epoch fractions
   num_sanity_val_steps: 2
   replace_sampler_ddp: false
