@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes 2 
-#SBATCH --ntasks 16 
-#SBATCH --ntasks-per-node 8 
-#SBATCH --gpus-per-node 8 
-#SBATCH --time=8:00:00
-#SBATCH --partition batch
+#SBATCH --nodes 1 
+#SBATCH --ntasks 16
+#SBATCH --ntasks-per-node 16
+#SBATCH --gpus-per-node 16
+#SBATCH --time=1:00:00
+#SBATCH --partition interactive
 #SBATCH --account ent_joc_model_mpnn_pyt
 #SBATCH --job-name megamolbart
 #SBATCH --exclusive             # exclusive node access
@@ -16,9 +16,9 @@
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..063_CL_.csv"
-NUM_VAL_WORKERS=2
-NUM_TRAIN_WORKERS=10
+DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
+NUM_VAL_WORKERS=0
+NUM_TRAIN_WORKERS=0
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"

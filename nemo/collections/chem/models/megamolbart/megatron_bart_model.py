@@ -41,7 +41,7 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeCsvDataset, MoleculeCsvStreamingDataset, expand_dataset_paths, ConcatMapDataset
+from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset, MoleculeIterableDataset, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
@@ -52,17 +52,18 @@ __all__ = ["MegaMolBARTModel"]
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
 
-        # TODO are the model utils calls needed?
-        cfg = model_utils.convert_model_config_to_dict_config(cfg)
+        cfg = model_utils.convert_model_config_to_dict_config(cfg) # TODO is this needed?
 
         # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
         # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
-        if trainer is not None:
+        if trainer is not None: # TODO is there a better way of handling this for the data splitting?
             self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
+            self.num_gpus = cfg.trainer.gpus
         else:
             self.world_size = 1
+            self.num_gpus = 1 
+        
         cfg = model_utils.maybe_update_config_version(cfg)
-        logging.info(f'CONFIG: {cfg}')
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
@@ -80,7 +81,7 @@ class MegaMolBARTModel(ModelPT):
 
         _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg.model, trainer=trainer)
-        self.config = OmegaConf.create(cfg.model) # TODO verify that checkpoint saving/loading works
+        self.config = OmegaConf.create(cfg.model) # TODO verify checkpoint saving/loading works
 
         # Load model
         sampler = self.setup_sampler(self.tokenizer, cfg)
@@ -136,8 +137,8 @@ class MegaMolBARTModel(ModelPT):
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
         # Configure globals
-        set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not implemented in NeMo
-        set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not implemented in NeMo
+        set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo
+        set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
 
         # megatron input arguments
         args = {'num_layers': cfg.model.num_layers,
@@ -276,23 +277,15 @@ class MegaMolBARTModel(ModelPT):
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg)
         filepath = cfg.pop('filepath', None)
+        _ = cfg.pop('world_size', None)
+        _ = cfg.pop('num_gpus', None)
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
-        
-        # TODO remove
-        # world_size = self.trainer.world_size
-        # global_rank = self.trainer.global_rank
-        # node_rank = self.trainer.node_rank
-        # local_rank = self.trainer.local_rank
-        # logging.info(f'DATASET1: world size {world_size}, global rank {global_rank}, node rank {node_rank}, local rank {local_rank}')
-        # global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
-        # node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
-        # world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
-        # logging.info(f'DATASET2: world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
 
+        # TODO make dataset class configurable
         datasets = []
         for path in dataset_paths:
-            data = MoleculeCsvStreamingDataset(filepath=path, world_size=self.world_size, **cfg) # TODO make dataset class configurable
+            data = MoleculeDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
             datasets.append(data)
 
         if len(datasets) == 1:
@@ -338,17 +331,6 @@ class MegaMolBARTModel(ModelPT):
 
     def collate_fn(self, batch):
         """ Used by DataLoader to concatenate/collate inputs."""
-
-        # TODO remove
-        # world_size = self.trainer.world_size
-        #global_rank = self.trainer.global_rank
-        #node_rank = self.trainer.node_rank
-        #local_rank = self.trainer.local_rank
-        # node_rank = get_node_rank()
-        # local_rank = get_envint("LOCAL_RANK", 0)
-        # rank = get_envint("RANK", None)
-        #logging.info(f'Batch contains {len(batch)} items and is {batch}')
-        # logging.info(f'COLLATE: world size {world_size}, rank {rank}, node rank {node_rank}, local rank {local_rank}')
 
         encoder_smiles = [x['encoder_smiles'][0] for x in batch]
         decoder_smiles = [x['decoder_smiles'][0] for x in batch]
@@ -399,13 +381,13 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
         """
-        # TODO remove
+        # TODO remove, these are all correct
         # global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
         # node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
         # world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
-        # logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}')
+        # logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}') # TODO remove
         # num_gpus, num_nodes, num_processes = self.trainer.num_gpus, self.trainer.num_nodes, self.trainer.num_processes
-        # logging.info(f'TRAIN num_gpus {num_gpus} num_nodes {num_nodes} num_processes {num_processes}')
+        # logging.info(f'TRAIN num_gpus {num_gpus} num_nodes {num_nodes} num_processes {num_processes}') # TODO remove
 
         outputs = self.forward(batch)
         loss = self.model._calc_loss(batch, outputs)
@@ -419,7 +401,6 @@ class MegaMolBARTModel(ModelPT):
         return {'loss': loss, 
                 'log': tensorboard_logs}
 
-    # TODO is this needed for ddp?
     @rank_zero_only
     def log_param_stats(self):
         for name, p in self.named_parameters():
@@ -470,23 +451,3 @@ class MegaMolBARTModel(ModelPT):
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
-
-
-# TODO remove
-# # If not set by pytorch, we need to determine node_rank
-# def get_node_rank():
-#     # Use an equivalent of pytorch lightning's determine_ddp_node_rank()
-#     node_rank = 0
-#     # First check if running on a slurm cluster
-#     num_slurm_tasks = get_envint("SLURM_NTASKS", 0)
-#     if num_slurm_tasks > 0:
-#         node_rank = get_envint("SLURM_NODEID", 0)
-#     else:
-#         node_rank_env = get_envint("NODE_RANK", None)
-#         group_rank = get_envint("GROUP_RANK", None)
-#         if group_rank:
-#             node_rank = group_rank
-#         # Take from NODE_RANK whenever available
-#         if node_rank_env:
-#             node_rank = node_rank_env
-#     return node_rank

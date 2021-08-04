@@ -1,7 +1,6 @@
 from .csv_data import (MoleculeCsvDatasetConfig, 
-                       MoleculeCsvDataset, 
-                       MoleculeCsvStreamingDataset, 
-                       MoleculeCsvCombinedDataset)
+                       MoleculeDataset, 
+                       MoleculeIterableDataset)
 
 # TODO remove
 #    MoleculeCsvStreamingDatasetConfig, 

@@ -5,11 +5,11 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-SLURM_JOB_NUM_NODES=2
+SLURM_JOB_NUM_NODES=1
 SLURM_GPUS_PER_NODE=8
-DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
-NUM_VAL_WORKERS=2
-NUM_TRAIN_WORKERS=5
+DATA_FILES_SELECTED="x_OP_000..015_CL_.csv"
+NUM_VAL_WORKERS=0
+NUM_TRAIN_WORKERS=0
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"

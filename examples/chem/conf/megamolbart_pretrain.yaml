@@ -39,21 +39,19 @@ model:
     filepath: /data/zinc_csv/train/x[000..008].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     pin_memory: false 
-    batch_size: 256 # Chemformer 128
+    batch_size: 64 # Chemformer 128
     shuffle: false
     drop_last: false
-    cache_data: true
-    num_workers: 20
+    num_workers: 0
 
   validation_ds:
     filepath: /data/zinc_csv/val/x[000..008].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     pin_memory: false 
-    batch_size: 256 # Chemformer 128
+    batch_size: 64 # Chemformer 128
     shuffle: false
     drop_last: false
-    cache_data: true
-    num_workers: 20
+    num_workers: 0
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:
@@ -85,7 +83,7 @@ exp_manager:
     save_last: true
     save_top_k: 5
     mode: max
-  create_wandb_logger: true
+  create_wandb_logger: false
   wandb_logger_kwargs:
     name: small_model_testing
     project: *name
