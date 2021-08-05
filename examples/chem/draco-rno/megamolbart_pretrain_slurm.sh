@@ -3,8 +3,8 @@
 #SBATCH --ntasks 16
 #SBATCH --ntasks-per-node 16
 #SBATCH --gpus-per-node 16
-#SBATCH --time=1:00:00
-#SBATCH --partition interactive
+#SBATCH --time=8:00:00
+#SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
 #SBATCH --job-name megamolbart
 #SBATCH --exclusive             # exclusive node access

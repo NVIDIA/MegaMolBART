@@ -1,6 +1,6 @@
 name: &name MegaMolBART
-do_training: true # set to false to preprocess data
-do_testing: false # set to true to run evaluation on test data after training
+do_training: true # set to false if data preprocessing steps must be completed
+do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
 random_seed: 42
 
 trainer:
@@ -10,13 +10,14 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: ddp
   gradient_clip_val: 1.0
-  checkpoint_callback: false # use exp_manager
-  logger: false # use nemo
-  limit_val_batches: 10 # set to 0.0 to disable validation
-  val_check_interval: 0.5 # fractions indicate epoch fractions
-  num_sanity_val_steps: 2
-  replace_sampler_ddp: false
+  checkpoint_callback: false # use exp_manager for checkpoints
+  logger: false # use nemo logging
+  limit_val_batches: 0.0 # set to 0.0 to disable validation
+  val_check_interval: 1 # fractions indicate epoch fractions
+  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
+  replace_sampler_ddp: false # moleculecsv data is manually distributed across GPUs currently
   prepare_data_per_node: true
+  profiler: advanced # simple, advanced or delete function. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html#enable-simple-profiling
   # amp_level: O1 # O1/O2 for mixed precision
   # precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
 
@@ -26,52 +27,54 @@ tokenizer:
 
 model:
   name: *name
-  d_model: 256 # hidden_size
+  d_model: 256 # the hidden_size
   num_layers: 4
   num_heads: 8
-  d_feedforward: 1024 # 4 * hidden_size
+  d_feedforward: 1024 # set to 4 * hidden_size
   max_seq_len: 512
   dropout: 0.1
   pretrained: false
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /data/zinc_csv/train/x[000..008].csv
+    filepath: /data/zinc_csv/train/x[000..001].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     pin_memory: false 
-    batch_size: 64 # Chemformer 128
+    batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
-    num_workers: 0
+    num_workers: 80
+    use_iterable: true
 
   validation_ds:
-    filepath: /data/zinc_csv/val/x[000..008].csv
+    filepath: /data/zinc_csv/val/x[000..001].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     pin_memory: false 
-    batch_size: 64 # Chemformer 128
+    batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
     num_workers: 0
+    use_iterable: true
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:
     name: adam
     betas: [0.9, 0.999]
     eps: 1.0e-8
-    lr: 0.0001 # Ross 1.0 ???
+    lr: 0.0001 # Chemformer used 1.0 ???
     weight_decay: 0.0
     sched:
       name: CosineAnnealing
       warmup_steps: 8000
-      warmup_ratio: null # Original MegaMolBART 0.01
+      warmup_ratio: null # originally 0.01 in MegaMolBART, use instead of warmup_steps
       min_lr: 1.0e-5
       last_epoch: -1
-      max_steps: 320000 #110000
+      max_steps: 320000 # 110000
       monitor: loss
       reduce_on_plateau: false
 
 exp_manager:
-  exp_dir: /result/nemo_experiments  # exp_dir for experiment, defaults to "./nemo_experiments"
+  exp_dir: /result/nemo_experiments # exp_dir for experiment, defaults to "./nemo_experiments"
   name: *name
   create_tensorboard_logger: true
   resume_ignore_no_checkpoint: true
@@ -79,7 +82,7 @@ exp_manager:
   create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: 'val_loss'
-    always_save_nemo: true
+    always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
     save_last: true
     save_top_k: 5
     mode: max
