@@ -41,7 +41,7 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset, MoleculeIterableDataset, expand_dataset_paths
+from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
@@ -81,7 +81,7 @@ class MegaMolBARTModel(ModelPT):
 
         _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg.model, trainer=trainer)
-        self.config = OmegaConf.create(cfg.model) # TODO verify checkpoint saving/loading works
+        self.config = OmegaConf.create(cfg.model)
 
         # Load model
         sampler = self.setup_sampler(self.tokenizer, cfg)
@@ -275,8 +275,9 @@ class MegaMolBARTModel(ModelPT):
                     )
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
-        cfg = dict(cfg)
+        cfg = dict(cfg.copy())
         filepath = cfg.pop('filepath', None)
+        use_iterable = cfg.pop('use_iterable', False)
         _ = cfg.pop('world_size', None)
         _ = cfg.pop('num_gpus', None)
         dataset_paths = expand_dataset_paths(filepath)
@@ -285,20 +286,33 @@ class MegaMolBARTModel(ModelPT):
         # TODO make dataset class configurable
         datasets = []
         for path in dataset_paths:
-            data = MoleculeDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
+            if use_iterable:
+                logging.info('Using iterable dataset.')
+                data = MoleculeIterableDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
+            else:
+                logging.info('Using non-iterable dataset.')
+                data = MoleculeDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
             datasets.append(data)
 
         if len(datasets) == 1:
             datasets = datasets[0]
         else:
-            datasets = pt_data.ConcatDataset(datasets)
+            if use_iterable:
+                datasets = ConcatIterableDataset(datasets)
+            else:
+                datasets = pt_data.ConcatDataset(datasets)
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
+        use_iterable = cfg.get('use_iterable', False)
         dataset = self._setup_dataset_from_config(cfg)
-        sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
-        sampler = sampler_name(dataset)
 
+        if use_iterable:
+            sampler = None
+        else:
+            sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
+            sampler = sampler_name(dataset)
+        
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
             batch_size=cfg.batch_size,
