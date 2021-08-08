@@ -6,16 +6,16 @@ random_seed: 42
 trainer:
   gpus: 2
   num_nodes: 1
-  max_steps: 1000000
+  max_steps: 1000000 # TODO fix me
   accumulate_grad_batches: 1
   accelerator: ddp
   gradient_clip_val: 1.0
-  checkpoint_callback: false # use exp_manager for checkpoints
-  logger: false # use nemo logging
-  limit_val_batches: 0.0 # set to 0.0 to disable validation
-  val_check_interval: 1 # fractions indicate epoch fractions
+  checkpoint_callback: false # use exp_manager instead for checkpoints
+  logger: false # use nemo logging instead
+  # limit_val_batches: 10 # set to 0.0 to disable validation
+  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations
   num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
-  replace_sampler_ddp: false # moleculecsv data is manually distributed across GPUs currently
+  replace_sampler_ddp: false # data are manually distributed across GPUs currently
   prepare_data_per_node: true
   profiler: advanced # simple, advanced or delete function. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html#enable-simple-profiling
   # amp_level: O1 # O1/O2 for mixed precision
@@ -37,32 +37,32 @@ model:
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /data/zinc_csv/train/x[000..001].csv
+    filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     pin_memory: false 
     batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
-    num_workers: 80
+    num_workers: 60
     use_iterable: true
 
   validation_ds:
-    filepath: /data/zinc_csv/val/x[000..001].csv
+    filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     pin_memory: false 
     batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
-    num_workers: 0
+    num_workers: 20
     use_iterable: true
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:
-    name: adam
+    name: adamw
     betas: [0.9, 0.999]
     eps: 1.0e-8
     lr: 0.0001 # Chemformer used 1.0 ???
-    weight_decay: 0.0
+    weight_decay: 0.0 # TODO add weight decay if regularization needed
     sched:
       name: CosineAnnealing
       warmup_steps: 8000
@@ -79,14 +79,14 @@ exp_manager:
   create_tensorboard_logger: true
   resume_ignore_no_checkpoint: true
   resume_if_exists: true
-  create_checkpoint_callback: true
+  create_checkpoint_callback: false  # TODO fix me
   checkpoint_callback_params:
     monitor: 'val_loss'
     always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
     save_last: true
     save_top_k: 5
     mode: max
-  create_wandb_logger: false
+  create_wandb_logger: false  # TODO fix me
   wandb_logger_kwargs:
     name: small_model_testing
     project: *name
