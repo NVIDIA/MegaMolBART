@@ -287,10 +287,8 @@ class MegaMolBARTModel(ModelPT):
         datasets = []
         for path in dataset_paths:
             if use_iterable:
-                logging.info('Using iterable dataset.')
                 data = MoleculeIterableDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
             else:
-                logging.info('Using non-iterable dataset.')
                 data = MoleculeDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
             datasets.append(data)
 
