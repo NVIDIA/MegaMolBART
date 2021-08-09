@@ -1,0 +1,30 @@
+{
+   "aceId": 257,
+   "aceInstance": "dgx1v.32g.8.norm",
+   "aceName": "nv-us-west-2",
+   "command": "sleep 168h",
+   "description": "Clara Discovery",
+   "dockerImageName": "nvidian/clara-lifesciences/megamolbart_training_nemo:210716",
+   "name": "development.ml-model.megamolbart-interactive",
+   "publishedContainerPorts": [
+       8888,
+       8889
+   ],
+   "resultContainerMountPoint": "/result",
+   "runPolicy": {
+       "preemptClass": "RUNONCE"
+   },
+   "datasetMounts": [
+       {
+           "containerMountPoint": "/data/zinc_csv_unsplit",
+           "id": "82878"
+       },
+       {
+           "containerMountPoint": "/data/zinc_csv",
+           "id": "83105"
+       }
+   ],
+   "workspaceMounts": [
+    ]
+}
+
