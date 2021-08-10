@@ -4,8 +4,8 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-NUM_GPUS=2
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
+NUM_GPUS=8
+DATA_FILES_SELECTED="x_OP_000..146_CL_.csv"
 PROJECT=MegaMolBART
 NAME=small_model_testing
 
@@ -29,8 +29,8 @@ python megamolbart_pretrain.py \
     trainer.num_nodes=1 \
     trainer.gpus=${NUM_GPUS} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
-    model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
-    model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
+    model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
+    model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     exp_manager.wandb_logger_kwargs.name=${NAME} \
