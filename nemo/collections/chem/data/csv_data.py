@@ -120,6 +120,17 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
                  world_size: int = 1, num_gpus: int = 1, **kwargs):
         super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, 
                      world_size=world_size, num_gpus=num_gpus)
+
+        # TODO move this to App?
+        env = os.environ.copy()
+        node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
+        local_rank = int(env.get('LOCAL_RANK', 0))
+        logging.info(f'DATASET node_rank {node_rank} local_rank {local_rank}')
+        self.global_rank = (node_rank * self.num_gpus) + local_rank
+        self.start = self.len * self.global_rank
+        self.end = self.start + self.len
+        self._initialize_file(self.start)
+        self._make_data_cache()
         
     def _make_data_cache(self):
         lines = [next(self.fh_iter) for x in range(self.len)]
@@ -131,17 +142,18 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        if self._cache is None:
-            env = os.environ.copy()
-            node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-            local_rank = int(env.get('LOCAL_RANK', 0))
-            self.global_rank = (node_rank * self.num_gpus) + local_rank
-            self.start = self.len * self.global_rank
-            self.end = self.start + self.len
-            self._initialize_file(self.start)
-            self._make_data_cache()
-                
-        mol = self._cache[idx]
+        # TODO REMOVE
+        # if self._cache is None:
+        #     env = os.environ.copy()
+        #     node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
+        #     local_rank = int(env.get('LOCAL_RANK', 0))
+        #     self.global_rank = (node_rank * self.num_gpus) + local_rank
+        #     self.start = self.len * self.global_rank
+        #     self.end = self.start + self.len
+        #     self._initialize_file(self.start)
+        #     self._make_data_cache()
+
+        mol = self._cache[idx]            
         enc_smi = self.augmenter(mol)
         dec_smi = self.augmenter(mol)
         output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}

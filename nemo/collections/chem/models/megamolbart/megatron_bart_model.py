@@ -63,6 +63,12 @@ class MegaMolBARTModel(ModelPT):
             self.world_size = 1
             self.num_gpus = 1 
         
+        # TODO REMOVE
+        env = os.environ.copy()
+        node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
+        local_rank = int(env.get('LOCAL_RANK', 0))
+        logging.info(f'GPU {local_rank} {node_rank}')
+        
         cfg = model_utils.maybe_update_config_version(cfg)
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
