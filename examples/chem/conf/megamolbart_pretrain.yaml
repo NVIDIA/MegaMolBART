@@ -17,7 +17,7 @@ trainer:
   num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
   replace_sampler_ddp: false # data are manually distributed across GPUs currently
   prepare_data_per_node: true
-  profiler: advanced # simple, advanced or delete function. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html#enable-simple-profiling
+  profiler: simple # simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
   amp_backend: apex
   amp_level: O1 # O0: fp32, O1/O2 for mixed, O3: fp16
   precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0

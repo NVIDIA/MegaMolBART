@@ -407,7 +407,6 @@ class MegaMolBARTModel(ModelPT):
         char_acc = self.model._calc_char_acc(batch, outputs)
         lr = self._optimizer.param_groups[0]["lr"]
         tensorboard_logs = {'train_loss': loss.item(),
-                            'val_loss': loss.item(), 
                             'train_char_acc': char_acc, 
                             'lr': lr}
 
@@ -433,8 +432,8 @@ class MegaMolBARTModel(ModelPT):
         outputs = self.model.validation_step(batch)
         loss = outputs['val_loss']
         char_acc = outputs['val_token_acc']
-        molecular_accuracy= outputs['val_molecular_accuracy']
-        perplexity= outputs['val_perplexity']
+        molecular_accuracy = outputs['val_molecular_accuracy']
+        perplexity = outputs['val_perplexity']
         invalid_smiles = outputs['val_invalid_smiles']
 
         tensorboard_logs = {'val_loss': loss,
