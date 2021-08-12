@@ -52,29 +52,10 @@ __all__ = ["MegaMolBARTModel"]
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
 
-        cfg = model_utils.convert_model_config_to_dict_config(cfg) # TODO is this needed?
-
-        # Get global rank and total number of GPU workers for IterableDataset partitioning, if applicable
-        # Global_rank and local_rank is set by LightningModule in Lightning 1.2.0
-        if trainer is not None: # TODO is there a better way of handling this for the data splitting?
-            self.world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
-            self.num_gpus = cfg.trainer.gpus
-        else:
-            self.world_size = 1
-            self.num_gpus = 1 
-        
-        # TODO REMOVE
-        env = os.environ.copy()
-        node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-        local_rank = int(env.get('LOCAL_RANK', 0))
-        logging.info(f'GPU {local_rank} {node_rank}')
-        
+        cfg = model_utils.convert_model_config_to_dict_config(cfg)
+        self._set_app_state(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
 
-        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
-        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
-        
-        self._app_state = None
         self._model_name = cfg.model.name
         self._restore_path = cfg.model.checkpoint_file
         self._hidden_size = cfg.model.d_model
@@ -105,6 +86,31 @@ class MegaMolBARTModel(ModelPT):
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.setup_optimization(cfg.model.optim)
+
+    def _set_app_state(self, cfg):
+        app_state = AppState()
+        if cfg.trainer is not None:
+            app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
+            num_gpus = cfg.trainer.gpus
+        else:
+            app_state._world_size = 1
+            num_gpus = 1
+
+        env = os.environ.copy()
+        app_state._local_rank = int(env.get('LOCAL_RANK', 0))
+        app_state._node_rank = int(env.get('NODE_RANK', 0))
+        app_state._global_rank = app_state._local_rank + (app_state._node_rank * num_gpus) # TODO better way to calculate?
+        app_state._model_parallel_size = None
+        app_state._model_parallel_rank = None
+        # app_state._device_id #          TODO add these
+        # app_state._model_parallel_group
+        # app_state._data_parallel_size
+        # app_state._data_parallel_rank
+        # app_state._data_parallel_group
+
+        self._app_state = app_state
+        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
+        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
 
     @staticmethod
     def _update_megatron_args(
@@ -284,18 +290,15 @@ class MegaMolBARTModel(ModelPT):
         cfg = dict(cfg.copy())
         filepath = cfg.pop('filepath', None)
         use_iterable = cfg.pop('use_iterable', False)
-        _ = cfg.pop('world_size', None)
-        _ = cfg.pop('num_gpus', None)
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
 
-        # TODO make dataset class configurable
         datasets = []
         for path in dataset_paths:
             if use_iterable:
-                data = MoleculeIterableDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
+                data = MoleculeIterableDataset(filepath=path, **cfg)
             else:
-                data = MoleculeDataset(filepath=path, world_size=self.world_size, num_gpus=self.num_gpus, **cfg)
+                data = MoleculeDataset(filepath=path, **cfg)
             datasets.append(data)
 
         if len(datasets) == 1:
@@ -399,14 +402,6 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
         """
-        # TODO remove, these are all correct
-        # global_rank = self.trainer.accelerator_connector.cluster_environment.global_rank()
-        # node_rank = self.trainer.accelerator_connector.cluster_environment.node_rank()
-        # world_size = self.trainer.accelerator_connector.cluster_environment.world_size()
-        # logging.info(f'TRAIN world_size {world_size} global_rank {global_rank} node_rank {node_rank}') # TODO remove
-        # num_gpus, num_nodes, num_processes = self.trainer.num_gpus, self.trainer.num_nodes, self.trainer.num_processes
-        # logging.info(f'TRAIN num_gpus {num_gpus} num_nodes {num_nodes} num_processes {num_processes}') # TODO remove
-
         outputs = self.forward(batch)
         loss = self.model._calc_loss(batch, outputs)
         char_acc = self.model._calc_char_acc(batch, outputs)

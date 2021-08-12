@@ -15,6 +15,7 @@ import torch
 # from torch.utils.data import Dataset
 from nemo.core import Dataset, IterableDataset
 from nemo.core.classes.dataset import DatasetConfig
+from nemo.utils.app_state import AppState
 from nemo.utils import logging
 from rdkit import Chem
 
@@ -27,8 +28,6 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     metadata_path: Optional[str] = None
     num_samples: Optional[int] = None
-    world_size: Optional[int] = 1
-    num_gpus: Optional[int] = 1
     num_workers: Optional[int] = 0
     use_iterable: Optional[bool] = False
 
@@ -36,14 +35,15 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
 class MoleculeABCDataset():
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
     # TODO make column selectable in regex
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, 
-                 world_size: int = 1, num_gpus: int = 1):
+    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None): 
         """
         Args:
             filepath (str): path to dataset file with compounds contained as smiles
         """
-        self.num_gpus = num_gpus # TODO find better way to get this data
-        self.global_rank = None
+
+        app_state = AppState()
+        self.global_rank = app_state._global_rank
+        world_size = app_state._world_size
 
         assert os.path.exists(filepath), FileNotFoundError(f"Could not find CSV file {filepath}")
         self.filepath = filepath
@@ -116,17 +116,9 @@ class MoleculeABCDataset():
 
 class MoleculeDataset(Dataset, MoleculeABCDataset):
     """Dataset that reads GPU-specific portion of data into memory from CSV file"""
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, 
-                 world_size: int = 1, num_gpus: int = 1, **kwargs):
-        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, 
-                     world_size=world_size, num_gpus=num_gpus)
-
-        # TODO move this to App?
-        env = os.environ.copy()
-        node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-        local_rank = int(env.get('LOCAL_RANK', 0))
-        logging.info(f'DATASET node_rank {node_rank} local_rank {local_rank}')
-        self.global_rank = (node_rank * self.num_gpus) + local_rank
+    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, **kwargs):
+        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples)
+        
         self.start = self.len * self.global_rank
         self.end = self.start + self.len
         self._initialize_file(self.start)
@@ -142,17 +134,6 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        # TODO REMOVE
-        # if self._cache is None:
-        #     env = os.environ.copy()
-        #     node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-        #     local_rank = int(env.get('LOCAL_RANK', 0))
-        #     self.global_rank = (node_rank * self.num_gpus) + local_rank
-        #     self.start = self.len * self.global_rank
-        #     self.end = self.start + self.len
-        #     self._initialize_file(self.start)
-        #     self._make_data_cache()
-
         mol = self._cache[idx]            
         enc_smi = self.augmenter(mol)
         dec_smi = self.augmenter(mol)
@@ -163,19 +144,12 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
     def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, 
                  world_size: int = 1, num_gpus: int = 1, **kwargs):
-        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, 
-                         world_size=world_size, num_gpus=num_gpus)
+        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples)
+
+        self.start = self.len * self.global_rank
+        self.end = self.start + self.len
         
-    def __iter__(self):
-        # Setup GPU specific chunk
-        if self.global_rank is None:
-            env = os.environ.copy()
-            node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-            local_rank = int(env.get('LOCAL_RANK', 0))
-            self.global_rank = (node_rank * self.num_gpus) + local_rank
-            self.start = self.len * self.global_rank
-            self.end = self.start + self.len
-  
+    def __iter__(self):  
         # Divide up further for workers
         worker_info = torch.utils.data.get_worker_info()
         if worker_info:
