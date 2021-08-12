@@ -4,7 +4,7 @@ do_testing: false # set to true to run evaluation on test data after training, r
 random_seed: 42
 
 trainer:
-  gpus: 2
+  gpus: 8
   num_nodes: 1
   max_steps: 1000000
   accumulate_grad_batches: 1
@@ -17,7 +17,7 @@ trainer:
   num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
   replace_sampler_ddp: false # data are manually distributed across GPUs currently
   prepare_data_per_node: true
-  profiler: advanced # simple, advanced or delete function. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html#enable-simple-profiling
+  profiler: simple # simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
   amp_backend: apex
   amp_level: O1 # O0: fp32, O1/O2 for mixed, O3: fp16
   precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0
@@ -39,36 +39,36 @@ model:
   checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 
   train_ds:
-    filepath: /data/zinc_csv/train/x[000..064].csv
+    filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     pin_memory: false 
     batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
     num_workers: 80
-    use_iterable: true
+    use_iterable: false
 
   validation_ds:
-    filepath: /data/zinc_csv/val/x[000..064].csv
+    filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     pin_memory: false 
     batch_size: 128 # Chemformer used 128
     shuffle: false
     drop_last: false
     num_workers: 10
-    use_iterable: true
+    use_iterable: false
 
   # TODO verify that optimizer and scheduler params set correctly
   optim:
     name: adamw
-    betas: [0.9, 0.999] # TODO deepspeed used 0.8, 0.999
+    betas: [0.9, 0.999] # TODO deepspeed config used 0.8, 0.999
     eps: 1.0e-8
     lr: 0.0001 # TODO deepspeed used 0.00003; Chemformer used 1.0 ???
     weight_decay: 3e-7
     sched:
       name: CosineAnnealing
       warmup_steps: 8000
-      warmup_ratio: null # originally 0.01 in MegaMolBART, use instead of warmup_steps
+      warmup_ratio: null # was originally 0.01 in MegaMolBART, use instead of warmup_steps
       min_lr: 1.0e-5
       last_epoch: -1
       max_steps: 320000 # 110000
@@ -81,14 +81,14 @@ exp_manager:
   create_tensorboard_logger: true
   resume_ignore_no_checkpoint: true
   resume_if_exists: true
-  create_checkpoint_callback: false  # TODO FIX ME BEFORE TRAINING
+  create_checkpoint_callback: true
   checkpoint_callback_params:
     monitor: 'val_loss'
     always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
     save_last: true
     save_top_k: 5
     mode: max
-  create_wandb_logger: false  # TODO FIX ME BEFORE TRAINING
+  create_wandb_logger: true
   wandb_logger_kwargs:
     name: small_model_testing
     project: *name
