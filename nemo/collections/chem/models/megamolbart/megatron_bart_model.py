@@ -458,6 +458,7 @@ class MegaMolBARTModel(ModelPT):
         perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
         tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
         logging.info(f'Validation perplexity {perplexity}')
+        # self.log('val_loss', loss) # for checkpoint TODO FIX THIS
         return {'val_loss': loss, 'log': tensorboard_logs}
 
     @classmethod
