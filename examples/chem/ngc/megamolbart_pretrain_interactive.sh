@@ -4,7 +4,7 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-NUM_GPUS=8
+NUM_GPUS=2
 NUM_NODES=1
 
 DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
@@ -39,7 +39,7 @@ python megamolbart_pretrain.py \
     model.train_ds.use_iterable=false \
     exp_manager.wandb_logger_kwargs.name=${NAME} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.create_wandb_logger=true \
+    exp_manager.create_wandb_logger=false \
     model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \

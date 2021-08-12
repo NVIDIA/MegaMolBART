@@ -448,8 +448,7 @@ class MegaMolBARTModel(ModelPT):
                 'invalid_smiles': invalid_smiles,
                 'log': tensorboard_logs}
 
-    @staticmethod
-    def validation_epoch_end(outputs: List[Dict]) -> Dict:
+    def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
@@ -458,7 +457,7 @@ class MegaMolBARTModel(ModelPT):
         perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
         tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
         logging.info(f'Validation perplexity {perplexity}')
-        # self.log('val_loss', loss) # for checkpoint TODO FIX THIS
+        self.log('val_loss', loss) # for checkpointing
         return {'val_loss': loss, 'log': tensorboard_logs}
 
     @classmethod
