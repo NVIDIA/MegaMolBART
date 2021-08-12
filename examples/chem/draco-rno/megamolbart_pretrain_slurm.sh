@@ -16,7 +16,7 @@
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..146_CL_.csv"
+DATA_FILES_SELECTED="x_OP_000..063_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
