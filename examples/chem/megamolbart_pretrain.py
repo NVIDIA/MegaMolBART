@@ -17,6 +17,7 @@ from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
 from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig  
 
+
 @dataclass
 class MegaMolBARTPretrain(NemoConfig):
     name: Optional[str] = 'MegaMolBART'
@@ -27,6 +28,7 @@ class MegaMolBARTPretrain(NemoConfig):
     trainer: Optional[TrainerConfig] = TrainerConfig()
     exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MegaMolBART', files_to_copy=[])
     random_seed: Optional[int] = None
+
 
 @hydra_runner(config_path="conf", config_name="megamolbart_pretrain")
 def main(cfg: MegaMolBARTPretrain) -> None:

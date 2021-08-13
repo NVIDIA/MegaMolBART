@@ -406,6 +406,11 @@ class MegaMolBARTModel(ModelPT):
         loss = self.model._calc_loss(batch, outputs)
         char_acc = self.model._calc_char_acc(batch, outputs)
         lr = self._optimizer.param_groups[0]["lr"]
+
+        self.log('lr', lr)
+        self.log('train_loss', loss.item(), on_epoch=True)
+        self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
+
         tensorboard_logs = {'train_loss': loss.item(),
                             'train_char_acc': char_acc, 
                             'lr': lr}
@@ -437,6 +442,12 @@ class MegaMolBARTModel(ModelPT):
         perplexity = outputs['val_perplexity']
         invalid_smiles = outputs['val_invalid_smiles']
 
+        self.log('val_loss', loss, prog_bar=True, on_epoch=True, sync_dist=True)
+        self.log('val_char_acc', char_acc, on_epoch=True, sync_dist=True)
+        self.log('val_mol_acc', molecular_accuracy, on_epoch=True, sync_dist=True)
+        self.log('val_perplexity', perplexity, on_epoch=True, sync_dist=True)
+        self.log('val_invalid_smiles', invalid_smiles, on_epoch=True, sync_dist=True)
+
         tensorboard_logs = {'val_loss': loss,
                             'val_char_acc': char_acc,
                             'val_mol_acc': molecular_accuracy,
@@ -458,7 +469,6 @@ class MegaMolBARTModel(ModelPT):
         perplexity = torch.tensor([x['perplexity'] for x in outputs]).mean().item()
         tensorboard_logs = {'val_loss': loss, 'perplexity': perplexity}
         logging.info(f'Validation perplexity {perplexity}')
-        self.log('val_loss', loss) # for checkpointing
         return {'val_loss': loss, 'log': tensorboard_logs}
 
     @classmethod
