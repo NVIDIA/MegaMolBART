@@ -16,7 +16,6 @@ from typing import Any, List, Iterable
 
 import numpy as np
 import torch.utils.data as pt_data
-# from torch.utils.data import IterableDataset
 from nemo.core import IterableDataset
 from nemo.core import Dataset
 from nemo.utils import logging
@@ -28,12 +27,14 @@ __all__ = ['ConcatIterableDataset']
 class ConcatIterableDataset(IterableDataset):
     r"""Dataset as a concatenation of multiple datasets.
 
-    This class is useful to assemble different existing datasets.
+    This class is useful to assemble different existing datasets. It is identical
+    to PyTorch's version except it allows iterable datasets to be use if they have 
+    a known length.
 
     Args:
         datasets (sequence): List of datasets to be concatenated
 
-    This class is identical to PyTorch's version for IterableDatasets
+    
     """
     datasets: List[IterableDataset]
     cumulative_sizes: List[int]
@@ -59,4 +60,4 @@ class ConcatIterableDataset(IterableDataset):
     def __iter__(self):
         while True:
             for _ in range(self.cumulative_sizes[-1]):
-                yield next(itertools.chain.from_iterable(self.datasets))
+                yield next(itertools.chain.from_iterable(self.datasets)) # TODO ensure this stores state

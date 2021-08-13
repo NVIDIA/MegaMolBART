@@ -9,12 +9,13 @@ from nemo.utils import logging
 def expand_dataset_paths(filepath: str) -> List[str]:
     """Expand dataset paths from braces"""
     # TODO this should go in a Nemo fileutils module or similar
-    filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # Replace '(', '[', '<' and '_OP_' with '{'
-    filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # Replace ')', ']', '>' and '_CL_' with '}'
+    filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
+    filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
     dataset_paths = list(braceexpand.braceexpand(filepath))
     return dataset_paths
 
 
+# DEPRECATED
 def shard_dataset_paths_for_ddp(self, dataset_paths):
     """Shard dataset paths for ddp"""
     dataset_paths = np.array(dataset_paths)

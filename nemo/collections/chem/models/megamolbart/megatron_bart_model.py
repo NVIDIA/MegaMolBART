@@ -429,6 +429,7 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the validation loop with the data from the validation dataloader
         passed in as `batch`. 
         """
+        logging.info('WARNING: validation outputs are set to zero for benchmarking') # TODO fix in base model file
         outputs = self.model.validation_step(batch)
         loss = outputs['val_loss']
         char_acc = outputs['val_token_acc']

@@ -16,7 +16,7 @@
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
+DATA_FILES_SELECTED="x_OP_000..003_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -63,23 +63,28 @@ echo '*******STARTING********' \
     model.train_ds.batch_size=512 \
     model.train_ds.num_workers=80 \
     model.train_ds.use_iterable=false \
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
+    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.batch_size=512 \
     model.validation_ds.num_workers=20 \
-    model.train_ds.use_iterable=false \
+    model.validation_ds.use_iterable=false \
     exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
-    
-    exp_manager.create_wandb_logger=false \
-    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
+    exp_manager.create_wandb_logger=true \
     model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
-    ~trainer.max_steps \
-    +trainer.max_epochs=2 \
-    ~trainer.val_check_interval \
-    +trainer.limit_val_batches=2
+    trainer.max_epochs=10000 \
+    trainer.val_check_interval=2000 \
+    +trainer.limit_val_batches=100
 EOF
+
+# model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
+# model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
+# ~trainer.max_steps \
+# +trainer.max_epochs=2 \
+# ~trainer.val_check_interval \
+# +trainer.limit_val_batches=2
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 

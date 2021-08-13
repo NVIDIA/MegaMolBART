@@ -229,21 +229,29 @@ class MegatronBART(MegatronModule):
         model_output = self.forward(batch)
         target_smiles = batch['target_smiles']
 
-        loss = self._calc_loss(batch, model_output)
-        token_acc = self._calc_char_acc(batch, model_output)
-        perplexity = self._calc_perplexity(batch, model_output)
-        (mol_strs, log_lhs) = self.sample_molecules(batch,
-                sampling_alg=self.val_sampling_alg)
-        metrics = self.sampler.calc_sampling_metrics(mol_strs,
-                target_smiles)
+        # TODO remove this
+        # loss = self._calc_loss(batch, model_output)
+        # token_acc = self._calc_char_acc(batch, model_output)
+        # perplexity = self._calc_perplexity(batch, model_output)
+        # (mol_strs, log_lhs) = self.sample_molecules(batch,
+        #         sampling_alg=self.val_sampling_alg)
+        # metrics = self.sampler.calc_sampling_metrics(mol_strs,
+        #         target_smiles)
 
+        # val_outputs = {
+        #     'val_loss': loss.item(),
+        #     'val_token_acc': token_acc,
+        #     'val_perplexity': perplexity,
+        #     'val_molecular_accuracy': metrics['accuracy'],
+        #     'val_invalid_smiles': metrics['invalid'],
+        #     }
         val_outputs = {
-            'val_loss': loss.item(),
-            'val_token_acc': token_acc,
-            'val_perplexity': perplexity,
-            'val_molecular_accuracy': metrics['accuracy'],
-            'val_invalid_smiles': metrics['invalid'],
-            }
+            'val_loss': 0.0,
+            'val_token_acc': 0.0,
+            'val_perplexity': 0.0,
+            'val_molecular_accuracy': 0.0,
+            'val_invalid_smiles': 0.0,
+        }
         return val_outputs
 
     def _calc_loss(self, batch_input, model_output):
