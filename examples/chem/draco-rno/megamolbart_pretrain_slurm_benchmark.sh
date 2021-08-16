@@ -15,12 +15,12 @@
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
+DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
-STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
-PROJECT="MegaMolBART" # exp_manager and wandb
-EXPNAME="Draco-RNO" # exp_manager and wandb
+STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+PROJECT=MegaMolBART # exp_manager and wandb
+EXPNAME=Draco-RNO # exp_manager and wandb
 
 WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split

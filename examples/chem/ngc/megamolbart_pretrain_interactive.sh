@@ -4,12 +4,12 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-NUM_GPUS=2
+NUM_GPUS=8
 NUM_NODES=1
 
-DATA_FILES_SELECTED="x000.csv"
+DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 PROJECT=MegaMolBART
-EXPNAME="BENCHMARK_NGC_nodes_${NUM_NODES}_gpus_${NUM_GPUS}"
+EXPNAME="NGC_nodes_${NUM_NODES}_gpus_${NUM_GPUS}"
 
 WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_MOUNT=/data/zinc_csv

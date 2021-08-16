@@ -4,10 +4,10 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-NUM_GPUS=2
+NUM_GPUS=8
 NUM_NODES=1
 
-DATA_FILES_SELECTED="x000.csv"
+DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 PROJECT=MegaMolBART
 EXPNAME="QUICK_NGC_nodes_${NUM_NODES}_gpus_${NUM_GPUS}"
 
