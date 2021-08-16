@@ -52,9 +52,6 @@ __all__ = ["MegaMolBARTModel"]
 class MegaMolBARTModel(ModelPT):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
 
-        self._world_size = None
-        self._global_rank = None
-
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
         self._set_app_state(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
@@ -91,48 +88,26 @@ class MegaMolBARTModel(ModelPT):
         self.setup_optimization(cfg.model.optim)
 
     def _set_app_state(self, cfg):
-        # TODO FIX THIS
-        # app_state = AppState()
-        # if cfg.trainer is not None:
-        #     app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
-        #     num_gpus = cfg.trainer.gpus
-        # else:
-        #     app_state._world_size = 1
-        #     num_gpus = 1
-
-        # env = os.environ.copy()
-        # app_state._local_rank = int(env.get('LOCAL_RANK', 0))
-        # app_state._node_rank = int(env.get('NODE_RANK', 0))
-        # app_state._global_rank = app_state._local_rank + (app_state._node_rank * num_gpus) # TODO better way to calculate?
-        # app_state._model_parallel_size = None
-        # app_state._model_parallel_rank = None
-        # # app_state._device_id #          TODO add these
-        # # app_state._model_parallel_group
-        # # app_state._data_parallel_size
-        # # app_state._data_parallel_rank
-        # # app_state._data_parallel_group
-        # self._app_state = app_state
-
+        app_state = AppState()
         if cfg.trainer is not None:
+            app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
             num_gpus = cfg.trainer.gpus
-            world_size = cfg.trainer.num_nodes * num_gpus
-
-            env = os.environ.copy()
-            node_rank = int(env.get('NODE_RANK', 0)) # TODO better way to get these numbers
-            local_rank = int(env.get('LOCAL_RANK', 0))
-            local_rank + (node_rank * num_gpus)
-            global_rank = local_rank + (node_rank * num_gpus)
         else:
-            world_size = 1
+            app_state._world_size = 1
             num_gpus = 1
-            local_rank = 0
-            node_rank = 0
-            num_gpus = 1
-            global_rank = 0
 
-        logging.info(f'GPU local_rank {local_rank} node_rank {node_rank} num_gpus {num_gpus} world_size {world_size} global_rank {global_rank}')
-        self._world_size = world_size
-        self._global_rank = global_rank
+        env = os.environ.copy()
+        app_state._local_rank = int(env.get('LOCAL_RANK', 0))
+        app_state._node_rank = int(env.get('NODE_RANK', 0))
+        app_state._global_rank = app_state._local_rank + (app_state._node_rank * num_gpus) # TODO better way to calculate?
+        app_state._model_parallel_size = None
+        app_state._model_parallel_rank = None
+        # app_state._device_id #          TODO add these
+        # app_state._model_parallel_group
+        # app_state._data_parallel_size
+        # app_state._data_parallel_rank
+        # app_state._data_parallel_group
+        self._app_state = app_state
 
         self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
         self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
@@ -315,9 +290,6 @@ class MegaMolBARTModel(ModelPT):
         cfg = dict(cfg.copy())
         filepath = cfg.pop('filepath', None)
         use_iterable = cfg.pop('use_iterable', False)
-
-        cfg['world_size'] = self._world_size # TODO REMOVE
-        cfg['global_rank'] = self._global_rank
 
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
