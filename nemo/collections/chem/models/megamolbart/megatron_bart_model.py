@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
 import tempfile
 import re
-import braceexpand
+import time
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
@@ -402,18 +402,26 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the training loop with the data from the training dataloader
         passed in as `batch`. 
         """
+        start_time = time.monotonic()
+
         outputs = self.forward(batch)
         loss = self.model._calc_loss(batch, outputs)
         char_acc = self.model._calc_char_acc(batch, outputs)
         lr = self._optimizer.param_groups[0]["lr"]
 
+        end_time = time.monotonic()
+        duration = end_time - start_time
+
+
         self.log('lr', lr)
         self.log('train_loss', loss.item(), on_epoch=True)
         self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
+        self.log('step_time', duration, on_step=True)
 
         tensorboard_logs = {'train_loss': loss.item(),
                             'train_char_acc': char_acc, 
-                            'lr': lr}
+                            'lr': lr,
+                            'step_time': duration}
 
         return {'loss': loss, 
                 'log': tensorboard_logs}
@@ -434,7 +442,6 @@ class MegaMolBARTModel(ModelPT):
         Lightning calls this inside the validation loop with the data from the validation dataloader
         passed in as `batch`. 
         """
-        logging.info('WARNING: validation outputs are set to zero for benchmarking') # TODO fix in base model file
         outputs = self.model.validation_step(batch)
         loss = outputs['val_loss']
         char_acc = outputs['val_token_acc']
@@ -442,17 +449,12 @@ class MegaMolBARTModel(ModelPT):
         perplexity = outputs['val_perplexity']
         invalid_smiles = outputs['val_invalid_smiles']
 
-        self.log('val_loss', loss, prog_bar=True, on_epoch=True, sync_dist=True)
-        self.log('val_char_acc', char_acc, on_epoch=True, sync_dist=True)
-        self.log('val_mol_acc', molecular_accuracy, on_epoch=True, sync_dist=True)
-        self.log('val_perplexity', perplexity, on_epoch=True, sync_dist=True)
-        self.log('val_invalid_smiles', invalid_smiles, on_epoch=True, sync_dist=True)
-
         tensorboard_logs = {'val_loss': loss,
                             'val_char_acc': char_acc,
                             'val_mol_acc': molecular_accuracy,
                             'val_perplexity': perplexity,
                             'val_invalid_smiles': invalid_smiles}
+        self.log_dict(tensorboard_logs, on_epoch=True, sync_dist=True)
         return {'val_loss': loss, 
                 'char_acc': char_acc,
                 'mol_acc': molecular_accuracy,

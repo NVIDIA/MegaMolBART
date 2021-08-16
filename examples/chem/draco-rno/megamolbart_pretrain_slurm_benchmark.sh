@@ -62,14 +62,15 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
-    model.validation_ds.batch_size=512 \
-    model.validation_ds.num_workers=20 \
-    model.validation_ds.use_iterable=false \
+    model.validation_ds.batch_size=1 \
+    ~model.validation_ds.num_workers \
+    model.validations.use_iterable=false \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
     model.train_ds.num_workers=80 \
     model.train_ds.use_iterable=false \
+    exp_manager.create_tensorboard_logger=false \
     exp_manager.create_wandb_logger=false \
     exp_manager.create_checkpoint_callback=false \
     trainer.max_steps=10000 \

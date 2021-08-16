@@ -43,9 +43,12 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     # Make dict from trainer to add DDPPlugin because typechecking it is a nightmare
     trainer_config = dict(deepcopy(cfg.trainer))
     trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
+    # if not(cfg.exp_manager.create_wandb_logger | cfg.exp_manager.create_tensorboard_logger):
+    #     trainer_config['logger'] = pl.loggers.csv_logs.CSVLogger(save_dir=cfg.exp_manager.exp_dir)
 
     if cfg.random_seed:
         pl.seed_everything(cfg.random_seed, workers=True)
+
     trainer = pl.Trainer(**trainer_config)
     exp_manager(trainer, cfg.get("exp_manager", None))
     
@@ -56,10 +59,14 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     logging.info("***********************************************************\n\n")
 
     if cfg.do_training:
+        logging.info("\n\n************** Starting Training ***********")
         trainer.fit(model)
+        logging.info("\n\n************** Finished Training ***********")
 
     if cfg.do_testing:
+        logging.info("\n\n************** Starting Testing ***********")
         trainer.test(model)
+        logging.info("\n\n************** Finished Testing ***********")
 
 
 if __name__ == '__main__':
