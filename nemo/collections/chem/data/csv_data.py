@@ -31,12 +31,15 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     num_workers: Optional[int] = 0
     use_iterable: Optional[bool] = False
     map_data: Optional[bool] = False
+    world_size: Optional[int] = 1, 
+    global_rank: Optional[int] = 0
 
 
 class MoleculeABCDataset():
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
     
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False): 
+    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False,
+                world_size: int = 1, global_rank: int = 0): 
         """
         Args:
             filepath (str): path to dataset file with compounds contained as smiles
@@ -46,9 +49,10 @@ class MoleculeABCDataset():
         self.map_data = map_data
 
         # Get GPU global_rank
-        app_state = AppState()
-        self.global_rank = app_state._global_rank
-        world_size = app_state._world_size
+        # app_state = AppState() # TODO fix me
+        # self.global_rank = app_state._global_rank
+        # world_size = app_state._world_size
+        self.global_rank = global_rank
 
         # Set length of dataset based on GPUs
         self.full_len = self._get_data_length(metadata_path) 

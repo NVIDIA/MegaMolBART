@@ -5,7 +5,8 @@ ARG GITHUB_ACCESS_TOKEN
 # ENV PATH /opt/conda/bin:$PATH
 # ENV CUDA_HOME /usr/local/cuda
 # SHELL ["/bin/bash", "-c"]
-# RUN echo "source activate base" > /etc/bash.bashrc
+RUN echo "source activate base" > /etc/bash.bashrc
+ENV TERM=xterm
 
 # Ensure apt-get won't prompt for selecting options
 ENV DEBIAN_FRONTEND=noninteractive

@@ -53,9 +53,6 @@ echo '*******STARTING********' \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
-    model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=80 \
-    model.train_ds.use_iterable=false \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.batch_size=512 \
@@ -67,6 +64,9 @@ echo '*******STARTING********' \
     exp_manager.create_wandb_logger=true \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
+    model.train_ds.batch_size=512 \
+    model.train_ds.num_workers=80 \
+    model.train_ds.use_iterable=false \
     ~trainer.max_steps \
     +trainer.max_epochs=4 \
     ~trainer.val_check_interval \
@@ -100,6 +100,10 @@ srun --pty \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
+--nv-meta ml-model.megamolbart_benchmark,dcgm_opt_out.yes \
+--job-name megamolbart_benchmark \
+--mem=0 \
+--overcommit \
 bash
 # bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
 # bash -c "${RUN_COMMAND}"

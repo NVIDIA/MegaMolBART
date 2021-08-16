@@ -6,12 +6,11 @@
 #SBATCH --time=8:00:00
 #SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
-#SBATCH --job-name megamolbart
-#SBATCH --exclusive             # exclusive node access
+#SBATCH --job-name megamolbart_benchmark
+#SBATCH --nv-meta ml-model.megamolbart_benchmark,dcgm_opt_out.yes
 #SBATCH --mem=0                 # all mem avail
 #SBATCH --mail-type=FAIL        # only send email on failure
 #SBATCH --overcommit            # Needed for pytorch
-#SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
 
 set -x
 
@@ -64,11 +63,11 @@ echo '*******STARTING********' \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.batch_size=1 \
     ~model.validation_ds.num_workers \
-    model.validations.use_iterable=false \
+    model.validation_ds.use_iterable=false \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=80 \
+    model.train_ds.num_workers=20 \
     model.train_ds.use_iterable=false \
     exp_manager.create_tensorboard_logger=false \
     exp_manager.create_wandb_logger=false \
