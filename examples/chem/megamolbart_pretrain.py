@@ -21,8 +21,8 @@ from nemo.collections.chem.decoder import DecodeSamplerConfig
 @dataclass
 class MegaMolBARTPretrain(NemoConfig):
     name: Optional[str] = 'MegaMolBART'
-    do_training: bool = False
-    do_testing: bool = False
+    do_training: bool
+    do_testing: bool
     model: MegatronBARTConfig = MegatronBARTConfig()
     tokenizer: MolEncTokenizerFromVocabFileConfig = MolEncTokenizerFromVocabFileConfig()
     trainer: Optional[TrainerConfig] = TrainerConfig()
@@ -43,8 +43,6 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     # Make dict from trainer to add DDPPlugin because typechecking it is a nightmare
     trainer_config = dict(deepcopy(cfg.trainer))
     trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
-    # if not(cfg.exp_manager.create_wandb_logger | cfg.exp_manager.create_tensorboard_logger):
-    #     trainer_config['logger'] = pl.loggers.csv_logs.CSVLogger(save_dir=cfg.exp_manager.exp_dir)
 
     if cfg.random_seed:
         pl.seed_everything(cfg.random_seed, workers=True)
