@@ -65,8 +65,8 @@ class MegatronBARTConfig(ModelConfig):
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
     train_ds: DatasetConfig = MoleculeCsvDatasetConfig()
-    validation_ds: Optional[DatasetConfig] = MoleculeCsvDatasetConfig()
-    test_ds: Optional[DatasetConfig] = MoleculeCsvDatasetConfig()
+    validation_ds: Optional[DatasetConfig] = None
+    test_ds: Optional[DatasetConfig] = None
     optim: Optional[OptimConfig] = MegatronBARTOptimConfig()
 
 

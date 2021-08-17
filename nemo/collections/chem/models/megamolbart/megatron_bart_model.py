@@ -253,21 +253,24 @@ class MegaMolBARTModel(ModelPT):
         self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config)
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
-        logging.info('Loading validation data')
-        self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
-        # Instantiate Torchmetric for each val dataloader
-        if self._validation_dl is not None:
-            for dataloader_idx in range(len(self._validation_dl)):
-                if dataloader_idx == 0:
-                    setattr(
-                        self, f'val_loss', GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
-                    )
-                else:
-                    setattr(
-                        self,
-                        f'val_loss_{dataloader_idx}',
-                        GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
-                    )
+        if val_data_config.get('filepath'): # TODO skip if limit_val_batches=0.0
+            logging.info('Loading validation data')
+            self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
+            # Instantiate Torchmetric for each val dataloader
+            if self._validation_dl is not None:
+                for dataloader_idx in range(len(self._validation_dl)):
+                    if dataloader_idx == 0:
+                        setattr(
+                            self, f'val_loss', GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                        )
+                    else:
+                        setattr(
+                            self,
+                            f'val_loss_{dataloader_idx}',
+                            GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True),
+                        )
+        else:
+            logging.info('Skipping validation data loading')
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
