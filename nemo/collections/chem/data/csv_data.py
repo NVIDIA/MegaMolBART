@@ -26,11 +26,11 @@ from pysmilesutils.augment import SMILESAugmenter
 @dataclass
 class MoleculeCsvDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
+    batch_size: int = 1
+    use_iterable: bool = False
+    map_data: bool = False
     metadata_path: Optional[str] = None
     num_samples: Optional[int] = None
-    num_workers: Optional[int] = 0
-    use_iterable: Optional[bool] = False
-    map_data: Optional[bool] = False
 
 
 class MoleculeABCDataset():
@@ -128,7 +128,6 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
         super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, map_data=map_data)
         self._initialize_file(self.start)
         self._make_data_cache()
-        logging.info(f'DATASET {filepath}, {self.global_rank}, {self.start}, {self.end}')  # TODO REMOVE
         
     def _make_data_cache(self):
         lines = [next(self.fh_iter) for x in range(self.len)]
@@ -150,7 +149,6 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
     def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, **kwargs):
         super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, map_data=False)
-        logging.info(f'DATASET {filepath}, {self.global_rank}, {self.start}, {self.end}') # TODO REMOVE
         
     def __iter__(self):  
         # Divide up for workers

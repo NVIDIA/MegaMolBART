@@ -21,8 +21,8 @@ from nemo.collections.chem.decoder import DecodeSamplerConfig
 @dataclass
 class MegaMolBARTPretrain(NemoConfig):
     name: Optional[str] = 'MegaMolBART'
-    do_training: bool
-    do_testing: bool
+    do_training: Optional[bool] = None
+    do_testing: Optional[bool] = None
     model: MegatronBARTConfig = MegatronBARTConfig()
     tokenizer: MolEncTokenizerFromVocabFileConfig = MolEncTokenizerFromVocabFileConfig()
     trainer: Optional[TrainerConfig] = TrainerConfig()

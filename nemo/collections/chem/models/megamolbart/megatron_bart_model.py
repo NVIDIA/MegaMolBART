@@ -148,6 +148,9 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
+        app_state = AppState()
+        model_parallel_size = app_state._model_parallel_size
+        model_parallel_rank = app_state._model_parallel_rank
         # Configure globals
         set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo
         set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
@@ -164,12 +167,12 @@ class MegaMolBARTModel(ModelPT):
                 # TODO vocab size may need to be set
 
         # extra args provider
-        if self._model_parallel_size is not None:
+        if model_parallel_size is not None:
             app_state = AppState()
             self._app_state = app_state
             os.environ["WORLD_SIZE"] = str(app_state.world_size) # Must be set for model parallel megatron-lm
-            os.environ["RANK"] = str(self._model_parallel_rank)
-            extra_args_provider = self._update_megatron_args(tensor_model_parallel_size=self._model_parallel_size)
+            os.environ["RANK"] = str(model_parallel_rank)
+            extra_args_provider = self._update_megatron_args(tensor_model_parallel_size=model_parallel_size)
         else:
             extra_args_provider = self._update_megatron_args()
 
