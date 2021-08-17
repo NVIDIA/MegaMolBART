@@ -15,7 +15,7 @@ trainer:
   # limit_val_batches: 10 # set to 0.0 to disable validation
   val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
   num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
-  replace_sampler_ddp: false # data are manually distributed across GPUs currently
+  replace_sampler_ddp: true
   prepare_data_per_node: true
   profiler: null # null, simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
   amp_backend: native

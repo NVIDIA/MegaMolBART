@@ -15,7 +15,6 @@ import torch
 # from torch.utils.data import Dataset
 from nemo.core import Dataset, IterableDataset
 from nemo.core.classes.dataset import DatasetConfig
-from nemo.utils.app_state import AppState
 from nemo.utils import logging
 from rdkit import Chem
 
@@ -44,22 +43,11 @@ class MoleculeABCDataset():
         assert os.path.exists(filepath), FileNotFoundError(f"Could not find CSV file {filepath}")
         self.filepath = filepath
         self.map_data = map_data
-
-        # Get GPU global_rank
-        app_state = AppState()
-        self.global_rank = app_state._global_rank
-        world_size = app_state._world_size
-
-        # Set length of dataset based on GPUs
-        self.full_len = self._get_data_length(metadata_path) 
-        self.len = self.full_len // world_size
-        assert self.len * world_size <= self.full_len
-        self.start = self.len * self.global_rank
-        
+        self.len = self._get_data_length(metadata_path)
         if num_samples:
             if num_samples > 0:
                 self.len = min(num_samples, self.len)
-
+        self.start = 0
         self.end = self.start + self.len
         self._cache = None
                 
@@ -83,7 +71,7 @@ class MoleculeABCDataset():
                         break
         
         if length == 0:
-            logging.info('Unable to determine dataset size from metadata. Falling back to line counting.')
+            logging.info('Unable to determine dataset size from metadata. Falling back to countining lines.')
             with open(self.filepath, 'rb') as fh:
                 for row, line in enumerate(fh):
                     pass
