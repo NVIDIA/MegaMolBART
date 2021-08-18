@@ -1,27 +1,26 @@
 #!/bin/bash
 #SBATCH --nodes 1
-#SBATCH --ntasks 16
-#SBATCH --ntasks-per-node 16
-#SBATCH --gpus-per-node 16
-#SBATCH --time=8:00:00
-#SBATCH --partition batch
+#SBATCH --ntasks 2
+#SBATCH --ntasks-per-node 2
+#SBATCH --gpus-per-node 2
+#SBATCH --time=1:00:00
+#SBATCH --partition interactive
 #SBATCH --account ent_joc_model_mpnn_pyt
-#SBATCH --nv-meta ml-model.megamolbart_pretrain
-#SBATCH --exclusive             # exclusive node access
-#SBATCH --mem=0                 # all mem avail
+#SBATCH --nv-meta ml-model.megamolbart_pretrain_multi
+#  SBATCH --exclusive             # exclusive node access
+#  SBATCH --mem=0                 # all mem avail
 #  SBATCH --mail-type=FAIL        # only send email on failure
 #  SBATCH --overcommit            # Needed for pytorch
 #  SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
 
-set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED=x_OP_000..031_CL_.csv
+DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
-STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
-PROJECT=MegaMolBART # exp_manager and wandb
-EXPNAME=Draco-RNO # exp_manager and wandb
+STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
+PROJECT="MegaMolBART" # exp_manager and wandb
+EXPNAME="Draco-RNO" # exp_manager and wandb
 EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 
 WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
@@ -30,6 +29,7 @@ CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### 
+NTASKS=$((${SLURM_JOB_NUM_NODES}*${SLURM_GPUS_PER_NODE}))
 RESULTS_DIR=${OUTPUT_DIR}/${EXP_DIR}
 mkdir -p ${RESULTS_DIR}
 
@@ -39,8 +39,8 @@ OUTPUT_MOUNT=/result
 RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXP_DIR}
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
-ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
+# OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
+# ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
 GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
@@ -63,31 +63,22 @@ echo '*******STARTING********' \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
-    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
-    model.validation_ds.batch_size=512 \
-    model.validation_ds.num_workers=20 \
-    model.validation_ds.use_iterable=false \
-    exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
-    exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.create_wandb_logger=true \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=8 \
+    model.train_ds.num_workers=20 \
     model.train_ds.use_iterable=false \
-    ~trainer.max_steps \
-    +trainer.max_epochs=4 \
+    ~model.validation_ds.filepath \
+    ~model.validation_ds.metadata_path \
+    ~model.validation_ds.batch_size \
+    ~model.validation_ds.num_workers \
+    ~model.validation_ds.use_iterable \
+    exp_manager.create_wandb_logger=false \
+    exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
+    exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     ~trainer.val_check_interval \
-    +trainer.limit_val_batches=0.0 
+    +trainer.limit_val_batches=0.0 \
 EOF
-
-# model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
-# model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
-# ~trainer.max_steps \
-# +trainer.max_epochs=2 \
-# ~trainer.val_check_interval \
-# +trainer.limit_val_batches=2
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 
