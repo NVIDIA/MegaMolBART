@@ -5,9 +5,9 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-SLURM_JOB_NUM_NODES=1
-SLURM_GPUS_PER_NODE=8
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
+SLURM_JOB_NUM_NODES=2
+SLURM_GPUS_PER_NODE=16
+DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -90,6 +90,7 @@ srun --pty \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
+--export TERM=xterm \
 --nv-meta ml-model.megamolbart_int \
 bash
 
