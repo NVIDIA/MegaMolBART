@@ -88,10 +88,10 @@ srun --pty \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
---nv-meta ml-model.megamolbart_interactive \
+--nv-meta ml-model.megamolbart_int \
 bash
 
-# --job-name megamolbart_benchmark \
+# --job-name megamolbart_int \
 # --mem=0 \
 # --overcommit \
 

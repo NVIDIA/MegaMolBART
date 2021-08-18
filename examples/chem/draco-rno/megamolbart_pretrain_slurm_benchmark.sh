@@ -1,21 +1,19 @@
 #!/bin/bash
 #SBATCH --nodes 1 
-#SBATCH --ntasks 8
-#SBATCH --ntasks-per-node 8
-#SBATCH --gpus-per-node 8
+#SBATCH --ntasks 16
+#SBATCH --ntasks-per-node 16
+#SBATCH --gpus-per-node 16
 #SBATCH --time=8:00:00
 #SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
-#SBATCH --job-name megamolbart_benchmark
-#SBATCH --nv-meta ml-model.megamolbart_benchmark,dcgm_opt_out.yes
+#SBATCH --nv-meta ml-model.megamolbart_benchmark
 #SBATCH --mem=0                 # all mem avail
-#SBATCH --mail-type=FAIL        # only send email on failure
-#SBATCH --overcommit            # Needed for pytorch
+#SBATCH --exclusive
 
 set -x
 
 ### CONFIG ###
-DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
+DATA_FILES_SELECTED=x_OP_000..015_CL_.csv
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
@@ -90,7 +88,6 @@ echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 srun \
 --output $OUTFILE \
 --error $ERRFILE \
---mpi=pmix \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \

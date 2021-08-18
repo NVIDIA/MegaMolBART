@@ -79,7 +79,6 @@ export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 srun --pty \
 --account ent_joc_model_mpnn_pyt \
 --partition interactive \
---mpi pmix \
 --nodes ${SLURM_JOB_NUM_NODES} \
 --ntasks ${NTASKS} \
 --ntasks-per-node ${SLURM_GPUS_PER_NODE} \
@@ -91,10 +90,7 @@ srun --pty \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
---nv-meta ml-model.megamolbart_benchmark,dcgm_opt_out.yes \
---job-name megamolbart_benchmark \
---mem=0 \
---overcommit \
+--nv-meta ml-model.megamolbart_intbench \
 bash
 # bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
 # bash -c "${RUN_COMMAND}"

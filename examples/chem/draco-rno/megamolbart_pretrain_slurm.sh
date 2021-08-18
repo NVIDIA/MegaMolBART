@@ -6,12 +6,12 @@
 #SBATCH --time=8:00:00
 #SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
-#SBATCH --job-name megamolbart
+#SBATCH --nv-meta ml-model.megamolbart_pretrain
 #SBATCH --exclusive             # exclusive node access
 #SBATCH --mem=0                 # all mem avail
-#SBATCH --mail-type=FAIL        # only send email on failure
-#SBATCH --overcommit            # Needed for pytorch
-#SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
+#  SBATCH --mail-type=FAIL        # only send email on failure
+#  SBATCH --overcommit            # Needed for pytorch
+#  SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
 
 set -x
 
@@ -92,7 +92,6 @@ echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 srun \
 --output $OUTFILE \
 --error $ERRFILE \
---mpi=pmix \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
