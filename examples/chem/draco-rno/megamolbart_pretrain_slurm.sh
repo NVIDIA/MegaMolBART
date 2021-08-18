@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --nodes 1 
-#SBATCH --ntasks 16
+#SBATCH --nodes 2 
+#SBATCH --ntasks 32
 #SBATCH --ntasks-per-node 16
 #SBATCH --gpus-per-node 16
 #SBATCH --time=8:00:00
@@ -74,12 +74,13 @@ echo '*******STARTING********' \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=80 \
+    model.train_ds.num_workers=8 \
     model.train_ds.use_iterable=false \
     ~trainer.max_steps \
     +trainer.max_epochs=4 \
     ~trainer.val_check_interval \
-    +trainer.limit_val_batches=0.0
+    +trainer.limit_val_batches=0.0 \
+    ~model.validation_ds
 EOF
 
 # model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \

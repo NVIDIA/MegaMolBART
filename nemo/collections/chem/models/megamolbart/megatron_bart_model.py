@@ -100,16 +100,16 @@ class MegaMolBARTModel(ModelPT):
             num_gpus = 1
 
         env = os.environ.copy()
-        app_state._local_rank = int(env.get('LOCAL_RANK', 0))
-        app_state._node_rank = int(env.get('NODE_RANK', 0))
-        app_state._global_rank = app_state._local_rank + (app_state._node_rank * num_gpus) # TODO better way to calculate?
-        app_state._model_parallel_size = None
-        app_state._model_parallel_rank = None
-        # app_state._device_id #          TODO add these
-        # app_state._model_parallel_group
-        # app_state._data_parallel_size
-        # app_state._data_parallel_rank
-        # app_state._data_parallel_group
+        app_state.local_rank = int(env.get('LOCAL_RANK', 0))
+        app_state.node_rank = int(env.get('NODE_RANK', 0))
+        app_state.global_rank = app_state.local_rank + (app_state.node_rank * num_gpus) # TODO better way to calculate?
+        app_state.model_parallel_size = None
+        app_state.model_parallel_rank = None
+        # app_state.device_id = None # TODO add these
+        # app_state.model_parallel_group = None
+        # app_state.data_parallel_size = None
+        # app_state.data_parallel_rank = None
+        # app_state.data_parallel_group = None
         self._app_state = app_state
 
     @staticmethod
@@ -148,8 +148,9 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
-        model_parallel_size = self._app_state._model_parallel_size
-        model_parallel_rank = self._app_state._model_parallel_rank
+        app_state = AppState()
+        model_parallel_size = app_state.model_parallel_size
+        model_parallel_rank = app_state.model_parallel_rank
 
         # Configure globals
         set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo

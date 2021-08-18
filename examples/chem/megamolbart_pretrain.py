@@ -37,7 +37,7 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     OmegaConf.set_struct(cfg, False)
     cfg = update_model_config(default_cfg, cfg)
     OmegaConf.set_struct(cfg, True)
-    logging.info("\n\n************** Experiment configuration ***********")
+    logging.info("************** Experiment configuration ***********")
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
 
     # Make dict from trainer to add DDPPlugin because typechecking it is a nightmare
@@ -51,20 +51,20 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     exp_manager(trainer, cfg.get("exp_manager", None))
     
     model = MegaMolBARTModel(cfg, trainer)
-    logging.info("\n\n************** Model parameters and their sizes ***********")
+    logging.info("************** Model parameters and their sizes ***********")
     for name, param in model.named_parameters():
         logging.info(f'{name}: {param.size()}')
-    logging.info("***********************************************************\n\n")
+    logging.info("***********************************************************")
 
     if cfg.do_training:
-        logging.info("\n\n************** Starting Training ***********")
+        logging.info("************** Starting Training ***********")
         trainer.fit(model)
-        logging.info("\n\n************** Finished Training ***********")
+        logging.info("************** Finished Training ***********")
 
     if cfg.do_testing:
-        logging.info("\n\n************** Starting Testing ***********")
+        logging.info("************** Starting Testing ***********")
         trainer.test(model)
-        logging.info("\n\n************** Finished Testing ***********")
+        logging.info("************** Finished Testing ***********")
 
 
 if __name__ == '__main__':

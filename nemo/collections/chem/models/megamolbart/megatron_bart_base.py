@@ -2,7 +2,7 @@
 
 import math
 from functools import partial
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 from apex.normalization import FusedLayerNorm
 from torch.nn import init
 import torch.nn as nn
@@ -65,8 +65,8 @@ class MegatronBARTConfig(ModelConfig):
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
     train_ds: DatasetConfig = MoleculeCsvDatasetConfig()
-    validation_ds: Optional[DatasetConfig] = None
-    test_ds: Optional[DatasetConfig] = None
+    validation_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
+    test_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
     optim: Optional[OptimConfig] = MegatronBARTOptimConfig()
 
 

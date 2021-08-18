@@ -19,7 +19,7 @@ trainer:
   prepare_data_per_node: true
   profiler: null # null, simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
   amp_backend: native
-  amp_level: O1 # O0: fp32, O1/O2 for mixed, O3: fp16
+  amp_level: O3 # O0: fp32, O1/O2 for mixed, O3: fp16
   precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0
   # auto_scale_batch_size: None/binsearch
 
