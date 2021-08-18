@@ -1,14 +1,14 @@
 #!/bin/bash
-#SBATCH --nodes 1
-#SBATCH --ntasks 2
-#SBATCH --ntasks-per-node 2
-#SBATCH --gpus-per-node 2
-#SBATCH --time=1:00:00
-#SBATCH --partition interactive
+#SBATCH --nodes 2
+#SBATCH --ntasks 32
+#SBATCH --ntasks-per-node 16
+#SBATCH --gpus-per-node 16
+#SBATCH --time=8:00:00
+#SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
 #SBATCH --nv-meta ml-model.megamolbart_pretrain_multi
-#  SBATCH --exclusive             # exclusive node access
-#  SBATCH --mem=0                 # all mem avail
+#SBATCH --exclusive             # exclusive node access
+#SBATCH --mem=0                 # all mem avail
 #  SBATCH --mail-type=FAIL        # only send email on failure
 #  SBATCH --overcommit            # Needed for pytorch
 #  SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
@@ -39,8 +39,8 @@ OUTPUT_MOUNT=/result
 RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXP_DIR}
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-# OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
-# ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
+ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
 GPU_LIMIT="$(($SLURM_GPUS_PER_NODE-1))"
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
@@ -66,18 +66,18 @@ echo '*******STARTING********' \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=20 \
+    model.train_ds.num_workers=10 \
     model.train_ds.use_iterable=false \
-    ~model.validation_ds.filepath \
-    ~model.validation_ds.metadata_path \
-    ~model.validation_ds.batch_size \
-    ~model.validation_ds.num_workers \
-    ~model.validation_ds.use_iterable \
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
+    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
+    model.validation_ds.batch_size=512 \
+    model.validation_ds.num_workers=0 \
+    model.validation_ds.use_iterable=false \
     exp_manager.create_wandb_logger=false \
     exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
     ~trainer.val_check_interval \
-    +trainer.limit_val_batches=0.0 \
+    +trainer.limit_val_batches=0.0
 EOF
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh

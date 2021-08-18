@@ -5,9 +5,9 @@ set -x
 # Tested with single node, multiple GPU configuration
 
 ### CONFIG ###
-SLURM_JOB_NUM_NODES=2
-SLURM_GPUS_PER_NODE=16
-DATA_FILES_SELECTED="x_OP_000..031_CL_.csv"
+SLURM_JOB_NUM_NODES=1
+SLURM_GPUS_PER_NODE=2
+DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
 
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
@@ -58,12 +58,12 @@ echo '*******STARTING********' \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
-    model.train_ds.num_workers=80 \
+    model.train_ds.num_workers=10 \
     model.train_ds.use_iterable=false \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.batch_size=512 \
-    model.validation_ds.num_workers=20 \
+    model.validation_ds.num_workers=4 \
     model.train_ds.use_iterable=false \
     exp_manager.create_wandb_logger=false \
     exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
@@ -93,10 +93,6 @@ srun --pty \
 --export TERM=xterm \
 --nv-meta ml-model.megamolbart_int \
 bash
-
-# --job-name megamolbart_int \
-# --mem=0 \
-# --overcommit \
 
 # bash ${OUTPUT_MOUNT}/${EXP_DIR}/job_script.sh 
 # bash -c "${RUN_COMMAND}"
