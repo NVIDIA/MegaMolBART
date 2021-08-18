@@ -37,7 +37,7 @@ python megamolbart_pretrain.py \
     ~model.validation_ds.use_iterable \
     model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
-    model.train_ds.batch_size=32 \
+    model.train_ds.batch_size=128 \
     model.train_ds.num_workers=2 \
     model.train_ds.use_iterable=false \
     exp_manager.create_tensorboard_logger=false \

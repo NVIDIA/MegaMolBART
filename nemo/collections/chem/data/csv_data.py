@@ -125,13 +125,8 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
         
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        mol = self._cache[idx]            
-        enc_smi = self.augmenter(mol)
-        dec_smi = self.augmenter(mol)
-        output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
-        return output
+            idx = idx.item()
+        return self._cache[idx]
 
 
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
@@ -156,7 +151,4 @@ class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
         for _ in range(iter_len):
             mol = next(self.fh_iter)
             mol = self.decoder(mol)[0]
-            enc_smi = self.augmenter(mol)
-            dec_smi = self.augmenter(mol)
-            output = {'encoder_smiles': enc_smi, 'decoder_smiles': dec_smi}
-            yield output
+            yield mol

@@ -45,6 +45,8 @@ from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from .megatron_bart_base import MegatronBART
+from pysmilesutils.augment import SMILESAugmenter
+from copy import copy
 
 __all__ = ["MegaMolBARTModel"]
 
@@ -85,7 +87,8 @@ class MegaMolBARTModel(ModelPT):
                                 cfg.model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        self.setup_optimization(cfg.model.optim)
+        self.setup_optimization(cfg.model.optim) # TODO check warning from training
+        self.aug = SMILESAugmenter()
 
     def _set_app_state(self, cfg):
         app_state = AppState()
@@ -108,9 +111,6 @@ class MegaMolBARTModel(ModelPT):
         # app_state._data_parallel_rank
         # app_state._data_parallel_group
         self._app_state = app_state
-
-        self._model_parallel_size = None # TODO how to configure -- Megatron set requires them for initialization
-        self._model_parallel_rank = None #      which must be done before torch.distributed is intialized
 
     @staticmethod
     def _update_megatron_args(
@@ -148,9 +148,9 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
-        app_state = AppState()
-        model_parallel_size = app_state._model_parallel_size
-        model_parallel_rank = app_state._model_parallel_rank
+        model_parallel_size = self._app_state._model_parallel_size
+        model_parallel_rank = self._app_state._model_parallel_rank
+
         # Configure globals
         set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo
         set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
@@ -356,11 +356,21 @@ class MegaMolBARTModel(ModelPT):
             return (tokens_short, mask_short)
         return (tokens, mask)
 
+    def augmenter(self, mol): # TODO move to dataset
+        try:
+            aug_smi = self.aug(mol)[0]
+        except:
+            aug_smi = mol
+        return aug_smi
+
     def collate_fn(self, batch):
         """ Used by DataLoader to concatenate/collate inputs."""
+        encoder_smiles = copy(batch)
+        decoder_smiles = batch
 
-        encoder_smiles = [x['encoder_smiles'][0] for x in batch]
-        decoder_smiles = [x['decoder_smiles'][0] for x in batch]
+        encoder_smiles = [self.augmenter(x) for x in encoder_smiles]
+        decoder_smiles = [self.augmenter(x) for x in decoder_smiles]
+
         enc_token_output = self.tokenizer.tokenize(encoder_smiles, mask=True, pad=True)
         dec_token_output = self.tokenizer.tokenize(decoder_smiles, pad=True)
 
