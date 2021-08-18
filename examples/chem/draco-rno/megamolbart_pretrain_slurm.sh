@@ -22,6 +22,7 @@ CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 PROJECT=MegaMolBART # exp_manager and wandb
 EXPNAME=Draco-RNO # exp_manager and wandb
+EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 
 WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
@@ -29,13 +30,13 @@ CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### 
-RESULTS_DIR="${OUTPUT_DIR}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}"
+RESULTS_DIR=${OUTPUT_DIR}/${EXP_DIR}
 mkdir -p ${RESULTS_DIR}
 
 DATA_MOUNT=/data
 CODE_MOUNT=/code
 OUTPUT_MOUNT=/result
-RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
+RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXP_DIR}
 WORKDIR=${CODE_MOUNT}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Can't be used with pty in srun
@@ -57,6 +58,8 @@ echo '*******STARTING********' \
 && python megamolbart_pretrain.py \
     --config-path=conf \
     --config-name=megamolbart_pretrain \
+    exp_manager.name=${EXP_DIR} \
+    exp_manager.exp_dir=${RESULTS_MOUNT} \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
@@ -65,9 +68,8 @@ echo '*******STARTING********' \
     model.validation_ds.batch_size=512 \
     model.validation_ds.num_workers=20 \
     model.validation_ds.use_iterable=false \
-    exp_manager.wandb_logger_kwargs.name=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
+    exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
     exp_manager.wandb_logger_kwargs.project=${PROJECT} \
-    exp_manager.exp_dir=${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE} \
     exp_manager.create_wandb_logger=true \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
@@ -98,7 +100,7 @@ srun \
 --export WANDB=${WANDB} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
-bash ${OUTPUT_MOUNT}/${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}/job_script.sh 
+bash ${OUTPUT_MOUNT}/${EXP_DIR}/job_script.sh 
 # bash -c "${RUN_COMMAND}"
 
 set +x
