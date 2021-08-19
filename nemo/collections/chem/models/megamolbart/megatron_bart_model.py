@@ -57,22 +57,18 @@ class MegaMolBARTModel(ModelPT):
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
         self._set_app_state(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
-
+        
         self._model_name = cfg.model.name
-        self._restore_path = cfg.model.checkpoint_file
-        self._hidden_size = cfg.model.d_model
         self.max_seq_len = cfg.model.max_seq_len
-
-        if not os.path.exists(cfg.tokenizer.vocab_path):
-            raise ValueError(f'Vocab file not found at {cfg.tokenizer.vocab_path}')
         self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
         self._vocab_size = len(self.tokenizer)
+        self._set_ddp(trainer)
 
         _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg.model, trainer=trainer)
-        self.config = OmegaConf.create(cfg.model)
 
         # Load model
+        self.config = OmegaConf.create(cfg.model)
         sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
         self.model = MegatronBART( 
@@ -111,6 +107,14 @@ class MegaMolBARTModel(ModelPT):
         # app_state.data_parallel_rank = None
         # app_state.data_parallel_group = None
         self._app_state = app_state
+
+    def _set_ddp(self, trainer):
+        # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
+        if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
+            self.replace_sampler_ddp = True
+            trainer.accelerator_connector.replace_sampler_ddp = False
+        else:
+            self.replace_sampler_ddp = False
 
     @staticmethod
     def _update_megatron_args(
@@ -245,6 +249,8 @@ class MegaMolBARTModel(ModelPT):
 
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
+        if not os.path.exists(cfg.vocab_path):
+            raise ValueError(f'Vocab file not found at {cfg.vocab_path}')
         tokenizer = MolEncTokenizer.from_vocab_file(**cfg)
         return tokenizer
 
@@ -318,11 +324,13 @@ class MegaMolBARTModel(ModelPT):
         return datasets
 
     def setup_dataloader_from_config(self, cfg: DictConfig):
-        use_iterable = cfg.get('use_iterable', False)
         dataset = self._setup_dataset_from_config(cfg)
 
-        if use_iterable:
-            sampler = None
+        if self.replace_sampler_ddp:
+            app_state = AppState()
+            sampler = pt_data.DistributedSampler(dataset=dataset, num_replicas=app_state.world_size, 
+                                                 rank=app_state.local_rank,
+                                                 shuffle=cfg.shuffle, drop_last=cfg.drop_last)
         else:
             sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
             sampler = sampler_name(dataset)
