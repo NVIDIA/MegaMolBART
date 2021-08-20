@@ -1,0 +1,36 @@
+FROM nvcr.io/nvidia/nemo:1.2.0 
+ARG GITHUB_ACCESS_TOKEN
+
+# Activating base environment
+RUN echo "source activate chem_env" > /etc/bash.bashrc
+ENV TERM=xterm
+
+## Installing tmux and vim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y \
+    wget git unzip tmux vim
+
+
+## Environment setup
+COPY conda/env_new.yml /tmp/.
+RUN conda env update --name chem_env -f /tmp/env_new.yml && conda clean -afy
+
+## PySMILES
+RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
+    && cd /opt/pysmilesutils; pip install .
+
+## NeMo_MegaMolBART
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git --branch michelle/nemo_chem_val_and_metrics
+
+## Copying useful attributes into chem directory
+RUN mkdir NeMo_MegaMolBART_chem
+COPY ./examples/chem NeMo_MegaMolBART_chem/examples
+COPY ./nemo/collections/chem NeMo_MegaMolBART_chem/collections
+
+## Removing non-chem
+RUN rm -rf NeMo_MegaMolBART
+
+## Resetting PythonPath
+ENV PYTHONPATH "${PYTHONPATH}:."
+
