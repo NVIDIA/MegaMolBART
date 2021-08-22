@@ -8,6 +8,7 @@ from nemo.collections.chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
 
 @dataclass
 class DecodeSamplerConfig():
+    tokenizer: MolEncTokenizer
     max_seq_len: int = DEFAULT_MAX_SEQ_LEN
 
 class DecodeSampler:

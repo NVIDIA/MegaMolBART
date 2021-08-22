@@ -3,7 +3,6 @@ import os
 from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
 import tempfile
-import re
 import time
 
 import numpy as np
@@ -19,16 +18,16 @@ from torch.utils.data.dataloader import DataLoader
 from nemo.collections.common import metrics
 
 from nemo.collections.common.data import ConcatDataset
-from nemo.core.config import hydra_runner
-from nemo.utils import logging
-from nemo.utils.exp_manager import exp_manager
 from nemo.utils.app_state import AppState
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
 from nemo.core.neural_types import ChannelType, LossType, MaskType, NeuralType
 from nemo.utils.env_var_parsing import get_envint
-from nemo.collections.common.metrics import GlobalAverageLossMetric
 from nemo.utils import logging, model_utils
+from nemo.collections.common.metrics import GlobalAverageLossMetric
+from nemo.collections.common.losses import CrossEntropyLoss
+# from nemo.collections.nlp.metrics import SequencePerplexity
+
 
 from megatron import get_args, initialize_megatron
 from megatron.model.bert_model import bert_attention_mask_func
@@ -88,6 +87,11 @@ class MegaMolBARTModel(ModelPT):
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.setup_optimization(cfg.model.optim) # TODO check warning from training
         self.aug = SMILESAugmenter()
+        self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
+        self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
+        # TODO conversion to TorchMetrics version of SequenceComplexity
+        # self.val_ppl = SequencePerplexity()
+        # self.test_ppl = SequencePerplexity()
 
     def _set_app_state(self, cfg):
         app_state = AppState()
@@ -275,17 +279,17 @@ class MegaMolBARTModel(ModelPT):
             logging.info('Loading validation data')
             self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
             # Instantiate Torchmetric for each val dataloader
-            if self._validation_dl is not None:
-                self._setup_eval_metrics(self._validation_dl, 'val')
+            # if self._validation_dl is not None:
+            #     self._setup_eval_metrics(self._validation_dl, 'val')
         else:
             logging.info('Skipping validation data loading')
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
         self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config)
-        # instantiate Torchmetric for each test dataloader
-        if self._test_dl is not None:
-            self._setup_eval_metrics(self._test_dl, 'test')
+        # Instantiate Torchmetric for each val dataloader
+        # if self._test_dl is not None:
+        #     self._setup_eval_metrics(self._test_dl, 'test')
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg.copy())
@@ -425,7 +429,6 @@ class MegaMolBARTModel(ModelPT):
         end_time = time.monotonic()
         duration = end_time - start_time
 
-
         self.log('lr', lr)
         self.log('train_loss', loss.item(), on_epoch=True)
         self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
@@ -439,62 +442,92 @@ class MegaMolBARTModel(ModelPT):
         return {'loss': loss, 
                 'log': tensorboard_logs}
 
-    def _eval_step(self, batch: dict, batch_idx: int, mode: str, dataloader_idx: int = 0) -> Dict:
+    def _eval_step(self, batch: dict, batch_idx: int, mode: str) -> Dict:
         self.model.eval()
-
+        
         model_output = self.model.forward(batch)
         target_smiles = batch['target_smiles']
 
-        num_measurements = len(target_smiles)
-        loss = self.model._calc_loss(batch, model_output)
-        loss_label = f'{mode}_loss' if dataloader_idx == 0 else f'{mode}_loss_{dataloader_idx}'
-        getattr(self, loss_label)(loss=loss, num_measurements=num_measurements)
-        
-        token_acc = self.model._calc_char_acc(batch, model_output)
+        loss = self.model._calc_loss(batch, model_output).item()
         perplexity = self.model._calc_perplexity(batch, model_output)
+        token_acc = self.model._calc_char_acc(batch, model_output)
         (mol_strs, log_lhs) = self.model.sample_molecules(batch, sampling_alg=self.val_sampling_alg)
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles) # TODO move to epoch end and parallelize on CPU
 
-        tensorboard_logs = {
-            f'{mode}_loss': loss.item(),
-            f'{mode}_perplexity': perplexity,            
+        # eval_loss_attr = getattr(self, f'{mode}_loss')
+        # num_measurements = len(target_smiles)
+        # eval_loss_attr.update(loss=loss, num_measurements=num_measurements)
+        # TODO believe original code is incorrect -- should be slicing ids/mask
+        # input_ids, labels = ids[:, :-1], ids[:, 1:]
+        # input_mask, output_mask = mask[:, :-1], mask[:, 1:]
+        # labels = batch['target'].transpose(0, 1) 
+        # target_mask = batch['target_pad_mask'].transpose(0, 1)
+        # log_probs = model_output['token_output'].transpose(0, 1)
+        # mask = ~(target_mask > 0)
+        # eval_ppl_attr = getattr(self, f'{mode}_ppl')
+        # eval_ppl_attr(log_probs=log_probs, labels=labels, mask=mask) # should be output mask
+
+        logs = {
+            f'{mode}_loss': loss,
+            f'{mode}_perplexity': perplexity,
             f'{mode}_char_acc': token_acc,
             f'{mode}_molecular_accuracy': metrics['accuracy'],
-            f'{mode}_invalid_smiles': metrics['invalid'] }
+            f'{mode}_invalid_smiles': metrics['invalid']}
 
-        self.log_dict(tensorboard_logs, on_epoch=True, sync_dist=True)
-        tensorboard_logs['log'] = tensorboard_logs.copy()
-        return tensorboard_logs
+        self.log_dict(logs, on_epoch=True, sync_dist=True)
+        logs['log'] = logs.copy()
+        return logs
 
-    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+    def validation_step(self, batch, batch_idx):
         """
         Lightning calls this inside the validation loop with the data from the validation dataloader
         passed in as `batch`.
         """
-        return self._eval_step(batch, batch_idx, 'val', dataloader_idx)
+        return self._eval_step(batch, batch_idx, 'val')
 
-    def test_step(self, batch, batch_idx, dataloader_idx=0):
-        return self._eval_step(batch, batch_idx, 'test', dataloader_idx)
+    def test_step(self, batch, batch_idx):
+        return self._eval_step(batch, batch_idx, 'test')
 
-    def _eval_epoch_end(self, mode: str, outputs: List[Dict]) -> Dict:
+    def _eval_epoch_end(self, outputs: List[Dict], mode: str) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        loss = torch.tensor([x['val_loss'] for x in outputs]).mean().item()
-        perplexity = torch.tensor([x['val_perplexity'] for x in outputs]).mean().item()
-        #tensorboard_logs = {'val_loss': loss, 'val_perplexity': perplexity}
-        #return {'val_loss': loss, 'log': tensorboard_logs}
-        return {'val_loss': loss, 'val_perplexity': perplexity}
+        loss_label = f'{mode}_loss'
+        eval_loss = torch.tensor([x[loss_label] for x in outputs]).mean().item()
+        # eval_loss_attr = getattr(self, loss_label)
+        # eval_loss = eval_loss_attr.compute()
+
+        ppl_label = f'{mode}_perplexity'
+        eval_ppl = torch.tensor([x[ppl_label] for x in outputs]).mean().item()
+
+        a_list = [None] * self.world_size
+        if self.global_rank == 0:
+            dist.all_gather_object(a_list, mol_strs)
+
+        # alternative_ppl_label = f'{mode}_ppl'
+        # alternative_ppl_attr = getattr(self, alternative_ppl_label)
+        # alternative_ppl = alternative_ppl_attr.compute()
+
+        return {loss_label: eval_loss, ppl_label: eval_ppl}
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        val_metrics = self._eval_epoch_end('val', outputs)
-        val_metrics['log'] = val_metrics.copy()
-        return val_metrics
+        mode = 'val'
+        self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
+        # getattr(self, f'{mode}_loss').reset()
+
+    def test_epoch_end(self, outputs: List[Dict]) -> Dict:
+        """
+        Called at the end of test to aggregate outputs.
+        :param outputs: list of individual outputs of each test step.
+        """
+        mode = 'test'
+        self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
+        # getattr(self, f'{mode}_loss').reset()
 
     @rank_zero_only
     def log_param_stats(self):

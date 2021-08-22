@@ -3,10 +3,8 @@
 import math
 from functools import partial
 from typing import Optional, Tuple, Union
-from apex.normalization import FusedLayerNorm
 from torch.nn import init
 import torch.nn as nn
-import torch.nn.functional as F
 import torch
 
 from megatron import mpu
@@ -349,11 +347,11 @@ class MegatronBART(MegatronModule):
             #self.sampler.device = self.device
             if sampling_alg == 'greedy':
                 (mol_strs, log_lhs) = \
-                    self.sampler.greedy_decode(decode_fn, batch_size,device=memory.device)
+                    self.sampler.greedy_decode(decode_fn, batch_size, device=memory.device)
             elif sampling_alg == 'beam':
                 (mol_strs, log_lhs) = \
                     self.sampler.beam_decode(decode_fn, batch_size,
-                        self.num_beams,device=memory.device)
+                        self.num_beams, device=memory.device)
 
         # Must remember to unfreeze!
         #model.train()
