@@ -1,7 +1,7 @@
 name: &name MegaMolBART
 do_training: true # set to false if data preprocessing steps must be completed
 do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
-random_seed: 42
+random_seed: 37
 
 trainer:
   accumulate_grad_batches: 1
