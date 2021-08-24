@@ -16,6 +16,7 @@ except:
 from dataclasses import dataclass
 from nemo.collections.chem.data import MoleculeCsvDatasetConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig
+from nemo.collections.chem.optimizer import AdamOptimConfig
 from nemo.core.classes.dataset import DatasetConfig
 from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
@@ -29,26 +30,7 @@ DEFAULT_D_FEEDFORWARD = 4 * DEFAULT_D_MODEL
 DEFAULT_MAX_SEQ_LEN = 512
 DEFAULT_DROPOUT = 0.0
 
-
-@dataclass
-class MegatronBARTSchedConfig(SchedConfig):
-    name: str = 'CosineAnnealing'
-    last_epoch: int = -1
-    warmup_steps: Optional[int] = 8000
-    min_lr: Optional[float] = 1.0e-5
-    max_steps: Optional[int] = 110000 # TODO this is not in original paper
-    monitor: Optional[str] = 'loss'
-    reduce_on_plateau: Optional[bool] = False
-
-
-@dataclass
-class MegatronBARTOptimConfig(OptimConfig):
-    name: str = 'adam'
-    lr: float = 1.0 # TODO this is what was in the paper, I believe it is wrong
-    betas: Tuple[float, float] = (0.9, 0.999)
-    weight_decay: float = 0.0
-    sched: Optional[SchedConfig] = MegatronBARTSchedConfig()
-
+__all__ = ["MegatronBARTConfig", "MegatronBART"]
 
 @dataclass
 class MegatronBARTConfig(ModelConfig):
@@ -65,7 +47,7 @@ class MegatronBARTConfig(ModelConfig):
     train_ds: DatasetConfig = MoleculeCsvDatasetConfig()
     validation_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
     test_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
-    optim: Optional[OptimConfig] = MegatronBARTOptimConfig()
+    optim: Optional[OptimConfig] = AdamOptimConfig()
 
 
 class MegatronBART(MegatronModule):

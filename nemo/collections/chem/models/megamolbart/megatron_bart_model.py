@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
+from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -18,6 +19,7 @@ from torch.utils.data.dataloader import DataLoader
 from nemo.collections.common import metrics
 
 from nemo.collections.common.data import ConcatDataset
+from nemo.core import optim
 from nemo.utils.app_state import AppState
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
@@ -45,6 +47,7 @@ from megatron.mpu import (
 from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
+from nemo.collections.chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
 from pysmilesutils.augment import SMILESAugmenter
 from copy import copy
@@ -73,6 +76,7 @@ class MegaMolBARTModel(ModelPT):
         self.config = OmegaConf.create(cfg.model)
         self.sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
+        self.d_model = cfg.model.d_model # for scheduler
         self.model = MegatronBART( 
                                 self.sampler,
                                 pad_token_idx,
@@ -85,13 +89,14 @@ class MegaMolBARTModel(ModelPT):
                                 cfg.model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        # config.schedulers.register_scheduler_params()
+        optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
+
         self.setup_optimization(cfg.model.optim) # TODO check warning from training
+
         self.aug = SMILESAugmenter()
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
-        # TODO conversion to TorchMetrics version of SequenceComplexity
-        # self.val_ppl = SequencePerplexity()
-        # self.test_ppl = SequencePerplexity()
 
     def _set_app_state(self, cfg):
         app_state = AppState()
@@ -269,27 +274,16 @@ class MegaMolBARTModel(ModelPT):
         logging.info('Loading training data')
         self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config)
 
-    def _setup_eval_metrics(self, dataloader_list: List[DataLoader], mode: str):
-        for dataloader_idx in range(len(dataloader_list)):
-            label = f'{mode}_loss' if dataloader_idx == 0 else f'{mode}_loss_{dataloader_idx}'
-            setattr(self, label, GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True))
-
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         if val_data_config.get('filepath'): # TODO skip if limit_val_batches=0.0
             logging.info('Loading validation data')
             self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
-            # Instantiate Torchmetric for each val dataloader
-            # if self._validation_dl is not None:
-            #     self._setup_eval_metrics(self._validation_dl, 'val')
         else:
             logging.info('Skipping validation data loading')
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
         self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config)
-        # Instantiate Torchmetric for each val dataloader
-        # if self._test_dl is not None:
-        #     self._setup_eval_metrics(self._test_dl, 'test')
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg.copy())
@@ -451,21 +445,8 @@ class MegaMolBARTModel(ModelPT):
         loss = self.model._calc_loss(batch, model_output).item()
         perplexity = self.model._calc_perplexity(batch, model_output)
         token_acc = self.model._calc_char_acc(batch, model_output)
-        (mol_strs, log_lhs) = self.model.sample_molecules(batch, sampling_alg=self.val_sampling_alg)
-        metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles) # TODO move to epoch end and parallelize on CPU
-
-        # eval_loss_attr = getattr(self, f'{mode}_loss')
-        # num_measurements = len(target_smiles)
-        # eval_loss_attr.update(loss=loss, num_measurements=num_measurements)
-        # TODO believe original code is incorrect -- should be slicing ids/mask
-        # input_ids, labels = ids[:, :-1], ids[:, 1:]
-        # input_mask, output_mask = mask[:, :-1], mask[:, 1:]
-        # labels = batch['target'].transpose(0, 1) 
-        # target_mask = batch['target_pad_mask'].transpose(0, 1)
-        # log_probs = model_output['token_output'].transpose(0, 1)
-        # mask = ~(target_mask > 0)
-        # eval_ppl_attr = getattr(self, f'{mode}_ppl')
-        # eval_ppl_attr(log_probs=log_probs, labels=labels, mask=mask) # should be output mask
+        (mol_strs, log_lhs) = self.model.sample_molecules(batch, sampling_alg=self.val_sampling_alg) 
+        metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
         logs = {
             f'{mode}_loss': loss,
@@ -495,21 +476,20 @@ class MegaMolBARTModel(ModelPT):
         """
         loss_label = f'{mode}_loss'
         eval_loss = torch.tensor([x[loss_label] for x in outputs]).mean().item()
-        # eval_loss_attr = getattr(self, loss_label)
-        # eval_loss = eval_loss_attr.compute()
 
         ppl_label = f'{mode}_perplexity'
         eval_ppl = torch.tensor([x[ppl_label] for x in outputs]).mean().item()
 
-        a_list = [None] * self.world_size
-        if self.global_rank == 0:
-            dist.all_gather_object(a_list, mol_strs)
+        token_label = f'{mode}_char_acc'
+        eval_token_acc = torch.tensor([x[token_label] for x in outputs]).mean().item()
 
-        # alternative_ppl_label = f'{mode}_ppl'
-        # alternative_ppl_attr = getattr(self, alternative_ppl_label)
-        # alternative_ppl = alternative_ppl_attr.compute()
+        mol_acc_label = f'{mode}_molecular_accuracy'
+        eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
-        return {loss_label: eval_loss, ppl_label: eval_ppl}
+        return {f'{loss_label}_avg': eval_loss, 
+                f'{ppl_label}_avg': eval_ppl,
+                f'{token_label}_avg': eval_token_acc,
+                f'{mol_acc_label}_avg': eval_mol_acc}
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
@@ -518,7 +498,6 @@ class MegaMolBARTModel(ModelPT):
         """
         mode = 'val'
         self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
-        # getattr(self, f'{mode}_loss').reset()
 
     def test_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
@@ -527,7 +506,6 @@ class MegaMolBARTModel(ModelPT):
         """
         mode = 'test'
         self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
-        # getattr(self, f'{mode}_loss').reset()
 
     @rank_zero_only
     def log_param_stats(self):
