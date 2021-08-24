@@ -1,0 +1,96 @@
+name: &name MegaMolBART
+do_training: true # set to false if data preprocessing steps must be completed
+do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
+random_seed: 42
+
+trainer:
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+  min_epochs: 6
+  max_epochs: 6
+  limit_val_batches: 1.0 
+  num_steps: 1160160
+  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
+  precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0
+  gpus: 8
+  num_nodes: 1
+  accelerator: ddp
+  amp_backend: native
+  amp_level: O3 # O0: fp32, O1/O2 for mixed, O3: fp16  
+  replace_sampler_ddp: true
+  prepare_data_per_node: true
+  profiler: null # null, simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
+  checkpoint_callback: false # use exp_manager instead for checkpoints
+  logger: false # use nemo logging instead
+  # auto_scale_batch_size: None/binsearch
+
+tokenizer:
+  mask_prob: 0.1
+  mask_scheme: span
+  vocab_path: /code/NeMo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
+
+model:
+  name: *name
+  d_feedforward: 4096 # set to 4 * hidden_size
+  d_model: 1024 # the hidden_size
+  dropout: 0.1
+  max_seq_len: 512
+  num_heads: 16
+  num_layers: 8
+  # vocab_size: 523 # TODO FIXME
+  pretrained: false
+  checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
+
+  train_ds:
+    batch_size: 128
+    filepath: /data/zinc_csv/train/x[000..146].csv
+    metadata_path: /data/zinc_csv/train/metadata.txt
+    pin_memory: false 
+    shuffle: false
+    drop_last: false
+    num_workers: 80
+    use_iterable: false
+    # task: mask_aug # TODO FIXME
+
+  validation_ds:
+    batch_size: 128
+    filepath: /data/zinc_csv/val/x[000..146].csv
+    metadata_path: /data/zinc_csv/val/metadata.txt
+    pin_memory: false 
+    shuffle: false
+    drop_last: false
+    num_workers: 10
+    use_iterable: false
+    # task: mask_aug # TODO FIXME
+
+  optim:
+    name: adam # TODO compare to _target_: torch.optim.AdamW
+    lr: 1.0
+    weight_decay: 0.0
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    sched:
+      name: TransformerLR
+      lr: ${model.optim.lr}
+      warm_up_steps: 8000
+      d_model: ${model.d_model}
+      last_epoch: -1
+
+exp_manager:
+  exp_dir: /result/nemo_experiments # exp_dir for experiment, defaults to "./nemo_experiments"
+  name: *name
+  create_tensorboard_logger: true
+  resume_ignore_no_checkpoint: true
+  resume_if_exists: true
+  create_checkpoint_callback: true
+  checkpoint_callback_params:
+    monitor: 'molecular_accuracy'
+    always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
+    save_last: true
+    save_top_k: 5
+    mode: max
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    name: pretrain_xl_span_aug
+    project: *name
