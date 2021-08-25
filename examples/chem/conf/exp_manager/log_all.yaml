@@ -1,5 +1,5 @@
 defaults:
-  - exp_manager_base
+  - exp_manager_defaults
 
 create_tensorboard_logger: true
 create_checkpoint_callback: true

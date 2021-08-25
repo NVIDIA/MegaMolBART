@@ -1,8 +1,8 @@
 defaults:
   - trainer: trainer_defaults
-  - exp_manager: log
-  - model/dataset@model.train_ds: dataset_default
-  - model/dataset@model.validation_ds: dataset_default
+  - model/dataset@model.train_ds: dataset_defaults
+  - model/dataset@model.validation_ds: dataset_defaults
+  - exp_manager: log_all
   - model: small
   - model/optim@model.optim: adam
   - model/optim/sched@model.optim.sched: transformer
