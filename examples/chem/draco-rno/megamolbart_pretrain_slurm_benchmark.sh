@@ -6,6 +6,7 @@
 #SBATCH --time=4:00:00
 #SBATCH --partition batch 
 #SBATCH --account ent_joc_model_mpnn_pyt
+#SBATCH --gres=gpfs:circe
 #SBATCH --nv-meta ml-model.megamolbart_benchmark
 #SBATCH --mem=0
 #SBATCH --exclusive

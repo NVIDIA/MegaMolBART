@@ -6,12 +6,12 @@
 #SBATCH --time=8:00:00
 #SBATCH --partition batch
 #SBATCH --account ent_joc_model_mpnn_pyt
+#SBATCH --gres=gpfs:circe
 #SBATCH --nv-meta ml-model.megamolbart_pretrain_multi
 #SBATCH --exclusive             # exclusive node access
 #SBATCH --mem=0                 # all mem avail
 #  SBATCH --mail-type=FAIL        # only send email on failure
 #  SBATCH --overcommit            # Needed for pytorch
-#  SBATCH --gres=gpfs:circe       # Needed for Circe-Draco <required>
 
 
 ### CONFIG ###

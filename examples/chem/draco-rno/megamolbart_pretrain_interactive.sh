@@ -72,6 +72,7 @@ export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
 # srun --output $OUTFILE --error $ERRFILE \
 srun --pty \
+--gres=gpfs:circe \
 --account ent_joc_model_mpnn_pyt \
 --partition interactive \
 --nodes ${SLURM_JOB_NUM_NODES} \
