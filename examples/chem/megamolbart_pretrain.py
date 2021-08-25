@@ -30,7 +30,7 @@ class MegaMolBARTPretrain(NemoConfig):
     random_seed: Optional[int] = None
 
 
-@hydra_runner(config_path="conf", config_name="megamolbart_pretrain")
+@hydra_runner()
 def main(cfg: MegaMolBARTPretrain) -> None:
     # Load configuration
     default_cfg = OmegaConf.structured(MegaMolBARTPretrain())

@@ -31,12 +31,14 @@ tokenizer:
 
 model:
   train_ds:
+    # task: mask_aug TODO FIXME
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     batch_size: 128
     num_workers: 10
 
   validation_ds:
+    # task: mask_aug TODO FIXME
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     batch_size: 128

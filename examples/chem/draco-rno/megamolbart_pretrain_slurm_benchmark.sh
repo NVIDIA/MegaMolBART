@@ -15,15 +15,16 @@ set -x
 WORKERS=12
 
 ### CONFIG ###
+MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FILES_SELECTED=x_OP_000..015_CL_.csv
-
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
+# WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+
 PROJECT=MegaMolBART # exp_manager and wandb
 EXPNAME=Draco-RNO # exp_manager and wandb
 EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}_workers_${WORKERS}
 
-WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
@@ -48,7 +49,6 @@ SCRIPT_PYTHONPATH=${CODE_MOUNT}':$PYTHONPATH'
 read -r -d '' RUN_COMMAND << EOF
 echo '*******STARTING********' \
 && echo '---------------' \
-&& wandb login ${WANDB} \
 && echo 'Starting training' \
 && export CUDA_VISIBLE_DEVICES=${SCRIPT_CUDA_VISIBLE_DEVICES} \
 && export PYTHONPATH=${SCRIPT_PYTHONPATH} \
@@ -56,7 +56,7 @@ echo '*******STARTING********' \
 && cd ${CODE_MOUNT}/examples/chem \
 && python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=megamolbart_pretrain \
+    --config-name=${MEGAMOLBART_CONFIG_FILE} \
     exp_manager.name=${EXP_DIR} \
     exp_manager.exp_dir=${RESULTS_MOUNT} \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
@@ -80,13 +80,6 @@ echo '*******STARTING********' \
     +trainer.limit_val_batches=0.0 \
     +trainer.log_every_n_steps=200
 EOF
-
-# model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
-# model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
-# ~trainer.max_steps \
-# +trainer.max_epochs=2 \
-# ~trainer.val_check_interval \
-# +trainer.limit_val_batches=2
 
 echo "${RUN_COMMAND}" > ${RESULTS_DIR}/job_script.sh
 

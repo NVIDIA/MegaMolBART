@@ -1,33 +1,37 @@
-FROM nvcr.io/nvidia/pytorch:21.06-py3
+FROM nvcr.io/nvidia/nemo:1.2.0 
 ARG GITHUB_ACCESS_TOKEN
+ARG NEMO_BRANCH=michelle/nemo_chem_val_and_metrics
 
-# ENV UCX_LOG_LEVEL error
-# ENV PATH /opt/conda/bin:$PATH
-# ENV CUDA_HOME /usr/local/cuda
-# SHELL ["/bin/bash", "-c"]
-RUN echo "source activate base" > /etc/bash.bashrc
+# Activating base environment
+RUN echo "source activate chem_env" > /etc/bash.bashrc
 ENV TERM=xterm
 
-# Ensure apt-get won't prompt for selecting options
+## Installing tmux and vim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y \
-    libxrender1 libsndfile1 sox \
-    python-setuptools swig \
-    python-dev ffmpeg \
+    python-setuptools python-dev swig \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
-## Environment setup
-COPY conda/env.yml /tmp/.
-RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
+## Environment setup - conda does not work with NeMo
+#RUN conda env update --name chem_env -f /tmp/env_new.yml && conda clean -afy
+RUN pip install rdkit-pypi==2021.03.4 wordninja
 
 ## PySMILES
 RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
     && cd /opt/pysmilesutils; pip install .
 
-# NeMo main
-RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/mlgill/NeMo.git /opt/NeMo && \
-	cd /opt/NeMo && \
-	git checkout c527e954b6101edb7d06fcda7cfdea7c646f6695 && \ 
-	sh reinstall.sh
+## NeMo_MegaMolBART
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git --branch ${NEMO_BRANCH}
+
+# Copying over chem-only collections and examples
+COPY ./examples/chem /workspace/nemo/examples/chem
+COPY ./tests/collections/chem /workspace/nemo/tests/collections/chem
+COPY ./nemo/collections/chem /workspace/nemo/collections/chem
+
+## Removing unecessary non-chem items
+RUN rm -rf NeMo_MegaMolBART
+
+## Resetting PythonPath
+ENV PYTHONPATH /workspace/nemo:$PYTHONPATH

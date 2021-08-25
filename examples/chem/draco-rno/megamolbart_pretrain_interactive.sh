@@ -7,15 +7,17 @@ set -x
 ### CONFIG ###
 SLURM_JOB_NUM_NODES=1
 SLURM_GPUS_PER_NODE=2
-DATA_FILES_SELECTED="x_OP_000..001_CL_.csv"
 
+MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
+DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
-STORAGE_DIR="/gpfs/fs1/projects/ent_joc/users/mgill/megatron"
-PROJECT="MegaMolBART" # exp_manager and wandb
-EXPNAME="Draco-RNO" # exp_manager and wandb
+WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
+STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+
+PROJECT=MegaMolBART # exp_manager and wandb
+EXPNAME=Draco-RNO # exp_manager and wandb
 EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
 
-WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
@@ -49,7 +51,7 @@ echo '*******STARTING********' \
 && cd ${CODE_MOUNT}/examples/chem \
 && python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=megamolbart_pretrain \
+    --config-name=${MEGAMOLBART_CONFIG_FILE} \
     exp_manager.name=${EXP_DIR} \
     exp_manager.exp_dir=${RESULTS_MOUNT} \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
@@ -59,15 +61,10 @@ echo '*******STARTING********' \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.train_ds.batch_size=512 \
     model.train_ds.num_workers=10 \
-    model.train_ds.use_iterable=false \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.batch_size=512 \
-    model.validation_ds.num_workers=4 \
-    model.train_ds.use_iterable=false \
-    exp_manager.create_wandb_logger=false \
-    exp_manager.wandb_logger_kwargs.name=${EXP_DIR} \
-    exp_manager.wandb_logger_kwargs.project=${PROJECT}
+    model.validation_ds.num_workers=4
 EOF
 
 
