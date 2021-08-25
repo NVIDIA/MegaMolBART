@@ -14,7 +14,8 @@ random_seed: 42
 
 exp_manager:
   name: *name
-  project: ${model.name}
+  wandb_logger_kwargs:
+    project: ${model.name}
 
 trainer:
   gpus: 8

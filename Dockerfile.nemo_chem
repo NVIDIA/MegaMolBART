@@ -1,6 +1,6 @@
 FROM nvcr.io/nvidia/nemo:1.2.0 
 ARG GITHUB_ACCESS_TOKEN
-ARG NEMO_BRANCH=michelle/cleanup
+ARG NEMO_BRANCH=main
 ARG NEMO_HOME=/workspace/nemo
 
 # Activating base environment

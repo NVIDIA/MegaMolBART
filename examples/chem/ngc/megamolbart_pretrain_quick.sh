@@ -29,7 +29,7 @@ export PYTHONPATH="${CODE_MOUNT}:"$PYTHONPATH
 export HYDRA_FULL_ERROR="1"
 cd ${CODE_MOUNT}/examples/chem
 
-# wandb login ${WANDB}
+wandb login ${WANDB}
 python megamolbart_pretrain.py \
     --config-path=conf \
     --config-name=${MEGAMOLBART_CONFIG_FILE} \
