@@ -26,7 +26,7 @@ EXPNAME=Draco-RNO # exp_manager and wandb
 EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}_workers_${WORKERS}
 
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
-CODE_DIR=${STORAGE_DIR}/workspace/nemo
+CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### 
