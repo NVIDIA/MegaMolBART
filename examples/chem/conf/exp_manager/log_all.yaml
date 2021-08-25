@@ -11,5 +11,4 @@ checkpoint_callback_params:
   mode: max
 create_wandb_logger: true
 wandb_logger_kwargs:
-  project: *name
   name: ${model.name}
