@@ -178,7 +178,7 @@ build() {
         -t ${MEGAMOLBART_CONT_BASENAME}:latest \
         -t ${MEGAMOLBART_CONT_BASENAME}:${DATE} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
-        -f Dockerfile.megamolbart_nemo \
+        -f Dockerfile.nemo_chem \
         .
 
     set +e

@@ -1,6 +1,6 @@
 FROM nvcr.io/nvidia/nemo:1.2.0 
 ARG GITHUB_ACCESS_TOKEN
-ARG NEMO_BRANCH=michelle/nemo_chem_val_and_metrics
+ARG NEMO_BRANCH=michelle/cleanup
 
 # Activating base environment
 RUN echo "source activate chem_env" > /etc/bash.bashrc
@@ -26,9 +26,10 @@ RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /
 RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git --branch ${NEMO_BRANCH}
 
 # Copying over chem-only collections and examples
-COPY ./examples/chem /workspace/nemo/examples/chem
-COPY ./tests/collections/chem /workspace/nemo/tests/collections/chem
-COPY ./nemo/collections/chem /workspace/nemo/collections/chem
+#COPY ./examples/chem /workspace/nemo/examples/chem
+#COPY ./tests/collections/chem /workspace/nemo/tests/collections/chem
+#COPY ./nemo/collections/chem /workspace/nemo/collections/chem
+COPY . /workspace/nemo
 
 ## Removing unecessary non-chem items
 RUN rm -rf NeMo_MegaMolBART
