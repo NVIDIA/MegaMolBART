@@ -14,6 +14,7 @@ random_seed: 42
 
 exp_manager:
   name: *name
+  project: ${model.name}
 
 trainer:
   gpus: 8
