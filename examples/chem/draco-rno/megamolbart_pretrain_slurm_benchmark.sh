@@ -17,7 +17,7 @@ WORKERS=12
 ### CONFIG ###
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FILES_SELECTED=x_OP_000..015_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210824"
 # WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
@@ -26,7 +26,7 @@ EXPNAME=Draco-RNO # exp_manager and wandb
 EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}_workers_${WORKERS}
 
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
-CODE_DIR=${STORAGE_DIR}/code/NeMo
+CODE_DIR=${STORAGE_DIR}/workspace/nemo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### 

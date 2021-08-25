@@ -26,7 +26,7 @@ trainer:
   val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
 
 tokenizer:
-  vocab_path: /code/NeMo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
+  vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
   mask_prob: 0.15
 
 model:

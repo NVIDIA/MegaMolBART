@@ -4,7 +4,7 @@
    "aceName": "nv-us-west-2",
    "command": "sleep 168h",
    "description": "Clara Discovery",
-   "dockerImageName": "nvidian/clara-lifesciences/megamolbart_training_nemo:210716",
+   "dockerImageName": "nvidian/clara-lifesciences/megamolbart_training_nemo:210824",
    "name": "development.ml-model.megamolbart-interactive",
    "publishedContainerPorts": [
        8888,

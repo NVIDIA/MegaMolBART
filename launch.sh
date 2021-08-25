@@ -147,31 +147,26 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
+NEMO_HOME=/workspace/nemo
 DOCKER_CMD="docker run \
     --rm \
     --network host \
     ${PARAM_RUNTIME} \
     -p ${JUPYTER_PORT}:8888 \
-    -v ${PROJECT_PATH}:/code/NeMo \
+    -v ${PROJECT_PATH}:${NEMO_HOME} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
-    -v /home/mgill/.ssh:/code/NeMo/.ssh:ro \
+    -v /home/mgill/.ssh:${NEMO_HOME}/.ssh:ro \
     --shm-size=1g \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
-    -e HOME=/code/NeMo \
+    -e HOME=${NEMO_HOME} \
     -e TF_CPP_MIN_LOG_LEVEL=3 \
-    -w /code/NeMo"
-#    -u $(id -u ${USER}):$(id -g ${USER}) \
+    -w ${NEMO_HOME}"
  
 DATE=$(date +%y%m%d)
 
 build() {
     set -e
-
-    #USERNAME=`whoami`
-    #USERID=`id -u $USERNAME`
-    #GROUPNAME=`id -gn`
-    #GROUPID=`id -g`
     MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )"
     echo "Building MegaMolBART training container..."
     docker build --network host \
@@ -202,23 +197,8 @@ pull() {
 
 
 dev() {
-
-DOCKER_CMD="docker run \
-    --rm \
-    --network host \
-    ${PARAM_RUNTIME} \
-    -p ${JUPYTER_PORT}:8888 \
-    -v /home/mgill/code/NeMo/examples/chem:/code/NeMo/examples/chem \
-    -v /home/mgill/code/NeMo/nemo/collections/chem:/code/NeMo/nemo/collections/chem \
-    -v /home/mgill/.ssh:/code/NeMo/.ssh:ro \
-    --shm-size=1g \
-    --ulimit memlock=-1 \
-    --ulimit stack=67108864 \
-    -e HOME=/code/NeMo \
-    -e TF_CPP_MIN_LOG_LEVEL=3 \
-    -w /code/NeMo"
     set -x
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env PYTHONPATH=/code/NeMo --workdir /code/NeMo --name nemo_dev " 
+    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --name nemo_dev " 
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
     exit
 }

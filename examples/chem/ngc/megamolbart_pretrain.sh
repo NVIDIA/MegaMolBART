@@ -8,19 +8,19 @@ NUM_GPUS=8
 NUM_NODES=1
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210716"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210824"
 WANDB=88800d16aea5891a1cdab809b2c47c351c8125e1
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
 PROJECT=MegaMolBART # exp_manager and wandb
-EXPNAME=Draco-RNO # exp_manager and wandb
-EXP_DIR=${EXPNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_GPUS_PER_NODE}
+EXPNAME=LOCAL # exp_manager and wandb
+EXP_DIR=${EXPNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 
 DATA_MOUNT=/data/zinc_csv_split
-CODE_MOUNT=/code/NeMo
-OUTPUT_MOUNT=/result/nemo_experiments
+CODE_MOUNT=/workspace/nemo
+RESULTS_MOUNT=/result/nemo_experiments
 
-mkdir -p ${OUTPUT_MOUNT}
+mkdir -p ${RESULTS_MOUNT}
 GPU_LIMIT=$(($NUM_GPUS-1))
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
 
