@@ -1,0 +1,4 @@
+exp_dir: /result/nemo_experiments # exp_dir for experiment, defaults to "./nemo_experiments"
+resume_ignore_no_checkpoint: true
+resume_if_exists: true
+resume_past_end: true

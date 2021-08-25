@@ -1,0 +1,50 @@
+defaults:
+  - trainer: trainer_defaults
+  - model/dataset@model.train_ds: dataset_defaults
+  - model/dataset@model.validation_ds: dataset_defaults
+  - exp_manager: log_all
+  - model: small
+  - model/optim@model.optim: adam
+  - model/optim/sched@model.optim.sched: transformer
+
+name: &name MegaMolBART
+do_training: true # set to false if data preprocessing steps must be completed
+do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
+random_seed: 42
+
+exp_manager:
+  name: *name
+  wandb_logger_kwargs:
+    project: ${model.name}
+
+trainer:
+  gpus: 8
+  num_nodes: 1
+  min_epochs: 10
+  max_epochs: 10
+  num_steps: 1933600
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
+  limit_val_batches: 1.0 
+  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+
+tokenizer:
+  mask_scheme: span
+  mask_prob: 0.1
+  vocab_path: /workspace/nemo/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
+
+model:
+  train_ds:
+    # task: mask TODO FIXME
+    filepath: /data/zinc_csv/train/x[000..146].csv
+    metadata_path: /data/zinc_csv/train/metadata.txt
+    batch_size: 128
+    num_workers: 10
+
+  validation_ds:
+    # task: mask TODO FIXME
+    filepath: /data/zinc_csv/val/x[000..146].csv
+    metadata_path: /data/zinc_csv/val/metadata.txt
+    batch_size: 128
+    num_workers: 4

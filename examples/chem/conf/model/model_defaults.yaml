@@ -1,0 +1,4 @@
+max_seq_len: 512
+dropout: 0.1
+pretrained: false
+checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt

@@ -1,0 +1,93 @@
+name: &name MegaMolBART
+do_training: true # set to false if data preprocessing steps must be completed
+do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
+random_seed: 42
+
+trainer:
+  gpus: 8
+  num_nodes: 1
+  max_steps: 1000000
+  accumulate_grad_batches: 1
+  accelerator: ddp
+  gradient_clip_val: 1.0
+  checkpoint_callback: false # use exp_manager instead for checkpoints
+  logger: false # use nemo logging instead
+  # limit_val_batches: 10 # set to 0.0 to disable validation
+  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
+  replace_sampler_ddp: true
+  prepare_data_per_node: true
+  profiler: null # null, simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
+  amp_backend: native
+  amp_level: O3 # O0: fp32, O1/O2 for mixed, O3: fp16
+  precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0
+  # auto_scale_batch_size: None/binsearch
+
+tokenizer:
+  vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
+  mask_prob: 0.15
+
+model:
+  name: *name
+  d_model: 256 # the hidden_size
+  num_layers: 4
+  num_heads: 8
+  d_feedforward: 1024 # set to 4 * hidden_size
+  max_seq_len: 512
+  dropout: 0.1
+  pretrained: false
+  checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
+
+  train_ds:
+    filepath: /data/zinc_csv/train/x[000..146].csv
+    metadata_path: /data/zinc_csv/train/metadata.txt
+    pin_memory: false 
+    batch_size: 128 # Chemformer used 128
+    shuffle: false
+    drop_last: false
+    num_workers: 80
+    use_iterable: false
+
+  validation_ds:
+    filepath: /data/zinc_csv/val/x[000..146].csv
+    metadata_path: /data/zinc_csv/val/metadata.txt
+    pin_memory: false 
+    batch_size: 128 # Chemformer used 128
+    shuffle: false
+    drop_last: false
+    num_workers: 10
+    use_iterable: false
+
+  # TODO verify that optimizer and scheduler params set correctly
+  optim:
+    name: adamw
+    betas: [0.9, 0.999] # TODO DeepSpeed config used 0.8, 0.999
+    eps: 1.0e-8
+    lr: 0.0001 # TODO DeepSpeed used 0.00003; Chemformer used 1.0 ???
+    weight_decay: 3e-7
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 8000
+      warmup_ratio: null # was originally 0.01 in MegaMolBART, use instead of warmup_steps
+      min_lr: 1.0e-5
+      last_epoch: -1
+      monitor: loss
+      reduce_on_plateau: false
+
+exp_manager:
+  exp_dir: /result/nemo_experiments # exp_dir for experiment, defaults to "./nemo_experiments"
+  name: *name
+  create_tensorboard_logger: true
+  resume_ignore_no_checkpoint: true
+  resume_if_exists: true
+  create_checkpoint_callback: true
+  checkpoint_callback_params:
+    monitor: 'val_loss'
+    always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
+    save_last: true
+    save_top_k: 5
+    mode: max
+  create_wandb_logger: true
+  wandb_logger_kwargs:
+    name: small_model_testing
+    project: *name

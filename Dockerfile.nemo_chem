@@ -1,0 +1,32 @@
+FROM nvcr.io/nvidia/nemo:1.2.0 
+ARG GITHUB_ACCESS_TOKEN
+ARG NEMO_BRANCH=main
+ARG NEMO_HOME=/workspace/nemo
+
+# Activating base environment
+RUN echo "source activate base" > /etc/bash.bashrc
+ENV TERM=xterm
+
+## Installing tmux and vim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y \
+    python-setuptools python-dev swig \
+    wget git unzip tmux vim && \
+    rm -rf /var/lib/apt/lists/*
+
+## Environment setup - conda does not work with NeMo
+#RUN conda env update --name chem_env -f /tmp/env_new.yml && conda clean -afy
+RUN pip install rdkit-pypi==2021.03.4 wordninja
+
+## PySMILES
+RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
+    && cd /opt/pysmilesutils; pip install .
+
+## NeMo_MegaMolBART
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git \
+    --branch ${NEMO_BRANCH} /opt/NeMo_MegaMolBART \
+    && rm -rf ${NEMO_HOME} \
+    && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
+    && ln -s ${NEMO_HOME}/nemo/collections/chem /opt/conda/lib/python3.8/site-packages/nemo/collections/chem 
+# TODO finish setup.py
