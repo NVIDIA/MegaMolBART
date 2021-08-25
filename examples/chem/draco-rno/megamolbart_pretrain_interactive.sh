@@ -59,11 +59,9 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
-    model.train_ds.batch_size=512 \
     model.train_ds.num_workers=10 \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
-    model.validation_ds.batch_size=512 \
     model.validation_ds.num_workers=4
 EOF
 
