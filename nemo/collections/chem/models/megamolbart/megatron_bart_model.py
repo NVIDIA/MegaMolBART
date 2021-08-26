@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
 import tempfile
 import time
+from functools import partial
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
@@ -44,12 +45,14 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import MoleculeCsvDatasetConfig, MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, expand_dataset_paths
+from nemo.collections.chem.data import (MoleculeCsvDatasetConfig, MoleculeDataset, 
+                                        MoleculeIterableDataset, ConcatIterableDataset, 
+                                        expand_dataset_paths, collate_molecule_dataset)
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from nemo.collections.chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
-from pysmilesutils.augment import SMILESAugmenter
+from pysmilesutils.augment import SMILESAugmenter, MolAugmenter
 from copy import copy
 
 __all__ = ["MegaMolBARTModel"]
@@ -62,6 +65,7 @@ class MegaMolBARTModel(ModelPT):
         self._set_app_state(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
         
+        self.smiles_augmenter = MolAugmenter()
         self._model_name = cfg.model.name
         self.max_seq_len = cfg.model.max_seq_len
         self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
@@ -73,6 +77,7 @@ class MegaMolBARTModel(ModelPT):
         super().__init__(cfg=cfg.model, trainer=trainer)
 
         # Load model
+        
         self.config = OmegaConf.create(cfg.model)
         self.sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
@@ -89,12 +94,10 @@ class MegaMolBARTModel(ModelPT):
                                 cfg.model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        # config.schedulers.register_scheduler_params()
         optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
 
         self.setup_optimization(cfg.model.optim) # TODO check warning from training
 
-        self.aug = SMILESAugmenter()
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
 
@@ -321,83 +324,70 @@ class MegaMolBARTModel(ModelPT):
             sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
             sampler = sampler_name(dataset)
         
+        collate_fn = partial(collate_molecule_dataset, tokenizer=self.tokenizer,
+                            encoder_augment=cfg.encoder_augment, 
+                            decoder_augment=cfg.decoder_augment,
+                            encoder_mask=cfg.encoder_mask, 
+                            canonicalize_target=cfg.canonicalize_target_smiles,
+                            smiles_augmenter=self.smiles_augmenter)
+
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
             batch_size=cfg.batch_size,
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
-            collate_fn=self.collate_fn)
+            collate_fn=collate_fn)
 
         return dataloader
 
-    @staticmethod
-    def _check_seq_len(tokens: List[List[str]], mask: List[List[int]], max_seq_len: int):
-        """ Warn user and shorten sequence if the tokens are too long, otherwise return original
+    # def augmenter(self, mol): # TODO move to dataset
+    #     try:
+    #         aug_smi = self.aug(mol)[0]
+    #     except:
+    #         aug_smi = mol
+    #     return aug_smi
 
-        Args:
-            tokens (List[List[str]]): List of token sequences
-            mask (List[List[int]]): List of mask sequences
+    # def collate_fn(self, batch):
+    #     """ Used by DataLoader to concatenate/collate inputs."""
+    #     encoder_smiles = copy(batch)
+    #     decoder_smiles = batch
 
-        Returns:
-            tokens (List[List[str]]): List of token sequences (shortened, if necessary)
-            mask (List[List[int]]): List of mask sequences (shortened, if necessary)
-        """
+    #     encoder_smiles = [self.augmenter(x) for x in encoder_smiles]
+    #     decoder_smiles = [self.augmenter(x) for x in decoder_smiles]
 
-        seq_len = max([len(ts) for ts in tokens])
-        if seq_len > max_seq_len:
-            tokens_short = [ts[:max_seq_len] for ts in tokens]
-            mask_short = [ms[:max_seq_len] for ms in mask]
-            return (tokens_short, mask_short)
-        return (tokens, mask)
+    #     enc_token_output = self.tokenizer.tokenize(encoder_smiles, mask=True, pad=True)
+    #     dec_token_output = self.tokenizer.tokenize(decoder_smiles, pad=True)
 
-    def augmenter(self, mol): # TODO move to dataset
-        try:
-            aug_smi = self.aug(mol)[0]
-        except:
-            aug_smi = mol
-        return aug_smi
+    #     enc_mask = enc_token_output['masked_pad_masks']
+    #     enc_tokens = enc_token_output['masked_tokens']
+    #     dec_tokens = dec_token_output['original_tokens']
+    #     dec_mask = dec_token_output['original_pad_masks']
 
-    def collate_fn(self, batch):
-        """ Used by DataLoader to concatenate/collate inputs."""
-        encoder_smiles = copy(batch)
-        decoder_smiles = batch
+    #     (enc_tokens, enc_mask) = check_seq_len(enc_tokens, enc_mask, self.max_seq_len)
+    #     (dec_tokens, dec_mask) = check_seq_len(dec_tokens, dec_mask, self.max_seq_len)
 
-        encoder_smiles = [self.augmenter(x) for x in encoder_smiles]
-        decoder_smiles = [self.augmenter(x) for x in decoder_smiles]
+    #     enc_token_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
+    #     dec_token_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
 
-        enc_token_output = self.tokenizer.tokenize(encoder_smiles, mask=True, pad=True)
-        dec_token_output = self.tokenizer.tokenize(decoder_smiles, pad=True)
+    #     enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1)
+    #     enc_pad_mask = torch.tensor(enc_mask,
+    #                                 dtype=torch.int64).transpose(0, 1)
+    #     dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
+    #     dec_pad_mask = torch.tensor(dec_mask,
+    #                                 dtype=torch.int64).transpose(0, 1)
 
-        enc_mask = enc_token_output['masked_pad_masks']
-        enc_tokens = enc_token_output['masked_tokens']
-        dec_tokens = dec_token_output['original_tokens']
-        dec_mask = dec_token_output['original_pad_masks']
+    #     collate_output = {
+    #         'encoder_input': enc_token_ids,
+    #         'encoder_pad_mask': enc_pad_mask,
+    #         'decoder_input': dec_token_ids[:-1, :],
+    #         'decoder_pad_mask': dec_pad_mask[:-1, :],
+    #         'target': dec_token_ids.clone()[1:, :],
+    #         'target_pad_mask': dec_pad_mask.clone()[1:, :],
+    #         'target_smiles': decoder_smiles,
+    #         }
 
-        (enc_tokens, enc_mask) = self._check_seq_len(enc_tokens, enc_mask, self.max_seq_len)
-        (dec_tokens, dec_mask) = self._check_seq_len(dec_tokens, dec_mask, self.max_seq_len)
-
-        enc_token_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
-        dec_token_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
-
-        enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1)
-        enc_pad_mask = torch.tensor(enc_mask,
-                                    dtype=torch.int64).transpose(0, 1)
-        dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
-        dec_pad_mask = torch.tensor(dec_mask,
-                                    dtype=torch.int64).transpose(0, 1)
-
-        collate_output = {
-            'encoder_input': enc_token_ids,
-            'encoder_pad_mask': enc_pad_mask,
-            'decoder_input': dec_token_ids[:-1, :],
-            'decoder_pad_mask': dec_pad_mask[:-1, :],
-            'target': dec_token_ids.clone()[1:, :],
-            'target_pad_mask': dec_pad_mask.clone()[1:, :],
-            'target_smiles': decoder_smiles,
-            }
-
-        return collate_output
+    #     return collate_output
 
     @typecheck()
     def forward(self, batch):

@@ -36,14 +36,16 @@ tokenizer:
 
 model:
   train_ds:
-    # task: aug TODO FIXME
+    encoder_mask: false # task = aug
+    decoder_augment: true
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
     batch_size: 128
     num_workers: 10
 
   validation_ds:
-    # task: aug TODO FIXME
+    encoder_mask: false # not done in validation set
+    decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
     batch_size: 128
