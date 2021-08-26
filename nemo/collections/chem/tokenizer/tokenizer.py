@@ -273,6 +273,7 @@ class MolEncTokenizer:
         return len(self.vocab)
 
     def tokenize(self, sents1, sents2=None, mask=False, pad=False):
+        # TODO this function can likely be streamlined
         if sents2 is not None and len(sents1) != len(sents2):
             raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
 
