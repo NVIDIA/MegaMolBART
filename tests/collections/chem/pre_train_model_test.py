@@ -6,11 +6,15 @@ import random
 
 from megatron.initialize import initialize_megatron
 from megatron import get_args
+from torch.cuda import init
 from megatron_molbart.decoder import DecodeSampler
 from megatron_molbart.tokenizer import MolEncTokenizer
 from megatron_molbart.megatron_bart import MegatronBART
 from util import (DEFAULT_NUM_LAYERS, DEFAULT_D_MODEL, DEFAULT_NUM_HEADS, DEFAULT_VOCAB_PATH, CHECKPOINTS_DIR, DEFAULT_MAX_SEQ_LEN)
 from util import REGEX as regex
+
+DEFAULT_VOCAB_PATH = "/opt/MegaMolBART/bart_vocab.txt"
+CHECKPOINTS_DIR = "/models/checkpoints"
 
 # Use dummy SMILES strings
 react_data = [
@@ -25,18 +29,21 @@ prod_data = [
     "CCl",
     "CBr"
 ]
-
-args = {
+def initialize_model():
+    pass
+kwargs = {
         'num_layers': DEFAULT_NUM_LAYERS,
         'hidden_size': DEFAULT_D_MODEL,
         'num_attention_heads': DEFAULT_NUM_HEADS,
         'max_position_embeddings': DEFAULT_MAX_SEQ_LEN,
         'tokenizer_type': 'GPT2BPETokenizer',
-        'vocab_file': DEFAULT_VOCAB_PATH,
+        'micro_batch_size': 8,
+        'merge_file': True,
+        'encoder_seq_length': 8, 
+        #'vocab_file': DEFAULT_VOCAB_PATH,
         'load': CHECKPOINTS_DIR
     }
-
-initialize_megatron(args_defaults=args, ignore_unknown_args=True)
+initialize_megatron(args_defaults=kwargs, ignore_unknown_args=True)
 args = get_args()
 
 random.seed(a=1)
@@ -66,6 +73,7 @@ def build_model(args, tokenzier, sampler):
 
 
 def test_pos_emb_shape():
+    initialize_model()
     tokenizer = build_tokenizer()
     sampler = build_sampler(args, tokenizer)
     model = build_model(args, tokenizer, sampler)
