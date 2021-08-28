@@ -365,10 +365,10 @@ class MegaMolBARTModel(ModelPT):
         self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
         self.log('step_time', duration, on_step=True)
 
-        tensorboard_logs = {'train_loss': loss.item(),
-                            'train_char_acc': char_acc, 
-                            'lr': lr,
-                            'step_time': duration}
+        tensorboard_logs = {'train/loss': loss.item(),
+                            'train/char_acc': char_acc, 
+                            'trainer/lr': lr,
+                            'trainer/step_time': duration}
 
         return {'loss': loss, 
                 'log': tensorboard_logs}
@@ -386,11 +386,11 @@ class MegaMolBARTModel(ModelPT):
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
         logs = {
-            f'{mode}_loss': loss,
-            f'{mode}_perplexity': perplexity,
-            f'{mode}_char_acc': token_acc,
-            f'{mode}_molecular_accuracy': metrics['accuracy'],
-            f'{mode}_invalid_smiles': metrics['invalid']}
+            f'{mode}/loss': loss,
+            f'{mode}/perplexity': perplexity,
+            f'{mode}/char_acc': token_acc,
+            f'{mode}/molecular_accuracy': metrics['accuracy'],
+            f'{mode}/invalid_smiles': metrics['invalid']}
 
         self.log_dict(logs, on_epoch=True, sync_dist=True)
         logs['log'] = logs.copy()
@@ -411,16 +411,16 @@ class MegaMolBARTModel(ModelPT):
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        loss_label = f'{mode}_loss'
+        loss_label = f'{mode}/loss'
         eval_loss = torch.tensor([x[loss_label] for x in outputs]).mean().item()
 
-        ppl_label = f'{mode}_perplexity'
+        ppl_label = f'{mode}/perplexity'
         eval_ppl = torch.tensor([x[ppl_label] for x in outputs]).mean().item()
 
-        token_label = f'{mode}_char_acc'
+        token_label = f'{mode}/char_acc'
         eval_token_acc = torch.tensor([x[token_label] for x in outputs]).mean().item()
 
-        mol_acc_label = f'{mode}_molecular_accuracy'
+        mol_acc_label = f'{mode}/molecular_accuracy'
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
         return {f'{loss_label}_avg': eval_loss, 
