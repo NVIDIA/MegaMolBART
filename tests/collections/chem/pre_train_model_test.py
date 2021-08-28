@@ -1,17 +1,41 @@
 # coding=utf-8
 
+from dataclasses import dataclass
 import pytest
 import torch
 import random
+import tempfile
 
 from megatron.initialize import initialize_megatron
 from megatron import get_args
+from torch.cuda import init
 from megatron_molbart.decoder import DecodeSampler
+from megatron.mpu import (
+    get_data_parallel_world_size,
+    get_data_parallel_rank,
+    get_model_parallel_group,
+    model_parallel_is_initialized,
+    set_pipeline_model_parallel_rank,
+    set_pipeline_model_parallel_world_size,
+)
 from megatron_molbart.tokenizer import MolEncTokenizer
 from megatron_molbart.megatron_bart import MegatronBART
 from util import (DEFAULT_NUM_LAYERS, DEFAULT_D_MODEL, DEFAULT_NUM_HEADS, DEFAULT_VOCAB_PATH, CHECKPOINTS_DIR, DEFAULT_MAX_SEQ_LEN)
 from util import REGEX as regex
+from nemo.utils.app_state import AppState
+import logging
+import os
 
+DEFAULT_VOCAB_PATH = "/opt/MegaMolBART/bart_vocab.txt"
+CHECKPOINTS_DIR = "/models/checkpoints"
+
+@dataclass
+class TestInput:
+    """Represents input to a test"""
+    def __init__(self, init_dict: dict):
+        for key in init_dict:
+            setattr(self, key, init_dict[key] )
+    
 # Use dummy SMILES strings
 react_data = [
     "CCO.C",
@@ -25,19 +49,125 @@ prod_data = [
     "CCl",
     "CBr"
 ]
+# args = {
+#         'num_layers': DEFAULT_NUM_LAYERS,
+#         'hidden_size': DEFAULT_D_MODEL,
+#         'num_attention_heads': DEFAULT_NUM_HEADS,
+#         'max_position_embeddings': DEFAULT_MAX_SEQ_LEN,
+#         'tokenizer_type': 'GPT2BPETokenizer',
+#         'micro_batch_size': 8,
+#         'merge_file': True,
+#         'encoder_seq_length': 8, 
+#         #'vocab_file': DEFAULT_VOCAB_PATH,
+#         'load': CHECKPOINTS_DIR
+#     }
+# initialize_megatron(args_defaults=kwargs, ignore_unknown_args=True)
+def _set_app_state(self, cfg):
+    app_state = AppState()
+    if cfg.trainer is not None:
+        app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
+        num_gpus = cfg.trainer.gpus
+    else:
+        app_state._world_size = 1
+        num_gpus = 1
 
-args = {
-        'num_layers': DEFAULT_NUM_LAYERS,
-        'hidden_size': DEFAULT_D_MODEL,
-        'num_attention_heads': DEFAULT_NUM_HEADS,
-        'max_position_embeddings': DEFAULT_MAX_SEQ_LEN,
-        'tokenizer_type': 'GPT2BPETokenizer',
-        'vocab_file': DEFAULT_VOCAB_PATH,
-        'load': CHECKPOINTS_DIR
-    }
+    env = os.environ.copy()
+    app_state.local_rank = int(env.get('LOCAL_RANK', 0))
+    app_state.node_rank = int(env.get('NODE_RANK', 0))
+    app_state.global_rank = app_state.local_rank + (app_state.node_rank * num_gpus) # TODO better way to calculate?
+    app_state.model_parallel_size = None
+    app_state.model_parallel_rank = None
+    # app_state.device_id = None # TODO add these
+    # app_state.model_parallel_group = None
+    # app_state.data_parallel_size = None
+    # app_state.data_parallel_rank = None
+    # app_state.data_parallel_group = None
+    self._app_state = app_state
 
-initialize_megatron(args_defaults=args, ignore_unknown_args=True)
-args = get_args()
+def _set_ddp(self, trainer):
+    # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
+    if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
+        self.replace_sampler_ddp = True
+        trainer.accelerator_connector.replace_sampler_ddp = False
+    else:
+        self.replace_sampler_ddp = False
+
+def _update_megatron_args(
+    micro_batch_size: int = 1,
+    tensor_model_parallel_size: int = 1,
+    scaled_masked_softmax_fusion: bool = False,
+    bias_gelu_fusion: bool = False,
+    bias_dropout_fusion: bool = False):
+
+    def extra_args_provider(parser):
+        parser.set_defaults(micro_batch_size=micro_batch_size)
+        parser.set_defaults(tensor_model_parallel_size=tensor_model_parallel_size)
+        parser.set_defaults(scaled_masked_softmax_fusion=scaled_masked_softmax_fusion)
+        parser.set_defaults(bias_gelu_fusion=bias_gelu_fusion)
+        parser.set_defaults(bias_dropout_fusion=bias_dropout_fusion)
+        return parser
+
+    return extra_args_provider
+
+def _get_megatron_vocab_file() -> str:
+    """Generate fake Megatron vocab file with required tokens"""
+    fake_vocab_contents = '\n'.join(['[CLS]', '[SEP]', '[PAD]', '[MASK]'])
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as fh:
+        fh.write(fake_vocab_contents)
+        vocab_file = fh.name
+    return vocab_file
+
+def complete_lazy_init(self) -> None:
+    # Finish megatron-lm initialization
+    if hasattr(self, "_lazy_init_fn") and self._lazy_init_fn is not None:
+        logging.info('Completing lazy initialization of Megatron framework...')
+        self._lazy_init_fn()
+        self._lazy_init_fn = None
+
+def setup_megatron() -> dict:
+    """Initialize Megatron"""
+    app_state = AppState()
+    model_parallel_size = app_state.model_parallel_size
+    model_parallel_rank = app_state.model_parallel_rank
+
+    # Configure globals
+    set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo
+    set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
+
+    # megatron input arguments
+    args = {'num_layers': DEFAULT_NUM_LAYERS,
+            'hidden_size': DEFAULT_D_MODEL,
+            'num_attention_heads': DEFAULT_NUM_HEADS,
+            'max_position_embeddings': DEFAULT_MAX_SEQ_LEN,
+            'onnx_safe': True,
+            'lazy_mpu_init': True,
+            'tokenizer_type': 'BertWordPieceCase',
+            'micro_batch_size': 8,
+            'merge_file': True,
+            'encoder_seq_length': 8,
+            'vocab_file': _get_megatron_vocab_file()}
+            # TODO vocab size may need to be set
+
+    # extra args provider
+    if model_parallel_size is not None:
+        app_state = AppState()
+        os.environ["WORLD_SIZE"] = str(app_state.world_size) # Must be set for model parallel megatron-lm
+        os.environ["RANK"] = str(model_parallel_rank)
+        extra_args_provider = _update_megatron_args(tensor_model_parallel_size=model_parallel_size)
+    else:
+        extra_args_provider = _update_megatron_args()
+
+    # Initialize part of Megatron global state that is needed for its constructor.
+    # We set 'lazy_mpu_init' flag on to make Megatron do only the initialization that does not depend
+    # on ddp be initialized yet (and we don't want Megatron to initialize DDP itself either)
+    # and to return a hook for us to call after PTL has torch.distributed initialized.
+    # (or if no PTL in case of inference - then we'll initialize torch.distributed)
+    # We call and clear this hook on first call to forward()
+    _lazy_init_fn = initialize_megatron(
+        extra_args_provider=extra_args_provider, args_defaults=args, ignore_unknown_args=True
+    )
+    return args
+args = TestInput(setup_megatron())
 
 random.seed(a=1)
 torch.manual_seed(1)
