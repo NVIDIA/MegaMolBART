@@ -5,3 +5,5 @@ encoder_augment: false
 encoder_mask: false
 decoder_augment: false
 canonicalize_input: false
+batch_size: 32
+num_workers: 10

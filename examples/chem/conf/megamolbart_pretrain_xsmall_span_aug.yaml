@@ -31,7 +31,7 @@ trainer:
   max_steps: 1000000
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
-  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
+  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
   val_check_interval: 5000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
   # auto_scale_batch_size: None/binsearch
 
@@ -46,7 +46,7 @@ model:
     decoder_augment: true
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 64
+    batch_size: 32
     num_workers: 10
 
   validation_ds:
@@ -54,5 +54,5 @@ model:
     decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 64
-    num_workers: 4
+    batch_size: 32
+    num_workers: 10
