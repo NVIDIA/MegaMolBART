@@ -6,5 +6,5 @@ amp_backend: native
 precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when amp_level is O0
 amp_level: O3 # O0: fp32, O1/O2 for mixed, O3: fp16  
 checkpoint_callback: false # use exp_manager instead for checkpoints
+log_every_n_steps: 200
 logger: false # use nemo logging instead
-# auto_scale_batch_size: None/binsearch
