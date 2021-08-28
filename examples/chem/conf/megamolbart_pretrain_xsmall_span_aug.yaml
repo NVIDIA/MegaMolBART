@@ -15,7 +15,15 @@ random_seed: 42
 exp_manager:
   name: *name
   wandb_logger_kwargs:
-    project: ${model.name}
+    project: *name
+    group: ${model.name}
+    job_type: Localhost_nodes_${trainer.num_nodes}_gpus_${trainer.gpus}
+    name: ${model.name}_${now:%y%m%d-%H%M%S}
+    entity: clara-discovery
+    notes: "date: ${now:%y%m%d-%H%M%S}"
+    tags:
+      - *name
+      - ${model.name}
 
 trainer:
   gpus: 8
@@ -24,20 +32,21 @@ trainer:
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
-  # limit_val_batches: 10 # set to 0.0 to disable validation
-  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  val_check_interval: 5000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  # auto_scale_batch_size: None/binsearch
 
 tokenizer:
   vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
   mask_prob: 0.15
 
 model:
+  name: pretrain_xsmall_span_aug
   train_ds:
     encoder_mask: true # task = mask(span)_aug
     decoder_augment: true
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 128
+    batch_size: 64
     num_workers: 10
 
   validation_ds:
@@ -45,5 +54,5 @@ model:
     decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 128
+    batch_size: 64
     num_workers: 4
