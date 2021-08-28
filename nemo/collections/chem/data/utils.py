@@ -5,6 +5,8 @@ import numpy as np
 import torch.distributed as dist
 from nemo.utils import logging
 
+__all__ = ['expand_dataset_paths']
+
 
 def expand_dataset_paths(filepath: str) -> List[str]:
     """Expand dataset paths from braces"""

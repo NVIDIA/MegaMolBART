@@ -1,0 +1,7 @@
+defaults:
+  - dataset_defaults
+
+encoder_augment: false
+encoder_mask: false
+decoder_augment: false
+canonicalize_input: false

@@ -1,25 +1,18 @@
 # coding=utf-8
 
-from pathlib import Path
 import os
 import re
 import math
 import mmap
-import numpy as np
-import pandas as pd
-import csv
 from typing import Optional
-import linecache
+from dataclasses import dataclass
 
 import torch
-# from torch.utils.data import Dataset
 from nemo.core import Dataset, IterableDataset
 from nemo.core.classes.dataset import DatasetConfig
 from nemo.utils import logging
-from rdkit import Chem
 
-from dataclasses import dataclass
-from pysmilesutils.augment import SMILESAugmenter
+__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeDataset', 'MoleculeIterableDataset']
 
 
 @dataclass
@@ -28,6 +21,10 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     batch_size: int = 1
     use_iterable: bool = False
     map_data: bool = False
+    encoder_augment: bool = True
+    encoder_mask: bool = False
+    decoder_augment: bool = False
+    canonicalize_input: bool = False
     metadata_path: Optional[str] = None
     num_samples: Optional[int] = None
 
@@ -50,8 +47,6 @@ class MoleculeABCDataset():
         self.start = 0
         self.end = self.start + self.len
         self._cache = None
-                
-        self.aug = SMILESAugmenter() # TODO create augmenter class and add augmentation probability
         self.regex = re.compile(r"""\,(?P<smiles>.+)""") # TODO make column selectable in regex
 
     def __len__(self):
@@ -97,13 +92,6 @@ class MoleculeABCDataset():
             lines = b''.join(lines)
         lines = re.findall(self.regex, lines.decode('utf-8'))
         return lines
-    
-    def augmenter(self, mol):
-        try:
-            aug_smi = self.aug(mol)
-        except:
-            aug_smi = mol
-        return aug_smi
         
     def __exit__(self):
         if self.map_data:
