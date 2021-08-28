@@ -3,5 +3,5 @@ warmup_steps: 8000
 warmup_ratio: null # was originally 0.01 in MegaMolBART, use instead of warmup_steps
 min_lr: 1.0e-5
 last_epoch: -1
-monitor: val_loss
+monitor: val/loss
 reduce_on_plateau: false

@@ -1,7 +1,7 @@
 defaults:
   - trainer: trainer_defaults
-  - model/dataset@model.train_ds: dataset_defaults
-  - model/dataset@model.validation_ds: dataset_defaults
+  - model/dataset@model.train_ds: train_ds_defaults
+  - model/dataset@model.validation_ds: validation_ds_defaults
   - exp_manager: log_all
   - model: small
   - model/optim@model.optim: adam
@@ -15,19 +15,26 @@ random_seed: 42
 exp_manager:
   name: *name
   wandb_logger_kwargs:
-    project: ${model.name}
+    project: *name
+    group: ${model.name}
+    job_type: Localhost_nodes_${trainer.num_nodes}_gpus_${trainer.gpus}
+    name: ${model.name}_${now:%y%m%d-%H%M%S}
+    entity: clara-discovery
+    notes: "date: ${now:%y%m%d-%H%M%S}"
+    tags:
+      - *name
+      - ${model.name}
 
 trainer:
   gpus: 8
   num_nodes: 1
   min_epochs: 6
   max_epochs: 6
-  num_steps: 1160160
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
-  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
-  limit_val_batches: 1.0 
-  val_check_interval: 10000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
+  val_check_interval: 5000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  # auto_scale_batch_size: None/binsearch
 
 tokenizer:
   mask_scheme: span
@@ -35,18 +42,19 @@ tokenizer:
   vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
 
 model:
+  name: pretrain_small_aug
   train_ds:
     encoder_mask: false # task = aug
     decoder_augment: true
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 128
-    num_workers: 10
+    batch_size: 4
+    num_workers: 0
 
   validation_ds:
     encoder_mask: false # not done in validation set
     decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 128
-    num_workers: 4
+    batch_size: 4
+    num_workers: 0

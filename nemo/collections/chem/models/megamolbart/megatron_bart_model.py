@@ -1,10 +1,9 @@
 
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Callable
 from pathlib import Path
 import tempfile
 import time
-from functools import partial
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
@@ -14,23 +13,20 @@ from dataclasses import dataclass
 import torch
 import torch.distributed as dist
 import torch.utils.data as pt_data
+from torch.utils.data.dataloader import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_only
-from torch.utils.data.dataloader import DataLoader
-from nemo.collections.common import metrics
 
-from nemo.collections.common.data import ConcatDataset
 from nemo.core import optim
-from nemo.utils.app_state import AppState
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
 from nemo.core.neural_types import ChannelType, LossType, MaskType, NeuralType
-from nemo.utils.env_var_parsing import get_envint
 from nemo.utils import logging, model_utils
+from nemo.utils.app_state import AppState
+from nemo.collections.common import metrics
+from nemo.collections.common.data import ConcatDataset
 from nemo.collections.common.metrics import GlobalAverageLossMetric
 from nemo.collections.common.losses import CrossEntropyLoss
-# from nemo.collections.nlp.metrics import SequencePerplexity
-
 
 from megatron import get_args, initialize_megatron
 from megatron.model.bert_model import bert_attention_mask_func
@@ -45,15 +41,11 @@ from megatron.mpu import (
     set_pipeline_model_parallel_world_size,
 )
 
-from nemo.collections.chem.data import (MoleculeCsvDatasetConfig, MoleculeDataset, 
-                                        MoleculeIterableDataset, ConcatIterableDataset, 
-                                        expand_dataset_paths, collate_molecule_dataset)
+from nemo.collections.chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer
 from nemo.collections.chem.decoder import DecodeSampler
 from nemo.collections.chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
-from pysmilesutils.augment import SMILESAugmenter, MolAugmenter
-from copy import copy
 
 __all__ = ["MegaMolBARTModel"]
 
@@ -65,7 +57,6 @@ class MegaMolBARTModel(ModelPT):
         self._set_app_state(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
         
-        self.smiles_augmenter = MolAugmenter()
         self._model_name = cfg.model.name
         self.max_seq_len = cfg.model.max_seq_len
         self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
@@ -73,11 +64,17 @@ class MegaMolBARTModel(ModelPT):
         self.val_sampling_alg = 'greedy'
         self._set_ddp(trainer)
 
+        # Augmentation / collate functionality
+        train_ds = cfg.model.train_ds
+        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **train_ds)
+        val_ds = cfg.model.validation_ds
+        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds)
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds) # TODO right now test_ds is not used
+
         _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg.model, trainer=trainer)
 
         # Load model
-        
         self.config = OmegaConf.create(cfg.model)
         self.sampler = self.setup_sampler(self.tokenizer, cfg)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
@@ -94,12 +91,13 @@ class MegaMolBARTModel(ModelPT):
                                 cfg.model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        # config.schedulers.register_scheduler_params()
         optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
 
         self.setup_optimization(cfg.model.optim) # TODO check warning from training
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
-        self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
+        self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
 
     def _set_app_state(self, cfg):
         app_state = AppState()
@@ -275,18 +273,21 @@ class MegaMolBARTModel(ModelPT):
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
         logging.info('Loading training data')
-        self._train_dl = self.setup_dataloader_from_config(cfg=train_data_config)
+        collate_fn = self.train_collate.collate_fn
+        self._train_dl = self.setup_dataloader_from_config(train_data_config, collate_fn)
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         if val_data_config.get('filepath'): # TODO skip if limit_val_batches=0.0
             logging.info('Loading validation data')
-            self._validation_dl = self.setup_dataloader_from_config(cfg=val_data_config)
+            collate_fn = self.val_collate.collate_fn
+            self._validation_dl = self.setup_dataloader_from_config(val_data_config, collate_fn)
         else:
             logging.info('Skipping validation data loading')
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         logging.info('Loading test data')
-        self._test_dl = self.setup_dataloader_from_config(cfg=test_data_config)
+        collate_fn = self.test_collate.collate_fn
+        self._test_dl = self.setup_dataloader_from_config(test_data_config, collate_fn)
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg.copy())
@@ -312,7 +313,7 @@ class MegaMolBARTModel(ModelPT):
                 datasets = pt_data.ConcatDataset(datasets)
         return datasets
 
-    def setup_dataloader_from_config(self, cfg: DictConfig):
+    def setup_dataloader_from_config(self, cfg: DictConfig, collate_fun: Callable):
         dataset = self._setup_dataset_from_config(cfg)
 
         if self.replace_sampler_ddp:
@@ -324,70 +325,16 @@ class MegaMolBARTModel(ModelPT):
             sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
             sampler = sampler_name(dataset)
         
-        collate_fn = partial(collate_molecule_dataset, tokenizer=self.tokenizer,
-                            encoder_augment=cfg.encoder_augment, 
-                            decoder_augment=cfg.decoder_augment,
-                            encoder_mask=cfg.encoder_mask, 
-                            canonicalize_target=cfg.canonicalize_target_smiles,
-                            smiles_augmenter=self.smiles_augmenter)
-
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
             batch_size=cfg.batch_size,
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
-            collate_fn=collate_fn)
+            collate_fn=collate_fun)
 
         return dataloader
 
-    # def augmenter(self, mol): # TODO move to dataset
-    #     try:
-    #         aug_smi = self.aug(mol)[0]
-    #     except:
-    #         aug_smi = mol
-    #     return aug_smi
-
-    # def collate_fn(self, batch):
-    #     """ Used by DataLoader to concatenate/collate inputs."""
-    #     encoder_smiles = copy(batch)
-    #     decoder_smiles = batch
-
-    #     encoder_smiles = [self.augmenter(x) for x in encoder_smiles]
-    #     decoder_smiles = [self.augmenter(x) for x in decoder_smiles]
-
-    #     enc_token_output = self.tokenizer.tokenize(encoder_smiles, mask=True, pad=True)
-    #     dec_token_output = self.tokenizer.tokenize(decoder_smiles, pad=True)
-
-    #     enc_mask = enc_token_output['masked_pad_masks']
-    #     enc_tokens = enc_token_output['masked_tokens']
-    #     dec_tokens = dec_token_output['original_tokens']
-    #     dec_mask = dec_token_output['original_pad_masks']
-
-    #     (enc_tokens, enc_mask) = check_seq_len(enc_tokens, enc_mask, self.max_seq_len)
-    #     (dec_tokens, dec_mask) = check_seq_len(dec_tokens, dec_mask, self.max_seq_len)
-
-    #     enc_token_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
-    #     dec_token_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
-
-    #     enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1)
-    #     enc_pad_mask = torch.tensor(enc_mask,
-    #                                 dtype=torch.int64).transpose(0, 1)
-    #     dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
-    #     dec_pad_mask = torch.tensor(dec_mask,
-    #                                 dtype=torch.int64).transpose(0, 1)
-
-    #     collate_output = {
-    #         'encoder_input': enc_token_ids,
-    #         'encoder_pad_mask': enc_pad_mask,
-    #         'decoder_input': dec_token_ids[:-1, :],
-    #         'decoder_pad_mask': dec_pad_mask[:-1, :],
-    #         'target': dec_token_ids.clone()[1:, :],
-    #         'target_pad_mask': dec_pad_mask.clone()[1:, :],
-    #         'target_smiles': decoder_smiles,
-    #         }
-
-    #     return collate_output
 
     @typecheck()
     def forward(self, batch):
@@ -418,10 +365,10 @@ class MegaMolBARTModel(ModelPT):
         self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
         self.log('step_time', duration, on_step=True)
 
-        tensorboard_logs = {'train_loss': loss.item(),
-                            'train_char_acc': char_acc, 
-                            'lr': lr,
-                            'step_time': duration}
+        tensorboard_logs = {'train/loss': loss.item(),
+                            'train/char_acc': char_acc, 
+                            'trainer/lr': lr,
+                            'trainer/step_time': duration}
 
         return {'loss': loss, 
                 'log': tensorboard_logs}
@@ -439,11 +386,11 @@ class MegaMolBARTModel(ModelPT):
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
         logs = {
-            f'{mode}_loss': loss,
-            f'{mode}_perplexity': perplexity,
-            f'{mode}_char_acc': token_acc,
-            f'{mode}_molecular_accuracy': metrics['accuracy'],
-            f'{mode}_invalid_smiles': metrics['invalid']}
+            f'{mode}/loss': loss,
+            f'{mode}/perplexity': perplexity,
+            f'{mode}/char_acc': token_acc,
+            f'{mode}/molecular_accuracy': metrics['accuracy'],
+            f'{mode}/invalid_smiles': metrics['invalid']}
 
         self.log_dict(logs, on_epoch=True, sync_dist=True)
         logs['log'] = logs.copy()
@@ -464,16 +411,16 @@ class MegaMolBARTModel(ModelPT):
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
-        loss_label = f'{mode}_loss'
+        loss_label = f'{mode}/loss'
         eval_loss = torch.tensor([x[loss_label] for x in outputs]).mean().item()
 
-        ppl_label = f'{mode}_perplexity'
+        ppl_label = f'{mode}/perplexity'
         eval_ppl = torch.tensor([x[ppl_label] for x in outputs]).mean().item()
 
-        token_label = f'{mode}_char_acc'
+        token_label = f'{mode}/char_acc'
         eval_token_acc = torch.tensor([x[token_label] for x in outputs]).mean().item()
 
-        mol_acc_label = f'{mode}_molecular_accuracy'
+        mol_acc_label = f'{mode}/molecular_accuracy'
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
         return {f'{loss_label}_avg': eval_loss, 
