@@ -6,21 +6,7 @@ from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
 
-Mol = Chem.Mol
-
 __all__ = ['MoleculeEnumeration']
-
-# class CanonicalSMILESAugmenter(SMILESAugmenter):
-#     def randomize_mol_restricted(self, mol: Mol, canonical: bool = False) -> str:
-#         """Randomize the atom ordering of a RDKit molecule (`rdkit.Chem.Mol`).
-#         :param mol:  RDKit molecule to get a randomized atom order.
-#         :return: RDKit molecule object with a randomized atom-order.
-#         """
-#         # Standard shuffle surprisingly leads to 35% slower code.
-#         atom_order: List[int] = list(range(mol.GetNumAtoms()))
-#         np.random.shuffle(atom_order)
-#         mol_rand = Chem.RenumberAtoms(mol, atom_order)
-#         return Chem.MolToSmiles(mol_rand, canonical=canonical)
 
 
 class MoleculeEnumeration:
