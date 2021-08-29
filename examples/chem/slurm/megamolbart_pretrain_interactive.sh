@@ -1,24 +1,47 @@
 #!/bin/bash
+#SBATCH --nodes 1
+#SBATCH --ntasks 2
+#SBATCH --ntasks-per-node 2
+#SBATCH --gpus-per-node 2
+#SBATCH --time=1:00:00
+#SBATCH --partition interactive
+#SBATCH --account ent_joc_model_mpnn_pyt
+#SBATCH --gres=gpfs:circe
+#SBATCH --nv-meta ml-model.megamolbart_pretrain_int
+#SBATCH --exclusive             # exclusive node access
+#SBATCH --mem=0                 # all mem avail
+#  SBATCH --mail-type=FAIL        # only send email on failure
+#  SBATCH --overcommit            # Needed for pytorch
+
 set -x
 
-##### Interactive training / development on a cluster with SLURM
+##### Development on a cluster with SLURM / Optional interactive or batch training
 ### CONFIG ###
 
-NUM_GPUS=SLURM_GPUS_PER_NODE
-NUM_NODES=SLURM_JOB_NUM_NODES
+if [ -z ${SLURM_GPUS_PER_NODE} ]; then
+    SLURM_JOB_NUM_NODES=1 # These are used for interactive job
+    SLURM_GPUS_PER_NODE=2
+    ADDITIONAL_FLAGS=" --gres=gpfs:circe --account ent_joc_model_mpnn_pyt --partition interactive --nv-meta ml-model.megamolbart_int --time 1:00:00"
+    IS_BATCH=0
+else
+    IS_BATCH=1
+fi
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
-STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### END CONFIG ###
+
+NUM_NODES=$SLURM_JOB_NUM_NODES
+NUM_GPUS=$SLURM_GPUS_PER_NODE
 
 HOSTNAME=$(hostname)
 HOSTNAME=${HOSTNAME%%"-login"*} # remove login string from name
@@ -78,29 +101,29 @@ echo '*******STARTING********' \
     model.validation_ds.num_workers=4
 EOF
 
-
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
 echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
 export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
-srun --pty \
---gres=gpfs:circe \
---account ent_joc_model_mpnn_pyt \
---partition interactive \
---nodes ${NUM_NODES} \
---ntasks ${NTASKS} \
---ntasks-per-node ${NUM_GPUS} \
---gpus-per-node ${NUM_GPUS} \
+if [ ${IS_BATCH} -eq 0 ]; then
+    ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS}" --pty --nodes ${NUM_NODES} --ntasks ${NTASKS} --ntasks-per-node ${NUM_GPUS} --gpus-per-node ${NUM_GPUS} "
+    EXEC_COMMAND=" bash"
+else
+    ADDITIONAL_FLAGS="--output $OUTFILE --error $ERRFILE "
+    EXEC_COMMAND=" bash -c ${SCRIPT_PATH}"
+fi
+
+srun $ADDITIONAL_FLAGS \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
---nv-meta ml-model.megamolbart_int \
-bash
+--export TERM=xterm \
+--export WANDB_API_KEY="${WANDB_API_KEY}" ${EXEC_COMMAND}
 
-# bash ${OUTPUT_MOUNT}/${EXP_NAME}/job_script.sh 
-# bash -c "${RUN_COMMAND}"
+# bash ${SCRIPT_PATH} 
+# bash -c "${EXEC_COMMAND}"
 
 set +x

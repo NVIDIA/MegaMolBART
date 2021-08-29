@@ -13,23 +13,35 @@
 #  SBATCH --mail-type=FAIL        # only send email on failure
 #  SBATCH --overcommit            # Needed for pytorch
 
+set -x
+
+##### Development on a cluster with SLURM / Optional interactive or batch training
 ### CONFIG ###
 
-NUM_GPUS=SLURM_GPUS_PER_NODE
-NUM_NODES=SLURM_JOB_NUM_NODES
+if [ -z ${SLURM_GPUS_PER_NODE} ]; then
+    SLURM_JOB_NUM_NODES=2 # These are used for interactive job
+    SLURM_GPUS_PER_NODE=32
+    ADDITIONAL_FLAGS=" --gres=gpfs:circe --account ent_joc_model_mpnn_pyt --partition batch --nv-meta ml-model.megamolbart_pretrain_multi --time 8:00:00"
+    IS_BATCH=0
+else
+    IS_BATCH=1
+fi
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..146_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
-STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### END CONFIG ###
+
+NUM_NODES=$SLURM_JOB_NUM_NODES
+NUM_GPUS=$SLURM_GPUS_PER_NODE
 
 HOSTNAME=$(hostname)
 HOSTNAME=${HOSTNAME%%"-login"*} # remove login string from name
@@ -83,25 +95,33 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
-    model.train_ds.num_workers=10 \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
-    model.validation_ds.num_workers=4
+    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt
 EOF
 
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
 echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
 export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
-srun \
---output $OUTFILE \
---error $ERRFILE \
+if [ ${IS_BATCH} -eq 0 ]; then
+    ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS}" --nodes ${NUM_NODES} --ntasks ${NTASKS} --ntasks-per-node ${NUM_GPUS} --gpus-per-node ${NUM_GPUS} "
+    EXEC_COMMAND=" bash"
+else
+    ADDITIONAL_FLAGS="--output $OUTFILE --error $ERRFILE "
+    EXEC_COMMAND=" bash -c ${SCRIPT_PATH}"
+fi
+
+srun $ADDITIONAL_FLAGS \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export RUN_COMMAND="${RUN_COMMAND}" \
-bash ${OUTPUT_MOUNT}/${EXP_NAME}/job_script.sh 
-# bash -c "${RUN_COMMAND}"
+--export SCRIPT_PATH="${SCRIPT_MOUNT}" \
+--export TERM=xterm \
+--export WANDB_API_KEY="${WANDB_API_KEY}" ${EXEC_COMMAND}
+
+# bash ${SCRIPT_PATH} 
+# bash -c "${EXEC_COMMAND}"
 
 set +x
