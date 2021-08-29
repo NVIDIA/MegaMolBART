@@ -3,25 +3,34 @@
 #SBATCH --ntasks 2
 #SBATCH --ntasks-per-node 2
 #SBATCH --gpus-per-node 2
-#SBATCH --time=1:00:00
-#SBATCH --partition interactive
-#SBATCH --account ent_joc_model_mpnn_pyt
-#SBATCH --gres=gpfs:circe
-#SBATCH --nv-meta ml-model.megamolbart_pretrain_int
-#SBATCH --exclusive             # exclusive node access
-#SBATCH --mem=0                 # all mem avail
-#  SBATCH --mail-type=FAIL        # only send email on failure
-#  SBATCH --overcommit            # Needed for pytorch
+#SBATCH --mail-type=FAIL
+
+#SBATCH --time=1:00:00                   # Draco
+#SBATCH --partition interactive          # Draco
+#SBATCH --account ent_joc_model_mpnn_pyt # Draco
+#SBATCH --gres=gpfs:circe                # Draco
+#SBATCH --nv-meta ml-model.megamolbart_pretrain_multi # Draco
+#SBATCH --exclusive                      # Draco, exclusive node access
+#SBATCH --mem=0                          # Draco, all mem avail
+
+# SBATCH --time=2:00:00            # Selene
+# SBATCH --partition interactive   # Selene
+# SBATCH --account swdl            # Selene
 
 set -x
 
 ##### Development on a cluster with SLURM / Optional interactive or batch training
 ### CONFIG ###
 
+HOSTNAME=Draco # Draco or Selene
 if [ -z ${SLURM_GPUS_PER_NODE} ]; then
     SLURM_JOB_NUM_NODES=1 # These are used for interactive job
     SLURM_GPUS_PER_NODE=2
-    ADDITIONAL_FLAGS=" --gres=gpfs:circe --account ent_joc_model_mpnn_pyt --partition interactive --nv-meta ml-model.megamolbart_int --time 1:00:00"
+    if [ $HOSTNAME == 'Draco']; then
+        ADDITIONAL_FLAGS=" --time 1:00:00 --partition interactive --account ent_joc_model_mpnn_pyt --nv-meta ml-model.megamolbart_pretrain_multi --gres=gpfs:circe "
+    elif [ $HOSTNAME == 'Selene']; then
+        ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl "
+    fi
     IS_BATCH=0
 else
     IS_BATCH=1
@@ -30,11 +39,10 @@ fi
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-HOSTNAME=Draco
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
-WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
-STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 
+STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
+WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
