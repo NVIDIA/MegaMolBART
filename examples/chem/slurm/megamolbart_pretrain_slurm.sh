@@ -30,6 +30,7 @@ fi
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..146_CL_.csv
+HOSTNAME=Draco
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
@@ -43,7 +44,7 @@ OUTPUT_DIR=${STORAGE_DIR}/nemo
 NUM_NODES=$SLURM_JOB_NUM_NODES
 NUM_GPUS=$SLURM_GPUS_PER_NODE
 
-HOSTNAME=$(hostname)
+# HOSTNAME=$(hostname)
 HOSTNAME=${HOSTNAME%%"-login"*} # remove login string from name
 EXP_NAME=${HOSTNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 
@@ -108,7 +109,7 @@ if [ ${IS_BATCH} -eq 0 ]; then
     EXEC_COMMAND=" bash"
 else
     ADDITIONAL_FLAGS="--output $OUTFILE --error $ERRFILE "
-    EXEC_COMMAND=" bash -c ${SCRIPT_PATH}"
+    EXEC_COMMAND=" bash -c ${SCRIPT_MOUNT}"
 fi
 
 srun $ADDITIONAL_FLAGS \
@@ -121,7 +122,7 @@ srun $ADDITIONAL_FLAGS \
 --export TERM=xterm \
 --export WANDB_API_KEY="${WANDB_API_KEY}" ${EXEC_COMMAND}
 
-# bash ${SCRIPT_PATH} 
+# bash ${SCRIPT_MOUNT} 
 # bash -c "${EXEC_COMMAND}"
 
 set +x
