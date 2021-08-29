@@ -23,9 +23,9 @@ EXP_NAME=${HOSTNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 NTASKS=$((${NUM_NODES}*${NUM_GPUS}))
 DATA_MOUNT=/data/zinc_csv_split
 CODE_MOUNT=/workspace/nemo
-RESULTS_MOUNT=/result/nemo_experiments/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
+RESULTS_MOUNT=/result/nemo_experiments/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}
 
-mkdir -p ${RESULTS_MOUNT}
+mkdir -p ${RESULTS_MOUNT}/${EXP_NAME}
 GPU_LIMIT=$(($NUM_GPUS-1))
 SCRIPT_CUDA_VISIBLE_DEVICES=$(seq --separator=',' 0 $GPU_LIMIT)
 
