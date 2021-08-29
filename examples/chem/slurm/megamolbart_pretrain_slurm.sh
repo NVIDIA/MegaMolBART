@@ -21,7 +21,7 @@ NUM_NODES=SLURM_JOB_NUM_NODES
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210824"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 

@@ -11,7 +11,7 @@ NUM_NODES=1
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210824"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
 ### END CONFIG ###
@@ -59,7 +59,6 @@ python megamolbart_pretrain.py \
     model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
     model.train_ds.num_workers=4 \
-    trainer.val_check_interval=1.0 \
     ++trainer.limit_val_batches=2 \
     +trainer.limit_train_batches=4 \
     +trainer.max_epochs=2 
