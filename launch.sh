@@ -113,6 +113,7 @@ DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
 RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=/home/mgill/results/nemo_experiments}
+WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
 
 ###############################################################################
 #
@@ -198,7 +199,7 @@ pull() {
 
 dev() {
     set -x
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --name nemo_dev " 
+    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_dev " 
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
     exit
 }
