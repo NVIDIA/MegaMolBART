@@ -5,17 +5,18 @@
 #SBATCH --gpus-per-node 16
 #SBATCH --mail-type=FAIL
 
-#SBATCH --time=8:00:00                   # Draco
-#SBATCH --partition batch                # Draco
-#SBATCH --account ent_joc_model_mpnn_pyt # Draco
-#SBATCH --gres=gpfs:circe                # Draco
-#SBATCH --nv-meta ml-model.megamolbart_pretrain_multi # Draco
-#SBATCH --exclusive                      # Draco, exclusive node access
-#SBATCH --mem=0                          # Draco, all mem avail
+# SBATCH --time=8:00:00                   # Draco
+# SBATCH --partition batch                # Draco
+# SBATCH --account ent_joc_model_mpnn_pyt # Draco
+# SBATCH --gres=gpfs:circe                # Draco
+# SBATCH --nv-meta ml-model.megamolbart_pretrain_multi # Draco
+# SBATCH --exclusive                      # Draco, exclusive node access
+# SBATCH --mem=0                          # Draco, all mem avail
 
 # SBATCH --time=8:00:00     # Selene
 # SBATCH --partition luna   # Selene
 # SBATCH --account swdl     # Selene
+# SBATCH --job-name swdl-claradiscovery:mlgill-megamolbart" # Selene
 
 
 set -x
@@ -27,10 +28,10 @@ HOSTNAME=Draco # Draco or Selene
 if [ -z ${SLURM_GPUS_PER_NODE} ]; then
     SLURM_JOB_NUM_NODES=2 # These are used for interactive jobs
     SLURM_GPUS_PER_NODE=32
-    if [ $HOSTNAME == 'Draco']; then
+    if [[ $HOSTNAME == 'Draco' ]]; then
         ADDITIONAL_FLAGS=" --time 1:00:00 --partition interactive --account ent_joc_model_mpnn_pyt --nv-meta ml-model.megamolbart_pretrain_multi --gres=gpfs:circe "
-    elif [ $HOSTNAME == 'Selene']; then
-        ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl "
+    elif [[ $HOSTNAME == 'Selene' ]]; then
+        ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl --job-name swdl-claradiscovery:mlgill-megamolbart "
     fi
     IS_BATCH=0
 else
