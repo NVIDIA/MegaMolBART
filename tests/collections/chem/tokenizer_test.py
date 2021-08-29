@@ -3,9 +3,8 @@
 import pytest
 import random
 import torch
-
-from tokenizer import MolEncTokenizer
-from util import REGEX as regex
+from nemo.collections.chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromSmilesConfig
+# from nemo.collections.chem.tokenizer.tokenizer import DEFAULT_REGEX
 
 # Use dummy SMILES strings
 smiles_data = [
@@ -13,6 +12,7 @@ smiles_data = [
     "CCClCCl",
     "C(=O)CBr"
 ]
+cfg = MolEncTokenizerFromSmilesConfig({'smiles': smiles_data})
 
 example_tokens = [
     ["^", "C", "(", "=", "O", ")", "unknown", "&"], 
@@ -23,7 +23,7 @@ example_tokens = [
 SEED = 0
 
 def test_create_vocab():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex)
+    tokenizer = MolEncTokenizer.from_smiles(smiles_data, cfg.regex)
     expected = {
         "<PAD>": 0,
         "?": 1,
@@ -42,8 +42,7 @@ def test_create_vocab():
         "Br": 14
     }
 
-    vocab = tokenizer.vocab
-
+    vocab = dict(sorted(tokenizer.vocab.items(), key=lambda x: x[1]))
     assert expected == vocab
 
 
@@ -64,7 +63,7 @@ def test_pad_seqs_mask():
 
 
 def test_mask_tokens_empty_mask():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     masked, token_mask = tokenizer._mask_tokens(example_tokens, empty_mask=True)
     expected_sum = 0
     mask_sum = sum([sum(m) for m in token_mask])
@@ -79,7 +78,7 @@ def test_mask_tokens_empty_mask():
 def test_mask_tokens_replace():
     random.seed(a=1)
     torch.manual_seed(SEED) 
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex, mask_prob=0.4, mask_scheme="replace")
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4, mask_scheme='replace')
     masked, token_mask = tokenizer._mask_tokens(example_tokens)
 
     expected_masks = [
@@ -95,7 +94,7 @@ def test_mask_tokens_span():
     random.seed(a=1)
     torch.manual_seed(SEED) 
 
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex, mask_prob=0.4)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4)
     masked, token_mask = tokenizer._mask_tokens(example_tokens)
 
     expected_masks = [
@@ -106,7 +105,7 @@ def test_mask_tokens_span():
 
 
 def test_convert_tokens_to_ids():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data[2:3], regex)
+    tokenizer = MolEncTokenizer.from_smiles(smiles_data[2:3], cfg.regex)
     ids = tokenizer.convert_tokens_to_ids(example_tokens)
     expected_ids = [[2, 6, 7, 8, 9, 10, 1, 3], [2, 6, 6, 5, 6, 11, 3]]
 
@@ -114,7 +113,7 @@ def test_convert_tokens_to_ids():
 
 
 def test_tokenize_one_sentence():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     tokens = tokenizer.tokenize(smiles_data)
     expected = [
         ["^", "C", "C", "O", ".", "C", "c", "c", "&"],
@@ -126,7 +125,7 @@ def test_tokenize_one_sentence():
 
 
 def test_tokenize_two_sentences():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     tokens = tokenizer.tokenize(smiles_data, sents2=smiles_data)
     expected = [
         ["^", "C", "C", "O", ".", "C", "c", "c", "<SEP>", "C", "C", "O", ".", "C", "c", "c", "&"],
@@ -148,7 +147,7 @@ def test_tokenize_mask_replace():
     random.seed(a=1)
     torch.manual_seed(SEED) 
 
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex, mask_prob=0.4, mask_scheme="replace")
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4, mask_scheme="replace")
     tokens = tokenizer.tokenize(smiles_data, sents2=smiles_data, mask=True)
 
     expected_m_tokens = [
@@ -171,7 +170,7 @@ def test_tokenize_mask_span():
     random.seed(a=1)
     torch.manual_seed(SEED) 
 
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex, mask_prob=0.4)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4)
     tokens = tokenizer.tokenize(smiles_data, sents2=smiles_data, mask=True)
 
     expected_m_tokens = [
@@ -198,7 +197,7 @@ def test_tokenize_mask_span_pad():
     random.seed(a=1)
     torch.manual_seed(SEED) 
 
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex, mask_prob=0.4)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4)
     tokens = tokenizer.tokenize(smiles_data, mask=True, pad=True)
 
     expected_m_tokens = [
@@ -225,7 +224,7 @@ def test_tokenize_mask_span_pad():
 
 
 def test_tokenize_padding():
-    tokenizer = MolEncTokenizer.from_smiles(smiles_data, regex)
+    tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     output = tokenizer.tokenize(smiles_data, sents2=smiles_data, pad=True)
     expected_tokens = [
         ["^", "C", "C", "O", ".", "C", "c", "c", "<SEP>", "C", "C", "O", ".", "C", "c", "c", "&"],
