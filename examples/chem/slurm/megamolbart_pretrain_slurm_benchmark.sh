@@ -19,7 +19,7 @@ NUM_GPUS=SLURM_GPUS_PER_NODE
 NUM_NODES=SLURM_JOB_NUM_NODES
 
 PROJECT=MegaMolBART
-MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
+MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..015_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
@@ -28,9 +28,6 @@ STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
 OUTPUT_DIR=${STORAGE_DIR}/nemo
-RESULTS_DIR=${OUTPUT_DIR}/${EXP_NAME}
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Not created in interactive mode
-ERRFILE="${RESULTS_DIR}/error-%j-%n.out" # Not created in interactive mode
 
 ### END CONFIG ###
 
@@ -38,11 +35,15 @@ HOSTNAME=$(hostname)
 HOSTNAME=${HOSTNAME%%"-login"*}
 EXP_NAME=${HOSTNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 
+RESULTS_DIR=${OUTPUT_DIR}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Not created in interactive mode
+ERRFILE="${RESULTS_DIR}/error-%j-%n.out" # Not created in interactive mode
+
 NTASKS=$((${NUM_NODES}*${NUM_GPUS}))
 DATA_MOUNT=/data
 CODE_MOUNT=/code
 OUTPUT_MOUNT=/result
-RESULTS_MOUNT=${OUTPUT_MOUNT}/${EXP_NAME}
+RESULTS_MOUNT=${OUTPUT_MOUNT}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
 MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 WORKDIR=${CODE_MOUNT}
 
@@ -69,9 +70,10 @@ echo '*******STARTING********' \
 && export CUDA_VISIBLE_DEVICES=${SCRIPT_CUDA_VISIBLE_DEVICES} \
 && export PYTHONPATH=${SCRIPT_PYTHONPATH} \
 && export HYDRA_FULL_ERROR=1 \
+&& export WANDB_API_KEY=${WANDB_API_KEY} \
 && python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=${MEGAMOLBART_CONFIG_FILE} \
+    --config-name=megamolbart_pretrain_${MEGAMOLBART_CONFIG_FILE} \
     exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE_MODE} \
     exp_manager.wandb_logger_kwargs.job_type=${EXP_NAME} \
     exp_manager.name=${EXP_NAME} \

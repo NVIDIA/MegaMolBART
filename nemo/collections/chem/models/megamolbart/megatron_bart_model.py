@@ -423,10 +423,14 @@ class MegaMolBARTModel(ModelPT):
         mol_acc_label = f'{mode}/molecular_accuracy'
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
-        return {f'{loss_label}_avg': eval_loss, 
+        logs =  {f'{loss_label}_avg': eval_loss, 
                 f'{ppl_label}_avg': eval_ppl,
                 f'{token_label}_avg': eval_token_acc,
                 f'{mol_acc_label}_avg': eval_mol_acc}
+
+        self.log_dict(logs)
+        logs['log'] = logs.copy()
+        return logs
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
         """

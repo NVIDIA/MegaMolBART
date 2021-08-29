@@ -9,7 +9,7 @@ NUM_GPUS=3
 NUM_NODES=1
 
 PROJECT=MegaMolBART
-MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
+MEGAMOLBART_CONFIG_FILE=xsmall_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
@@ -22,7 +22,7 @@ EXP_NAME=${HOSTNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 NTASKS=$((${NUM_NODES}*${NUM_GPUS}))
 DATA_MOUNT=/data/zinc_csv_split
 CODE_MOUNT=/workspace/nemo
-RESULTS_MOUNT=/result/nemo_experiments
+RESULTS_MOUNT=/result/nemo_experiments/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
 
 mkdir -p ${RESULTS_MOUNT}
 GPU_LIMIT=$(($NUM_GPUS-1))
@@ -45,7 +45,7 @@ fi
 
 python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=${MEGAMOLBART_CONFIG_FILE} \
+    --config-name=megamolbart_pretrain_${MEGAMOLBART_CONFIG_FILE} \
     exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE_MODE} \
     exp_manager.wandb_logger_kwargs.job_type=${EXP_NAME} \
     exp_manager.name=${EXP_NAME} \
@@ -59,7 +59,8 @@ python megamolbart_pretrain.py \
     model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
     model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
     model.train_ds.num_workers=4 \
-    ++trainer.limit_val_batches=2 \
+    trainer.val_check_interval=1.0 \
+    +trainer.limit_val_batches=2 \
     +trainer.limit_train_batches=4 \
     +trainer.max_epochs=2 
 
