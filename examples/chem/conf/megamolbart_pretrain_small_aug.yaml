@@ -48,13 +48,13 @@ model:
     decoder_augment: true
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 4
-    num_workers: 0
+    batch_size: 32
+    num_workers: 8
 
   validation_ds:
     encoder_mask: false # not done in validation set
     decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 4
-    num_workers: 0
+    batch_size: 32
+    num_workers: 8
