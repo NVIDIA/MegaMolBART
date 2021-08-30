@@ -1,7 +1,7 @@
 FROM nvcr.io/nvidia/nemo:1.2.0 
 ARG GITHUB_ACCESS_TOKEN
 ARG NEMO_BRANCH=main
-ARG NEMO_HOME=/workspace/nemo
+ARG NEMO_HOME=/code/nemo
 
 # Activating base environment
 RUN echo "source activate base" > /etc/bash.bashrc
