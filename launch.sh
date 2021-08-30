@@ -38,6 +38,7 @@ launch.sh [command]
     build
     pull
     push
+    dev
     root
     jupyter
 
@@ -45,8 +46,8 @@ launch.sh [command]
 Getting Started tl;dr
 ----------------------------------------
 
-    ./launch build
-    ./launch dev
+    ./launch.sh build
+    ./launch.sh dev
 For more detailed info on getting started, see README.md
 
 
@@ -60,29 +61,36 @@ variables:
         container image for MegaMolBART training, prepended with registry. e.g.,
         Note that this is a separate (precursor) container from any service associated containers
     PROJECT_PATH
-        path to repository. e.g.,
-        /home/user/projects/cheminformatics
+        local path to code. e.g., /home/user/code/NeMo_MegaMolBART
+    PROJECT_MOUNT_PATH
+        Path code is mounted to inside container, e.g. /workspace/nemo
     REGISTRY_ACCESS_TOKEN
-        container registry access token. e.g.,
-        Ckj53jGK...
+        container registry access token. e.g., Ckj53jGK...
     REGISTRY_USER
-        container registry username. e.g.,
-        astern
+        container registry username. e.g., astern
     REGISTRY
-        container registry URL. e.g.,
-        server.com/registry:5005
+        container registry URL. e.g., server.com/registry:5005
     DATA_PATH
-        path to data directory. e.g.,
-        /scratch/data/cheminformatics
+        path to data directory. e.g., /scratch/data/zinc_csv_split
     JUPYTER_PORT
         Port for launching jupyter lab
     GITHUB_ACCESS_TOKEN
-        GitHub API token for repo access
+        GitHub API token for repo download during build
 
 EOF
     exit
 }
 
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training}
+PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
+JUPYTER_PORT=${JUPYTER_PORT:=8888}
+DATA_PATH=${DATA_PATH:=/tmp}
+DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
+RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
+RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
+WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
 
 ###############################################################################
 #
@@ -108,12 +116,14 @@ fi
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-JUPYTER_PORT=${JUPYTER_PORT:-9000}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=workspace/nemo}
+JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
 RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
-RESULT_PATH=${RESULT_PATH:=/home/mgill/results/nemo_experiments}
+RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
 
 ###############################################################################
 #
@@ -124,9 +134,14 @@ WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
 if [ $write_env -eq 1 ]; then
     echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
     echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
+    echo PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH} >> $LOCAL_ENV
     echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
     echo DATA_MOUNT_PATH=${DATA_MOUNT_PATH} >> $LOCAL_ENV
+    echo RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH} >> $LOCAL_ENV
+    echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
+    echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
+    echo GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} >> $LOCAL_ENV
 fi
 
 ###############################################################################
@@ -148,32 +163,29 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-NEMO_HOME=/workspace/nemo
+DATE=$(date +%y%m%d)
 DOCKER_CMD="docker run \
     --rm \
     --network host \
     ${PARAM_RUNTIME} \
     -p ${JUPYTER_PORT}:8888 \
-    -v ${PROJECT_PATH}:${NEMO_HOME} \
+    -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
-    -v /home/mgill/.ssh:${NEMO_HOME}/.ssh:ro \
     --shm-size=1g \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
-    -e HOME=${NEMO_HOME} \
-    -e TF_CPP_MIN_LOG_LEVEL=3 \
-    -w ${NEMO_HOME}"
- 
-DATE=$(date +%y%m%d)
+    -e HOME=${PROJECT_MOUNT_PATH} \
+    -w ${PROJECT_MOUNT_PATH}"
 
 build() {
     set -e
-    MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )"
+    MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
     echo "Building MegaMolBART training container..."
     docker build --network host \
         -t ${MEGAMOLBART_CONT_BASENAME}:latest \
         -t ${MEGAMOLBART_CONT_BASENAME}:${DATE} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
+        --build-arg NEMO_HOME=${PROJECT_MOUNT_PATH} \
         -f Dockerfile.nemo_chem \
         .
 

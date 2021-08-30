@@ -5,19 +5,19 @@ set -x
 
 ### CONFIG ###
 
-NUM_GPUS=3
-NUM_NODES=1
+NUM_NODES=2
+NUM_GPUS=16
 
+HOSTNAME=NGC
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
-DATA_FILES_SELECTED=x_OP_000..006_CL_.csv
+DATA_FILES_SELECTED=x_OP_000..146_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210828"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
+WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 
 ### END CONFIG ###
 
-HOSTNAME=$(hostname)
-HOSTNAME=${HOSTNAME%%"-login"*} # remove login string from name
 EXP_NAME=${HOSTNAME}_nodes_${NUM_NODES}_gpus_${NUM_GPUS}
 
 NTASKS=$((${NUM_NODES}*${NUM_GPUS}))
