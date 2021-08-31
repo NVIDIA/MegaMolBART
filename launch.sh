@@ -65,7 +65,7 @@ variables:
         If code should not be mounted in the container, then the PROJECT_MOUNT_PATH line should
         be removed from the DOCKER_CMD here https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/main/launch.sh#L164
     PROJECT_MOUNT_PATH
-        Path to code inside container, e.g. /code/nemo
+        Path to code inside container, e.g. /workspace/nemo
         This can be ignored for non-development runs since code is already inside the container.
         THIS PATH SHOULD BE CHANGED ONLY IF NECESSARY. Many downstream functions depend on it.
     JUPYTER_PORT
@@ -92,7 +92,7 @@ EOF
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/code/nemo}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
