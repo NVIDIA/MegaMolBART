@@ -63,25 +63,30 @@ variables:
     PROJECT_PATH
         local path to code. e.g., /home/user/code/NeMo_MegaMolBART
     PROJECT_MOUNT_PATH
-        Path code is mounted to inside container, e.g. /workspace/nemo
-    REGISTRY_ACCESS_TOKEN
-        container registry access token. e.g., Ckj53jGK...
-    REGISTRY_USER
-        container registry username. e.g., astern
-    REGISTRY
-        container registry URL. e.g., server.com/registry:5005
+        Path to code inside container, e.g. /workspace/nemo
+        Disable this mount for non-development runs
+    JUPYTER_PORT
+        Port for launching jupyter lab, e.g. 8888
     DATA_PATH
         path to data directory. e.g., /scratch/data/zinc_csv_split
-    JUPYTER_PORT
-        Port for launching jupyter lab
+    DATA_MOUNT_PATH
+        Path to data inside container. e.g., /data
+    REGISTRY
+        container registry URL. e.g., nvcr.io
+    REGISTRY_USER
+        container registry username. e.g., '$oauthtoken' for GitHub token access
+    REGISTRY_ACCESS_TOKEN
+        container registry access token. e.g., Ckj53jGK...
+    WANDB_API_KEY
+        Weights and Balances API key to upload runs to WandB. Can also be uploaded afterwards., e.g. Dkjdf...
     GITHUB_ACCESS_TOKEN
-        GitHub API token for repo download during build
+        GitHub API token to checkout private code repo (required for build only)
 
 EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
@@ -89,8 +94,10 @@ DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
 RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
-WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
+REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
+REGISTRY=${REGISTRY:=NotSpecified}
 GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
+WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
 
 ###############################################################################
 #
@@ -110,23 +117,6 @@ fi
 
 ###############################################################################
 #
-# alternatively, override variable here.  These should be all that are needed.
-#
-###############################################################################
-
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training}
-PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=workspace/nemo}
-JUPYTER_PORT=${JUPYTER_PORT:=8888}
-DATA_PATH=${DATA_PATH:=/tmp}
-DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
-RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
-RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
-WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
-
-###############################################################################
-#
 # If $LOCAL_ENV was not found, write out a template for user to edit
 #
 ###############################################################################
@@ -140,6 +130,8 @@ if [ $write_env -eq 1 ]; then
     echo DATA_MOUNT_PATH=${DATA_MOUNT_PATH} >> $LOCAL_ENV
     echo RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH} >> $LOCAL_ENV
     echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
+    echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
+    echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
     echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
     echo GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} >> $LOCAL_ENV
 fi
