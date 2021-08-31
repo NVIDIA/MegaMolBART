@@ -11,7 +11,7 @@ SLURM_GPUS_PER_NODE=2
 NTASKS=$((${SLURM_JOB_NUM_NODES}*${SLURM_GPUS_PER_NODE}))
 
 PROJECT=MegaMolBART
-MEGAMOLBART_CONFIG_FILE=xsmall_span_aug
+MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210830"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
@@ -54,15 +54,15 @@ python megamolbart_pretrain.py \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
+    model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
+    model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
+    model.train_ds.num_workers=4 \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.validation_ds.num_workers=4 \
-    model.train_ds.filepath=${DATA_MOUNT}/test/${DATA_FILES_SELECTED} \
-    model.train_ds.metadata_path=${DATA_MOUNT}/test/metadata.txt \
-    model.train_ds.num_workers=4 \
-    trainer.val_check_interval=1.0 \
-    +trainer.limit_val_batches=2 \
-    +trainer.limit_train_batches=4 \
-    +trainer.max_epochs=2 
+    ++trainer.val_check_interval=0.5 \
+    ++trainer.limit_val_batches=2 \
+    ++trainer.limit_train_batches=10 \
+    ++trainer.max_epochs=10 
 
 set +x

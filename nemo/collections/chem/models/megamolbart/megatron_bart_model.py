@@ -411,6 +411,8 @@ class MegaMolBARTModel(ModelPT):
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
         """
+        logging.info(f'Starting final evaluation for {mode} step.')
+
         loss_label = f'{mode}/loss'
         eval_loss = torch.tensor([x[loss_label] for x in outputs]).mean().item()
 
@@ -430,6 +432,9 @@ class MegaMolBARTModel(ModelPT):
 
         self.log_dict(logs)
         logs['log'] = logs.copy()
+
+        logging.info(f'Finished final evaluation for {mode} step.')
+
         return logs
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
