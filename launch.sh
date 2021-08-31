@@ -62,9 +62,12 @@ variables:
         Note that this is a separate (precursor) container from any service associated containers
     PROJECT_PATH
         local path to code. e.g., /home/user/code/NeMo_MegaMolBART
+        If code should not be mounted in the container, then the PROJECT_MOUNT_PATH line should
+        be removed from the DOCKER_CMD here https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/main/launch.sh#L164
     PROJECT_MOUNT_PATH
-        Path to code inside container, e.g. /workspace/nemo
-        Disable this mount for non-development runs
+        Path to code inside container, e.g. /code/nemo
+        This can be ignored for non-development runs since code is already inside the container.
+        THIS PATH SHOULD BE CHANGED ONLY IF NECESSARY. Many downstream functions depend on it.
     JUPYTER_PORT
         Port for launching jupyter lab, e.g. 8888
     DATA_PATH
@@ -72,13 +75,14 @@ variables:
     DATA_MOUNT_PATH
         Path to data inside container. e.g., /data
     REGISTRY
-        container registry URL. e.g., nvcr.io
+        container registry URL. e.g., nvcr.io. Only required to push/pull containers.
     REGISTRY_USER
-        container registry username. e.g., '$oauthtoken' for GitHub token access
+        container registry username. e.g., '$oauthtoken' for registry access. Only required to push/pull containers.
     REGISTRY_ACCESS_TOKEN
-        container registry access token. e.g., Ckj53jGK...
+        container registry access token. e.g., Ckj53jGK... Only required to push/pull containers.
     WANDB_API_KEY
         Weights and Balances API key to upload runs to WandB. Can also be uploaded afterwards., e.g. Dkjdf...
+        This value is optional -- Weights and Biases will log data and not upload if missing.
     GITHUB_ACCESS_TOKEN
         GitHub API token to checkout private code repo (required for build only)
 
@@ -88,7 +92,7 @@ EOF
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/code/nemo}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
