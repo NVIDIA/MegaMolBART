@@ -82,7 +82,11 @@ echo '*******STARTING********' \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.train_ds.batch_size=128 \
-    model.validation_ds.batch_size=128
+    model.validation_ds.batch_size=128 \
+    ++trainer.val_check_interval=0.5 \
+    ++trainer.limit_val_batches=2 \
+    ++trainer.limit_train_batches=10 \
+    ++trainer.max_epochs=10 
 EOF
 
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
