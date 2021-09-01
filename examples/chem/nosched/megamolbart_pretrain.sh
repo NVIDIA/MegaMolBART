@@ -1,20 +1,18 @@
 #!/bin/bash
 set -x
 
-# Tested with single node, multiple GPU configuration
-
+# Tested with single node, multiple GPU configurations
 ### CONFIG ###
 
 HOSTNAME=NGC
 
-SLURM_GPUS_PER_NODE=3
+SLURM_GPUS_PER_NODE=3 # These are used for interactive jobs for consistency with SLURM scripts
 NUM_NODES=1
-NTASKS=$((${NUM_NODES}*${SLURM_GPUS_PER_NODE}))
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..006_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210830"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
 ### END CONFIG ###

@@ -6,9 +6,8 @@ set -x
 ### CONFIG ###
 
 HOSTNAME=Selene
-SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs
+SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs for consistency with SLURM scripts
 SLURM_TASKS_PER_NODE=2
-NTASKS=$((${SLURM_JOB_NUM_NODES}*${SLURM_TASKS_PER_NODE}))
 
 ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl --job-name swdl-clara:mgill_megamolbart "
 IS_BATCH=0 # 0 for interactive, 1 for sbatch
@@ -17,7 +16,7 @@ IS_DEV=1 # 1 will mount code over that in container, 0 does not
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210830"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
 
 STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
@@ -94,7 +93,7 @@ echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
 export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
 if [ ${IS_BATCH} -eq 0 ]; then
-    ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS}" --pty --nodes ${SLURM_JOB_NUM_NODES} --ntasks ${NTASKS} --ntasks-per-node ${SLURM_TASKS_PER_NODE} "
+    ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS}" --pty --nodes ${SLURM_JOB_NUM_NODES} --ntasks-per-node ${SLURM_TASKS_PER_NODE} "
     EXEC_COMMAND=" bash"
 else
     ADDITIONAL_FLAGS="--output $OUTFILE --error $ERRFILE "

@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --nodes 2
-#SBATCH --ntasks 16
 #SBATCH --ntasks-per-node 8
 #SBATCH --mail-type=FAIL
 #SBATCH --time=4:00:00                          # Selene
@@ -10,7 +9,7 @@
 
 set -x
 
-##### Development on a cluster with SLURM / Optional interactive or batch training
+##### Development on a cluster with SLURM
 ### CONFIG ###
 
 HOSTNAME=Selene
@@ -20,7 +19,7 @@ IS_DEV=1 # 1 will mount code over that in container, 0 does not
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..146_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210830"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
 
 STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
@@ -33,8 +32,8 @@ OUTPUT_DIR=${STORAGE_DIR}/nemo
 EXP_NAME=${HOSTNAME}_nodes_${SLURM_JOB_NUM_NODES}_gpus_${SLURM_NTASKS_PER_NODE}
 
 RESULTS_DIR=${OUTPUT_DIR}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
-OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Ignored in interactive mode
-ERRFILE="${RESULTS_DIR}/error-%j-%n.out" # Ignored in interactive mode
+OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out"
+ERRFILE="${RESULTS_DIR}/error-%j-%n.out"
 
 DATA_MOUNT=/data
 CODE_MOUNT=/code
@@ -93,22 +92,14 @@ SCRIPT_PATH=${RESULTS_DIR}/job_script.sh
 echo "${RUN_COMMAND}" > ${SCRIPT_PATH}
 export SCRIPT_MOUNT=${RESULTS_MOUNT}/job_script.sh
 
-if [ ${IS_BATCH} -eq 0 ]; then
-    ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS}" --nodes ${SLURM_JOB_NUM_NODES} --ntasks ${NTASKS} --ntasks-per-node ${SLURM_TASKS_PER_NODE} "
-    EXEC_COMMAND=" bash"
-else
-    ADDITIONAL_FLAGS="--output $OUTFILE --error $ERRFILE "
-    # EXEC_COMMAND=" bash -c ${RUN_COMMAND}"
-    EXEC_COMMAND=" bash ${SCRIPT_MOUNT}"
-fi
-
 srun $ADDITIONAL_FLAGS \
+--output $OUTFILE --error $ERRFILE \
 --container-image ${CONTAINER} \
 --container-mounts ${MOUNTS} \
 --container-workdir ${WORKDIR} \
 --export PYTHONPATH="${SCRIPT_PYTHONPATH}" \
 --export SCRIPT_PATH="${SCRIPT_MOUNT}" \
 --export WANDB_API_KEY="${WANDB_API_KEY}" \
-${EXEC_COMMAND}
+bash ${SCRIPT_MOUNT}
 
 set +x
