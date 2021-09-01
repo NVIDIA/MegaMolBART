@@ -11,7 +11,6 @@ SLURM_TASKS_PER_NODE=2
 
 ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl --job-name swdl-clara:mgill_megamolbart "
 IS_BATCH=0 # 0 for interactive, 1 for sbatch
-IS_DEV=1 # 1 will mount code over that in container, 0 does not
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
@@ -37,10 +36,7 @@ OUTPUT_MOUNT=/result
 RESULTS_MOUNT=${OUTPUT_MOUNT}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
 WORKDIR=${CODE_MOUNT}
 
-MOUNTS="$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
-if [ $IS_DEV -eq 1 ]; then
-    MOUNTS=$MOUNTS",$CODE_DIR:$CODE_MOUNT"
-fi
+MOUNTS="$CODE_DIR:$CODE_MOUNT,$OUTPUT_DIR:$OUTPUT_MOUNT,$DATA_DIR:$DATA_MOUNT"
 
 mkdir -p ${RESULTS_DIR}
 GPU_LIMIT="$(($SLURM_TASKS_PER_NODE-1))"
