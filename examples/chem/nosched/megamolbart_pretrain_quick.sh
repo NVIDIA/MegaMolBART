@@ -6,14 +6,13 @@ set -x
 
 HOSTNAME=NGC
 
-SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs
+SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs for consistency with SLURM scripts
 SLURM_GPUS_PER_NODE=2
-NTASKS=$((${SLURM_JOB_NUM_NODES}*${SLURM_GPUS_PER_NODE}))
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210830"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
 ### END CONFIG ###
