@@ -12,7 +12,7 @@ SLURM_GPUS_PER_NODE=2
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
+CONTAINER="FIXME"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron
 
 ### END CONFIG ###

@@ -15,7 +15,7 @@ IS_BATCH=0 # 0 for interactive, 1 for sbatch
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:210831"
+CONTAINER="FIXME"
 
 STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
