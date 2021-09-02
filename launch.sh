@@ -159,7 +159,10 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-DATE=$(date +%y%m%d)
+#DATE=$(date +%y%m%d)
+GITHUB_BRANCH=main
+GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
+
 DOCKER_CMD="docker run \
     --rm \
     --network host \
@@ -179,8 +182,10 @@ build() {
     echo "Building MegaMolBART training container..."
     docker build --network host \
         -t ${MEGAMOLBART_CONT_BASENAME}:latest \
-        -t ${MEGAMOLBART_CONT_BASENAME}:${DATE} \
+        -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
+        --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
+        --build-arg GITHUB_SHA=${GITHUB_SHA} \
         --build-arg NEMO_HOME=${PROJECT_MOUNT_PATH} \
         -f Dockerfile.nemo_chem \
         .
@@ -193,7 +198,7 @@ build() {
 push() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
     docker push ${MEGAMOLBART_CONT}:latest
-    docker push ${MEGAMOLBART_CONT}:${DATE}
+    docker push ${MEGAMOLBART_CONT}:${GITHUB_SHA}
     exit
 }
 
