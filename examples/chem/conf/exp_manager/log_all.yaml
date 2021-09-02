@@ -5,7 +5,7 @@ create_wandb_logger: true
 create_tensorboard_logger: true
 create_checkpoint_callback: true
 checkpoint_callback_params:
-  monitor: 'val/molecular_accuracy'
+  monitor: 'val_molecular_accuracy'
   always_save_nemo: true # nemo style checkpoints, which contain pytorch lightning checkpoints inside
   save_last: true
   save_top_k: 5

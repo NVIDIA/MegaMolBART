@@ -390,12 +390,14 @@ class MegaMolBARTModel(ModelPT):
         (mol_strs, log_lhs) = self.model.sample_molecules(batch, sampling_alg=self.val_sampling_alg) 
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
+        # molecular_accuracy is entered twice so there is a version w/o slash which interferes with checkpointing
         logs = {
             f'{mode}/loss': loss,
             f'{mode}/perplexity': perplexity,
             f'{mode}/char_acc': token_acc,
             f'{mode}/molecular_accuracy': metrics['accuracy'],
-            f'{mode}/invalid_smiles': metrics['invalid']}
+            f'{mode}/invalid_smiles': metrics['invalid'],
+            f'{mode}_molecular_accuracy': metrics['accuracy']}
 
         self.log_dict(logs, on_epoch=True, sync_dist=True)
         logs['log'] = logs.copy()
