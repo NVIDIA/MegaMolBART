@@ -31,7 +31,7 @@ OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Ignored in interactive mode
 ERRFILE="${RESULTS_DIR}/error-%j-%n.out" # Ignored in interactive mode
 
 DATA_MOUNT=/data
-CODE_MOUNT=/code
+CODE_MOUNT=/workspace/nemo
 OUTPUT_MOUNT=/result
 RESULTS_MOUNT=${OUTPUT_MOUNT}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
 WORKDIR=${CODE_MOUNT}
