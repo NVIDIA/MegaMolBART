@@ -54,7 +54,7 @@ class MegaMolBARTModel(ModelPT):
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
 
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
-        self._set_app_state(cfg)
+        self._set_app_state(cfg, trainer.node_rank)
         cfg = model_utils.maybe_update_config_version(cfg)
         
         self._model_name = cfg.model.name
@@ -99,7 +99,7 @@ class MegaMolBARTModel(ModelPT):
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
 
-    def _set_app_state(self, cfg):
+    def _set_app_state(self, cfg, node_rank):
         app_state = AppState()
         if cfg.trainer is not None:
             app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
@@ -108,10 +108,9 @@ class MegaMolBARTModel(ModelPT):
             app_state._world_size = 1
             num_gpus = 1
 
-        env = os.environ.copy()
-        app_state.local_rank = int(env.get('LOCAL_RANK', 0))
-        app_state.node_rank = int(env.get('NODE_RANK', 0))
-        app_state.global_rank = app_state.local_rank + (app_state.node_rank * num_gpus) # TODO better way to calculate?
+        app_state.local_rank = int(os.environ.get('LOCAL_RANK', 0))
+        # app_state.node_rank = node_rank # 'NODE_RANK' NOT USED BY SELENE
+        app_state.global_rank = node_rank * num_gpus + app_state.local_rank
         app_state.model_parallel_size = None
         app_state.model_parallel_rank = None
         # app_state.device_id = None # TODO add these
@@ -341,6 +340,12 @@ class MegaMolBARTModel(ModelPT):
         app_state = AppState()
         if app_state.model_parallel_size is None:
             self.complete_lazy_init()
+
+            LOCAL_RANK=int(os.environ.get('LOCAL_RANK', -1))
+            RANK = int(os.environ.get('RANK', -1)) 
+            app_state.global_rank
+            logging.info(f'Env GPU rank setup: local rank {LOCAL_RANK}, global rank {RANK}')
+            logging.info(f'App GPU rank setup: local rank {app_state.local_rank}, global rank {app_state.global_rank}')
 
         outputs = self.model(batch)
         return outputs
