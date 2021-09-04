@@ -162,6 +162,13 @@ class MegaMolBARTModel(ModelPT):
             self._lazy_init_fn()
             self._lazy_init_fn = None
 
+            LOCAL_RANK = int(os.environ.get('LOCAL_RANK', -1))
+            RANK = int(os.environ.get('RANK', -1))
+            app_state = AppState()
+            logging.info(f'Env GPU rank setup: local rank {LOCAL_RANK}, global rank {RANK}')
+            logging.info(f'App GPU rank setup: local rank {app_state.local_rank}, global rank {app_state.global_rank}')
+
+
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
         app_state = AppState()
@@ -340,12 +347,6 @@ class MegaMolBARTModel(ModelPT):
         app_state = AppState()
         if app_state.model_parallel_size is None:
             self.complete_lazy_init()
-
-            LOCAL_RANK=int(os.environ.get('LOCAL_RANK', -1))
-            RANK = int(os.environ.get('RANK', -1)) 
-            app_state.global_rank
-            logging.info(f'Env GPU rank setup: local rank {LOCAL_RANK}, global rank {RANK}')
-            logging.info(f'App GPU rank setup: local rank {app_state.local_rank}, global rank {app_state.global_rank}')
 
         outputs = self.model(batch)
         return outputs
