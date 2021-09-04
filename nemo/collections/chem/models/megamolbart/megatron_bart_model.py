@@ -414,6 +414,10 @@ class MegaMolBARTModel(ModelPT):
     def test_step(self, batch, batch_idx):
         return self._eval_step(batch, batch_idx, 'test')
 
+    def training_epoch_end(self, outputs):
+        logging.info(f'Finishing training epoch {self.current_epoch}')
+        return super().training_epoch_end(outputs)
+
     def _eval_epoch_end(self, outputs: List[Dict], mode: str) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
