@@ -442,11 +442,12 @@ class MegaMolBARTModel(ModelPT):
                 f'{token_label}_avg': eval_token_acc,
                 f'{mol_acc_label}_avg': eval_mol_acc}
 
+        logging.info(f'Metrics from {mode} epoch end at step {self.global_step}: loss:{eval_loss}, perplexity:{eval_ppl}, token acc:{eval_token_acc}, molecular acc:{eval_mol_acc}')
+
         self.log_dict(logs)
         logs['log'] = logs.copy()
 
         logging.info(f'Finished final evaluation for {mode} step.')
-
         return logs
 
     def validation_epoch_end(self, outputs: List[Dict]) -> Dict:
