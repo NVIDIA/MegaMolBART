@@ -27,13 +27,13 @@ exp_manager:
 
 trainer:
   gpus: 8
-  num_nodes: 1
+  num_nodes: 4 
   min_epochs: 10
   max_epochs: 10
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
-  val_check_interval: 0.5 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  val_check_interval: 2000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
   # auto_scale_batch_size: None/binsearch
 
 tokenizer:
