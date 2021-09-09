@@ -48,7 +48,7 @@ model:
     decoder_augment: false
     filepath: /data/zinc_csv/train/x[000..146].csv
     metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 32
+    batch_size: 256 
     num_workers: 8
 
   validation_ds:
@@ -56,5 +56,5 @@ model:
     decoder_augment: false
     filepath: /data/zinc_csv/val/x[000..146].csv
     metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 32
+    batch_size: 512 
     num_workers: 8

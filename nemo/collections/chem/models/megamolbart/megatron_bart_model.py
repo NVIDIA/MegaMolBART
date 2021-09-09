@@ -393,6 +393,7 @@ class MegaMolBARTModel(ModelPT):
 
         # molecular_accuracy is entered twice so there is a version w/o slash which interferes with checkpointing
         logs = {
+            f'{mode}/step': self.global_step,
             f'{mode}/loss': loss,
             f'{mode}/perplexity': perplexity,
             f'{mode}/char_acc': token_acc,
@@ -437,10 +438,11 @@ class MegaMolBARTModel(ModelPT):
         mol_acc_label = f'{mode}/molecular_accuracy'
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
-        logs =  {f'{loss_label}_avg': eval_loss, 
-                f'{ppl_label}_avg': eval_ppl,
-                f'{token_label}_avg': eval_token_acc,
-                f'{mol_acc_label}_avg': eval_mol_acc}
+        logs =  {f'{mode}/step_avg': self.global_step,
+                 f'{loss_label}_avg': eval_loss, 
+                 f'{ppl_label}_avg': eval_ppl,
+                 f'{token_label}_avg': eval_token_acc,
+                 f'{mol_acc_label}_avg': eval_mol_acc}
 
         logging.info(f'Metrics from {mode} epoch end at step {self.global_step}: loss:{eval_loss}, perplexity:{eval_ppl}, token acc:{eval_token_acc}, molecular acc:{eval_mol_acc}')
 
