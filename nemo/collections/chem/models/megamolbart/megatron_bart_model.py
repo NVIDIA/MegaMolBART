@@ -42,7 +42,7 @@ from megatron.mpu import (
 )
 
 from nemo.collections.chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
-from nemo.collections.chem.tokenizer import MolEncTokenizer
+from nemo.collections.chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
 from nemo.collections.chem.decoder import DecodeSampler
 from nemo.collections.chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
@@ -54,54 +54,63 @@ class MegaMolBARTModel(ModelPT):
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
 
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
-        self._set_app_state(cfg, trainer.node_rank)
+        node_rank = trainer.node_rank if trainer else 0 # TODO fix this for model parallel checkpoint loading
+        self._set_app_state(cfg, node_rank)
         cfg = model_utils.maybe_update_config_version(cfg)
-        
-        self._model_name = cfg.model.name
-        self.max_seq_len = cfg.model.max_seq_len
-        self.tokenizer = self.setup_tokenizer(cfg.tokenizer)
+
+        # TODO handle this better for reloading a nemo checkpoint when model parallel is added
+        cfg_model = cfg.model if cfg.get('model') else cfg
+        if cfg.get('tokenizer'):
+            cfg_tokenizer = cfg.tokenizer
+        else:
+            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
+
+        self._model_name = cfg_model.name
+        self.max_seq_len = cfg_model.max_seq_len
+
+        self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
         self._vocab_size = len(self.tokenizer)
         self.val_sampling_alg = 'greedy'
-        self._set_ddp(trainer)
+        if trainer:
+            self._set_ddp(trainer)
 
         # Augmentation / collate functionality
-        train_ds = cfg.model.train_ds
+        train_ds = cfg_model.train_ds
+        val_ds = cfg_model.validation_ds
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **train_ds)
-        val_ds = cfg.model.validation_ds
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds)
         self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds) # TODO right now test_ds is not used
 
-        _ = self.setup_megatron(cfg) # Megatron initialization -- must be done before superclass init and model loaded            
-        super().__init__(cfg=cfg.model, trainer=trainer)
+        _ = self.setup_megatron(cfg_model) # Megatron initialization -- must be done before superclass init and model loaded            
+        super().__init__(cfg=cfg_model, trainer=trainer)
 
         # Load model
-        self.config = OmegaConf.create(cfg.model)
-        self.sampler = self.setup_sampler(self.tokenizer, cfg)
+        self.config = OmegaConf.create(cfg_model) # TODO this may be the cause of issues with config saving above
+        self.sampler = self.setup_sampler(self.tokenizer, cfg_model)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
-        self.d_model = cfg.model.d_model # for scheduler
+        self.d_model = cfg_model.d_model # for scheduler
         self.model = MegatronBART( 
                                 self.sampler,
                                 pad_token_idx,
                                 self._vocab_size,
-                                cfg.model.d_model,
-                                cfg.model.num_layers,
-                                cfg.model.num_heads,
-                                cfg.model.d_feedforward,
-                                cfg.model.max_seq_len,
-                                cfg.model.dropout)
+                                cfg_model.d_model,
+                                cfg_model.num_layers,
+                                cfg_model.num_heads,
+                                cfg_model.d_feedforward,
+                                cfg_model.max_seq_len,
+                                cfg_model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        # config.schedulers.register_scheduler_params()
         optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
 
-        self.setup_optimization(cfg.model.optim) # TODO check warning from training
+        self.setup_optimization(cfg_model.optim) # TODO check warning from training
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
 
     def _set_app_state(self, cfg, node_rank):
         app_state = AppState()
-        if cfg.trainer is not None:
+        if cfg.get('trainer'):
             app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
             num_gpus = cfg.trainer.gpus
         else:
@@ -168,7 +177,6 @@ class MegaMolBARTModel(ModelPT):
             logging.info(f'Env GPU rank setup: local rank {LOCAL_RANK}, global rank {RANK}')
             logging.info(f'App GPU rank setup: local rank {app_state.local_rank}, global rank {app_state.global_rank}')
 
-
     def setup_megatron(self, cfg: DictConfig) -> dict:
         """Initialize Megatron"""
         app_state = AppState()
@@ -180,10 +188,10 @@ class MegaMolBARTModel(ModelPT):
         set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
 
         # megatron input arguments
-        args = {'num_layers': cfg.model.num_layers,
-                'hidden_size': cfg.model.d_model,
-                'num_attention_heads': cfg.model.num_heads,
-                'max_position_embeddings': cfg.model.max_seq_len,
+        args = {'num_layers': cfg.num_layers,
+                'hidden_size': cfg.d_model,
+                'num_attention_heads': cfg.num_heads,
+                'max_position_embeddings': cfg.max_seq_len,
                 'onnx_safe': True,
                 'lazy_mpu_init': True,
                 'tokenizer_type': 'BertWordPieceCase',
@@ -220,52 +228,6 @@ class MegaMolBARTModel(ModelPT):
         )
         return args
 
-    def _load_checkpoint(self, filename: str) -> None:
-        """Helper function for loading megatron checkpoints.
-
-        Args:
-            filename (str): Path to megatron checkpoint.
-        """
-        state_dict = torch.load(filename, map_location='cpu')
-        if 'checkpoint_version' in state_dict:
-            if state_dict['checkpoint_version'] is not None:
-                set_checkpoint_version(state_dict['checkpoint_version'])
-                logging.info(
-                    f"Megatron-lm checkpoint version found. Setting checkpoint_version to {state_dict['checkpoint_version']}."
-                )
-        else:
-            logging.warning('Megatron-lm checkpoint version not found. Setting checkpoint_version to 0.')
-            set_checkpoint_version(0)
-        # To load from Megatron pretrained checkpoint
-        if 'model' in state_dict:
-            self.language_model.load_state_dict(state_dict['model'][self._language_model_key])
-        else:
-            self.load_state_dict(state_dict)
-
-        logging.info(f"Checkpoint loaded from from {filename}")
-
-    def restore_weights(self, restore_path: str) -> None:
-        """Restores module/model's weights for Megatron model
-           For model parallel checkpoints the directory structure
-           should be restore_path/mp_rank_0X/model_optim_rng.pt
-
-        Args:
-            restore_path (str): restore_path should a file or a directory if using model parallel
-        """
-        self._restore_path = restore_path
-        if os.path.isfile(restore_path):
-            self._load_checkpoint(restore_path)
-        elif os.path.isdir(restore_path):
-            # Need model parallel groups to restore model parallel checkpoints
-            if model_parallel_is_initialized():
-                model_parallel_rank = dist.get_rank(group=get_model_parallel_group())
-                mp_restore_path = f'{restore_path}/mp_rank_{model_parallel_rank:02d}/model_optim_rng.pt'
-                self._load_checkpoint(mp_restore_path)
-            else:
-                logging.info(f'torch.distributed not initialized yet. Will not restore model parallel checkpoint')
-        else:
-            logging.error(f'restore_path: {restore_path} must be a file or directory.')
-
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
         if not os.path.exists(cfg.vocab_path):
@@ -275,7 +237,7 @@ class MegaMolBARTModel(ModelPT):
 
     @staticmethod
     def setup_sampler(tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
-        return DecodeSampler(tokenizer, cfg.model.max_seq_len)
+        return DecodeSampler(tokenizer, cfg.max_seq_len)
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
         logging.info('Loading training data')
