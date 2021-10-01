@@ -40,7 +40,7 @@ class MolEncTokenizerBaseConfig():
 
 @dataclass
 class MolEncTokenizerFromVocabFileConfig():
-    vocab_path: str = /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
+    vocab_path: str = '/workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt'
     regex: str = DEFAULT_REGEX
     chem_tokens_start_idx: int = DEFAULT_CHEM_TOKEN_START
     pad_token_idx: int = 0
