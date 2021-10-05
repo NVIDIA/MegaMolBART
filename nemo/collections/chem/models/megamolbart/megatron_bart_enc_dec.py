@@ -1,5 +1,10 @@
+import os
 from typing import Optional, Tuple
-from apex.normalization import FusedLayerNorm
+
+if os.getenv("APEX_ENABLED", default='1') == '1':
+    from apex.normalization import FusedLayerNorm
+else:
+    from torch.nn import LayerNorm as FusedLayerNorm
 
 import torch.nn as nn
 from torch.nn import init
