@@ -15,7 +15,7 @@ from nemo.utils.exp_manager import exp_manager, ExpManagerConfig
 
 from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
 from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
-from nemo.collections.chem.decoder import DecodeSamplerConfig  
+from nemo.collections.chem.decoder import DecodeSamplerConfig
 
 
 @dataclass
@@ -49,7 +49,7 @@ def main(cfg: MegaMolBARTPretrain) -> None:
 
     trainer = pl.Trainer(**trainer_config)
     exp_manager(trainer, cfg.get("exp_manager", None))
-    
+
     model = MegaMolBARTModel(cfg, trainer)
     logging.info("************** Model parameters and their sizes ***********")
     for name, param in model.named_parameters():
@@ -60,6 +60,10 @@ def main(cfg: MegaMolBARTPretrain) -> None:
         logging.info("************** Starting Training ***********")
         trainer.fit(model)
         logging.info("************** Finished Training ***********")
+    else:
+        logging.info("************** Starting Data PreProcessing ***********")
+        trainer.fit(model)
+        logging.info("************** Finished Data PreProcessing ***********")
 
     if cfg.do_testing:
         logging.info("************** Starting Testing ***********")
@@ -71,4 +75,4 @@ if __name__ == '__main__':
 
     main()
 
-    
+
