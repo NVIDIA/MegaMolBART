@@ -5,6 +5,7 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
+from preprocess import Preprocess
 
 from nemo.utils import logging
 from nemo.utils.config_utils import update_model_config
@@ -28,7 +29,7 @@ class MegaMolBARTPretrain(NemoConfig):
     trainer: Optional[TrainerConfig] = TrainerConfig()
     exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MegaMolBART', files_to_copy=[])
     random_seed: Optional[int] = None
-
+    dataset_path: Optional[str] = None
 
 @hydra_runner()
 def main(cfg: MegaMolBARTPretrain) -> None:
@@ -62,7 +63,9 @@ def main(cfg: MegaMolBARTPretrain) -> None:
         logging.info("************** Finished Training ***********")
     else:
         logging.info("************** Starting Data PreProcessing ***********")
-        trainer.fit(model)
+        preprocess = Preprocess()
+        preprocess.split_dataset(links_file='conf/model/dataset/ZINC-downloader-small.txt',
+                                 output_dir=cfg.dataset_path)
         logging.info("************** Finished Data PreProcessing ***********")
 
     if cfg.do_testing:

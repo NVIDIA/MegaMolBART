@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/nemo:1.2.0 
+FROM nvcr.io/nvidia/nemo:1.2.0
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
 ARG GITHUB_SHA
@@ -22,6 +22,7 @@ RUN apt-get update && \
 ## Environment setup --  multithreaded dataloading very sensitive to libboost version. Do not change w/o testing.
 COPY conda/env.yml /tmp/env.yml
 RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
+RUN pip install dask[complete]
 
 ## PySMILES
 RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
@@ -32,5 +33,5 @@ RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_Me
     --branch ${GITHUB_BRANCH} /opt/NeMo_MegaMolBART \
     && rm -rf ${NEMO_HOME} \
     && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
-    && ln -s ${NEMO_HOME}/nemo/collections/chem /opt/conda/lib/python3.8/site-packages/nemo/collections/chem 
+    && ln -s ${NEMO_HOME}/nemo/collections/chem /opt/conda/lib/python3.8/site-packages/nemo/collections/chem
 # TODO finish setup.py
