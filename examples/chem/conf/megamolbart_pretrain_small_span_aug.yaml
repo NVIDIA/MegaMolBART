@@ -11,6 +11,7 @@ name: &name MegaMolBART
 do_training: true # set to false if data preprocessing steps must be completed
 do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
 random_seed: 42
+dataset_path: /data/zinc_csv/
 
 exp_manager:
   name: *name
@@ -27,7 +28,7 @@ exp_manager:
 
 trainer:
   gpus: 8
-  num_nodes: 4 
+  num_nodes: 4
   min_epochs: 10
   max_epochs: 10
   accumulate_grad_batches: 1
@@ -46,15 +47,15 @@ model:
   train_ds:
     encoder_mask: true # task = mask(span)_aug
     decoder_augment: true
-    filepath: /data/zinc_csv/train/x[000..146].csv
-    metadata_path: /data/zinc_csv/train/metadata.txt
-    batch_size: 256 
+    filepath: ${dataset_path}/train/x[000..146].csv
+    metadata_path: ${dataset_path}/train/metadata.txt
+    batch_size: 256
     num_workers: 8
 
   validation_ds:
     encoder_mask: false # not done in validation set
     decoder_augment: false
-    filepath: /data/zinc_csv/val/x[000..146].csv
-    metadata_path: /data/zinc_csv/val/metadata.txt
-    batch_size: 512 
+    filepath: ${dataset_path}/val/x[000..146].csv
+    metadata_path: ${dataset_path}/val/metadata.txt
+    batch_size: 512
     num_workers: 8
