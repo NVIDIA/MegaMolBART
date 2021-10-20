@@ -3,6 +3,7 @@ ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
 ARG GITHUB_SHA
 ARG NEMO_HOME=/workspace/nemo
+ARG NEMO_BASE_HOME=/workspace/nemo_base
 
 ENV GITHUB_SHA=${GITHUB_SHA}
 ENV GITHUB_BRANCH=${GITHUB_BRANCH}
@@ -31,5 +32,5 @@ RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_Me
     --branch ${GITHUB_BRANCH} /opt/NeMo_MegaMolBART \
     && rm -rf ${NEMO_HOME} \
     && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
-    && ln -s ${NEMO_HOME}/nemo/collections/chem /opt/conda/lib/python3.8/site-packages/nemo/collections/chem
+    && ln -s ${NEMO_HOME}/nemo/collections/chem ${NEMO_BASE_HOME}/nemo/collections/chem
 # TODO finish setup.py
