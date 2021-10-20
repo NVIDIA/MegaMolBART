@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/nemo:1.2.0
+FROM nemo_dev:latest
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
 ARG GITHUB_SHA
@@ -15,7 +15,6 @@ ENV TERM=xterm
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y \
-    python-setuptools python-dev swig \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
