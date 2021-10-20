@@ -20,7 +20,7 @@ class AdamOptimConfig(OptimConfig):
 class TransformerLRParams(SchedulerParams):
     lr: float = AdamOptimConfig.lr
     warm_up_steps: int = 0
-    d_model: int = 256 # TODO FIXME MegatronBARTConfig.d_model
+    d_model: int = 256 # TODO how to automatically set to MegatronBARTConfig.d_model
     verbose: bool = False
 
 

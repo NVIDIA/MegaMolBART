@@ -58,12 +58,12 @@ class MegaMolBARTModel(ModelPT):
         self._set_app_state(cfg, node_rank)
         cfg = model_utils.maybe_update_config_version(cfg)
 
-        # TODO handle this better for reloading a nemo checkpoint when model parallel is added
+        # Handle irregular configuration settings
         cfg_model = cfg.model if cfg.get('model') else cfg
         if cfg.get('tokenizer'):
             cfg_tokenizer = cfg.tokenizer
         else:
-            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
+            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: must be changed when other tokenizers added
 
         self._model_name = cfg_model.name
         self.max_seq_len = cfg_model.max_seq_len
@@ -79,13 +79,13 @@ class MegaMolBARTModel(ModelPT):
         val_ds = cfg_model.validation_ds
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **train_ds)
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds)
-        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds) # TODO right now test_ds is not used
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **val_ds) # TODO test_ds is not used
 
         _ = self.setup_megatron(cfg_model) # Megatron initialization -- must be done before superclass init and model loaded            
         super().__init__(cfg=cfg_model, trainer=trainer)
 
         # Load model
-        self.config = OmegaConf.create(cfg_model) # TODO this may be the cause of issues with config saving above
+        self.cfg = cfg # Save the entire config
         self.sampler = self.setup_sampler(self.tokenizer, cfg_model)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
         self.d_model = cfg_model.d_model # for scheduler
@@ -103,7 +103,7 @@ class MegaMolBARTModel(ModelPT):
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
 
-        self.setup_optimization(cfg_model.optim) # TODO check warning from training
+        self.setup_optimization(cfg_model.optim)
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
