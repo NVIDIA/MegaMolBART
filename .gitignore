@@ -1,7 +1,6 @@
 # log and data files
 *.model
 *.pkl
-#*.ipynb
 output
 result
 *.pt
@@ -12,6 +11,10 @@ work
 runs
 fastspeech_output
 .hydra
+.bash_history
+.viminfo
+.ssh/*
+.gitconfig
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -124,6 +127,7 @@ venv.bak/
 
 # VSCode project settins
 .vscode*
+*.code-workspace
 
 # Spyder project settings
 .spyderproject

@@ -1,19 +1,11 @@
 import os
 from typing import Optional, Tuple
 
-if os.getenv("APEX_ENABLED", default='1') == '1':
-    from apex.normalization import FusedLayerNorm
-else:
-    from torch.nn import LayerNorm as FusedLayerNorm
-
 import torch.nn as nn
 from torch.nn import init
 
-from megatron import mpu
-try:
-    from megatron.module import MegatronModule # v 1.1.5
-except:
-    from megatron.model.module import MegatronModule
+from apex.normalization.fused_layer_norm import FusedLayerNorm
+from nemo.collections.nlp.modules.common.megatron.module import MegatronModule
 
 from .megatron_bart_layers import MultiheadAttention, EncoderLayer, DecoderLayer
 

@@ -7,11 +7,8 @@ from torch.nn import init
 import torch.nn as nn
 import torch
 
-from megatron import mpu
-try:
-    from megatron.module import MegatronModule # v 1.1.5
-except:
-    from megatron.model.module import MegatronModule
+from apex.transformer import tensor_parallel
+from nemo.collections.nlp.modules.common.megatron.module import MegatronModule
 
 from dataclasses import dataclass
 from nemo.collections.chem.data import MoleculeCsvDatasetConfig
@@ -20,7 +17,7 @@ from nemo.collections.chem.optimizer import AdamOptimConfig
 from nemo.core.classes.dataset import DatasetConfig
 from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
-from .megatron_bart_enc_dec import ParallelTransformerDecoder, ParallelTransformerEncoder
+from .megatron_bart_enc_dec import ParallelTransformerEncoder, ParallelTransformerDecoder
 
 # Model parameters
 DEFAULT_D_MODEL = 256
@@ -99,7 +96,7 @@ class MegatronBART(MegatronModule):
             bias=True,
             init_method=init_method,
             )
-        self.token_fc = mpu.RowParallelLinear(d_model, vocab_size,
+        self.token_fc = tensor_parallel.RowParallelLinear(d_model, vocab_size,
                 input_is_parallel=False, init_method=init_method,
                 skip_bias_add=False)
         self.loss_fn = nn.CrossEntropyLoss(reduction='none',

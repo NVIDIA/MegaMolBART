@@ -1,21 +1,14 @@
 import os
 from typing import Optional, Tuple
 
-if os.getenv("APEX_ENABLED", default='1') == '1':
-    from apex.normalization import FusedLayerNorm
-else:
-    from torch.nn import LayerNorm as FusedLayerNorm
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 
-from megatron import mpu
-try:
-    from megatron.module import MegatronModule # v 1.1.5
-except:
-    from megatron.model.module import MegatronModule
+from apex.normalization.fused_layer_norm import FusedLayerNorm
+from apex.transformer import tensor_parallel
+from nemo.collections.nlp.modules.common.megatron.module import MegatronModule
 
 
 class MultiheadAttention(MegatronModule):
@@ -43,23 +36,23 @@ class MultiheadAttention(MegatronModule):
         self.skip_bias = not bias
 
         # Self-Attention is Column Parallelized
-        self.query_key_value = mpu.ColumnParallelLinear(self.embed_dim,
+        self.query_key_value = tensor_parallel.ColumnParallelLinear(self.embed_dim,
                 3 * self.embed_dim, gather_output=True,
                 init_method=self.init_method,
                 skip_bias_add=self.skip_bias)
 
         # Cross-Attention is Row and Column Parallelized
-        self.q_proj = mpu.RowParallelLinear(self.embed_dim,
+        self.q_proj = tensor_parallel.RowParallelLinear(self.embed_dim,
                 self.embed_dim, input_is_parallel=False,
                 init_method=self.init_method, bias=bias,
                 skip_bias_add=self.skip_bias)
-        self.key_value = mpu.ColumnParallelLinear(self.embed_dim, 2
+        self.key_value = tensor_parallel.ColumnParallelLinear(self.embed_dim, 2
                 * self.embed_dim, gather_output=True,
                 init_method=self.init_method,
                 skip_bias_add=self.skip_bias)
 
         # Final projection is Row Parallelized
-        self.out_proj = mpu.RowParallelLinear(self.embed_dim,
+        self.out_proj = tensor_parallel.RowParallelLinear(self.embed_dim,
                 self.embed_dim, input_is_parallel=False,
                 init_method=self.init_method, bias=bias)
 
@@ -91,7 +84,7 @@ class MultiheadAttention(MegatronModule):
         # Compute attention projections
         if not self.cross_attention:
             (q_k_v, bias) = self.query_key_value(query)
-            (q, k, v) = mpu.split_tensor_along_last_dim(q_k_v, 3)
+            (q, k, v) = tensor_parallel.split_tensor_along_last_dim(q_k_v, 3)
         else:
             q, _ = self.q_proj(query)
             if key is None:
@@ -100,7 +93,7 @@ class MultiheadAttention(MegatronModule):
                 k = v = None
             else:
                 (k_v, bias) = self.key_value(key)
-                (k, v) = mpu.split_tensor_along_last_dim(k_v, 2)
+                (k, v) = tensor_parallel.split_tensor_along_last_dim(k_v, 2)
 
         # Scale query and reshape
         q = q.contiguous()
@@ -180,10 +173,10 @@ class EncoderLayer(MegatronModule):
         self.attn_dropout = nn.Dropout(p=dropout)
         self.activation_fn = F.gelu
         self.activation_dropout = nn.Dropout(p=dropout)
-        self.fc1 = mpu.ColumnParallelLinear(embed_dim, 4
+        self.fc1 = tensor_parallel.ColumnParallelLinear(embed_dim, 4
                 * embed_dim, gather_output=False,
                 init_method=init_method, skip_bias_add=False)
-        self.fc2 = mpu.RowParallelLinear(4 * embed_dim,
+        self.fc2 = tensor_parallel.RowParallelLinear(4 * embed_dim,
                 embed_dim, input_is_parallel=True,
                 init_method=init_method, skip_bias_add=False)
         self.final_layer_norm = FusedLayerNorm(embed_dim)
@@ -260,10 +253,10 @@ class DecoderLayer(MegatronModule):
         self.dropout = nn.Dropout(p=dropout)
         self.activation_fn = F.gelu
         self.activation_dropout = nn.Dropout(p=dropout)
-        self.fc1 = mpu.ColumnParallelLinear(embed_dim, 4
+        self.fc1 = tensor_parallel.ColumnParallelLinear(embed_dim, 4
                 * embed_dim, gather_output=False,
                 init_method=init_method, skip_bias_add=False)
-        self.fc2 = mpu.RowParallelLinear(4 * embed_dim,
+        self.fc2 = tensor_parallel.RowParallelLinear(4 * embed_dim,
                 embed_dim, input_is_parallel=True,
                 init_method=init_method, skip_bias_add=False)
         self.final_layer_norm = FusedLayerNorm(embed_dim)
