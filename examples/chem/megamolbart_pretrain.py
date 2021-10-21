@@ -33,11 +33,13 @@ class MegaMolBARTPretrain(NemoConfig):
 
 @hydra_runner()
 def main(cfg: MegaMolBARTPretrain) -> None:
+
     # Load configuration
     default_cfg = OmegaConf.structured(MegaMolBARTPretrain())
     OmegaConf.set_struct(cfg, False)
     cfg = update_model_config(default_cfg, cfg)
     OmegaConf.set_struct(cfg, True)
+
     logging.info("************** Experiment configuration ***********")
     logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
 
@@ -48,6 +50,8 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     if cfg.random_seed:
         pl.seed_everything(cfg.random_seed, workers=True)
 
+    if trainer_config['precision'] != 'bf16':
+        trainer_config['precision'] = int(trainer_config['precision']) # TODO figure out why this is recognized as a string
     trainer = pl.Trainer(**trainer_config)
     exp_manager(trainer, cfg.get("exp_manager", None))
 

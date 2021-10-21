@@ -58,7 +58,7 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-
+        cfg_model = cfg.model if cfg.get('model') else cfg
         super().__init__(cfg=cfg_model, trainer=trainer)
         self.cfg = cfg
 
@@ -82,7 +82,7 @@ class MegaMolBARTModel(NLPModel):
         # cfg = model_utils.maybe_update_config_version(cfg)
 
         # Handle irregular configuration settings
-        cfg_model = cfg.model if cfg.get('model') else cfg
+        # cfg_model = cfg.model if cfg.get('model') else cfg
         if cfg.get('tokenizer'):
             cfg_tokenizer = cfg.tokenizer
         else:

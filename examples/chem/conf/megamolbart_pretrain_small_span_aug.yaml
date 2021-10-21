@@ -25,6 +25,8 @@ exp_manager:
     tags:
       - *name
       - ${model.name}
+  checkpoint_callback_params:
+    filename: ${model.name}-span_aug--{val_molecular_accuracy:.2f}-{step}-{consumed_samples}
 
 trainer:
   gpus: 8
