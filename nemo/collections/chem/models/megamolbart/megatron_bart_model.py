@@ -58,7 +58,28 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
+        if trainer:
+            self._set_ddp(trainer)
+
+        # Handle irregular configuration settings
         cfg_model = cfg.model if cfg.get('model') else cfg
+
+        if cfg.get('tokenizer'):
+            cfg_tokenizer = cfg.tokenizer
+        else:
+            # TODO: must be changed when other tokenizers added
+            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
+
+        self._model_name = cfg_model.name
+        self.max_seq_len = cfg_model.max_seq_len
+        self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
+        self._vocab_size = len(self.tokenizer)
+        self.val_sampling_alg = 'greedy'
+
+        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
+        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
+
         super().__init__(cfg=cfg_model, trainer=trainer)
         self.cfg = cfg
 
@@ -81,27 +102,27 @@ class MegaMolBARTModel(NLPModel):
         # self._set_app_state(cfg, node_rank)
         # cfg = model_utils.maybe_update_config_version(cfg)
 
-        # Handle irregular configuration settings
-        # cfg_model = cfg.model if cfg.get('model') else cfg
-        if cfg.get('tokenizer'):
-            cfg_tokenizer = cfg.tokenizer
-        else:
-            # TODO: must be changed when other tokenizers added
-            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
+        # # Handle irregular configuration settings
+        # # cfg_model = cfg.model if cfg.get('model') else cfg
+        # if cfg.get('tokenizer'):
+        #     cfg_tokenizer = cfg.tokenizer
+        # else:
+        #     # TODO: must be changed when other tokenizers added
+        #     cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
 
-        self._model_name = cfg_model.name
-        self.max_seq_len = cfg_model.max_seq_len
-        self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
-        self._vocab_size = len(self.tokenizer)
-        self.val_sampling_alg = 'greedy'
+        # self._model_name = cfg_model.name
+        # self.max_seq_len = cfg_model.max_seq_len
+        # self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
+        # self._vocab_size = len(self.tokenizer)
+        # self.val_sampling_alg = 'greedy'
 
         # if trainer:
         #     self._set_ddp(trainer)
 
-        # Augmentation / collate functionality
-        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
-        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
-        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
+        # # Augmentation / collate functionality
+        # self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
+        # self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
+        # self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
 
         # _ = self.setup_megatron(cfg_model) # Megatron initialization -- must be done before superclass init and model loaded            
         # super().__init__(cfg=cfg_model, trainer=trainer)
@@ -129,6 +150,14 @@ class MegaMolBARTModel(NLPModel):
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
 
+    def _set_ddp(self, trainer):
+        # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
+        if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
+            self.replace_sampler_ddp = True
+            trainer.accelerator_connector.replace_sampler_ddp = False
+        else:
+            self.replace_sampler_ddp = False
+
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
         if not os.path.exists(cfg.vocab_path):
@@ -139,6 +168,16 @@ class MegaMolBARTModel(NLPModel):
     @staticmethod
     def setup_sampler(tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
         return DecodeSampler(tokenizer, cfg.max_seq_len)
+
+    def setup(self, stage=None):
+        if stage == 'predict':
+            return
+        # TODO: consider adding a ModelPT guard to check if model is being restored.
+        # TODO BUG: handle train_valid_test_num_samples and also consumed_samples on resume, can train_collate be setup here?
+        # allowing restored models to optionally setup datasets
+        self.setup_training_data(self.cfg.model.train_ds)
+        self.setup_validation_data(self.cfg.model.validation_ds)
+        self.setup_test_data(self.cfg.model.validation_ds)  # TODO test_ds is not used
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
         logging.info('Loading training data')
@@ -185,14 +224,16 @@ class MegaMolBARTModel(NLPModel):
     def setup_dataloader_from_config(self, cfg: DictConfig, collate_fun: Callable):
         dataset = self._setup_dataset_from_config(cfg)
 
-        if self.replace_sampler_ddp:
-            app_state = AppState()
-            sampler = pt_data.DistributedSampler(dataset=dataset, num_replicas=app_state.world_size, 
-                                                 rank=app_state.local_rank,
-                                                 shuffle=cfg.shuffle, drop_last=cfg.drop_last)
-        else:
-            sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
-            sampler = sampler_name(dataset)
+        # if self.replace_sampler_ddp:
+        #     app_state = AppState()
+        #     sampler = pt_data.DistributedSampler(dataset=dataset, num_replicas=app_state.world_size, 
+        #                                          rank=app_state.local_rank,
+        #                                          shuffle=cfg.shuffle, drop_last=cfg.drop_last)
+        # else:
+        #     sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
+        #     sampler = sampler_name(dataset)
+        sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around init_process_group
+        sampler = sampler_name(dataset)
         
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
@@ -366,13 +407,7 @@ class MegaMolBARTModel(NLPModel):
     #     # app_state.data_parallel_group = None
     #     self._app_state = app_state
 
-    # def _set_ddp(self, trainer):
-    #     # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
-    #     if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
-    #         self.replace_sampler_ddp = True
-    #         trainer.accelerator_connector.replace_sampler_ddp = False
-    #     else:
-    #         self.replace_sampler_ddp = False
+
 
     # @staticmethod
     # def _update_megatron_args(
