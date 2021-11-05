@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import torch
 from nemo.core import Dataset, IterableDataset
+from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
 from nemo.core.classes.dataset import DatasetConfig
 from nemo.utils import logging
 
@@ -29,21 +30,26 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     num_samples: Optional[int] = None
 
 
-class MoleculeABCDataset():
+class MoleculeABCDataset(MegatronDataset):
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
     
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False): 
+    def __init__(self, cfg, trainer, name):
         """
         Args:
-            filepath (str): path to dataset file with compounds contained as smiles
+            dataset_cfg: dataset config
+            trainer: Pytorch Lightning trainer
         """
-        assert os.path.exists(filepath), FileNotFoundError(f"Could not find CSV file {filepath}")
-        self.filepath = filepath
-        self.map_data = map_data
-        self.len = self._get_data_length(metadata_path)
-        if num_samples:
-            if num_samples > 0:
-                self.len = min(num_samples, self.len)
+        self.cfg = cfg.model[name]
+        assert os.path.exists(self.cfg.filepath), FileNotFoundError(f"Could not find CSV file {self.cfg.filepath}")
+        super().__init__(cfg, trainer=trainer)
+
+
+        self.filepath = self.cfg.filepath
+        self.map_data = self.cfg.map_data
+        self.len = self._get_data_length(self.cfg.metadata_path)
+        if self.cfg.num_samples:
+            if self.cfg.num_samples > 0:
+                self.len = min(self.cfg.num_samples, self.len)
         self.start = 0
         self.end = self.start + self.len
         self._cache = None
@@ -72,7 +78,7 @@ class MoleculeABCDataset():
                     pass
             length = row
 
-        logging.info(f'Dataset {self.filepath} calculated to be {length} lines.')
+        logging.info(f'Dataset {self.filepath} contains {length} molecules.')
         return length
     
     def _initialize_file(self, start):
@@ -87,7 +93,7 @@ class MoleculeABCDataset():
         _ = [next(fh_iter) for x in range(start + 1)] # scan to start row 
         self.fh_iter = fh_iter
         
-    def decoder(self, lines):
+    def parse_data(self, lines):
         if isinstance(lines, list):
             lines = b''.join(lines)
         lines = re.findall(self.regex, lines.decode('utf-8'))
@@ -100,14 +106,14 @@ class MoleculeABCDataset():
 
 class MoleculeDataset(Dataset, MoleculeABCDataset):
     """Dataset that reads GPU-specific portion of data into memory from CSV file"""
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False, **kwargs):
-        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, map_data=map_data)
+    def __init__(self, cfg, trainer, name):
+        super().__init__(cfg, trainer=trainer, name=name)
         self._initialize_file(self.start)
         self._make_data_cache()
         
     def _make_data_cache(self):
         lines = [next(self.fh_iter) for x in range(self.len)]
-        lines = self.decoder(lines)
+        lines = self.parse_data(lines)
         assert len(lines) == self.len
         self._cache = lines
         
@@ -118,8 +124,8 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
 
 
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
-    def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, **kwargs):
-        super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, map_data=False)
+    def __init__(self, cfg, trainer, name):
+        super().__init__(cfg, trainer=trainer, name=name)
         
     def __iter__(self):  
         # Divide up for workers
@@ -138,5 +144,5 @@ class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
 
         for _ in range(iter_len):
             mol = next(self.fh_iter)
-            mol = self.decoder(mol)[0]
+            mol = self.parse_data(mol)[0]
             yield mol
