@@ -10,7 +10,7 @@ SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs for consistency with
 SLURM_GPUS_PER_NODE=2
 
 PROJECT=MegaMolBART
-MEGAMOLBART_CONFIG_FILE=small_span_aug
+MEGAMOLBART_CONFIG_FILE=xsmall_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
 CONTAINER="FIXME"
 STORAGE_DIR=/gpfs/fs1/projects/ent_joc/users/mgill/megatron

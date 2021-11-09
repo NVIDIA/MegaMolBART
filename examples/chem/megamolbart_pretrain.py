@@ -28,7 +28,7 @@ class MegaMolBARTPretrain(NemoConfig):
     tokenizer: MolEncTokenizerFromVocabFileConfig = MolEncTokenizerFromVocabFileConfig()
     trainer: Optional[TrainerConfig] = TrainerConfig()
     exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MegaMolBART', files_to_copy=[])
-    random_seed: Optional[int] = None
+    seed: Optional[int] = None
     dataset_path: Optional[str] = None
 
 @hydra_runner()
@@ -47,8 +47,8 @@ def main(cfg: MegaMolBARTPretrain) -> None:
     trainer_config = dict(deepcopy(cfg.trainer))
     trainer_config['plugins'] = [DDPPlugin(find_unused_parameters=True)]
 
-    if cfg.random_seed:
-        pl.seed_everything(cfg.random_seed, workers=True)
+    if cfg.seed:
+        pl.seed_everything(cfg.seed, workers=True)
 
     if trainer_config['precision'] != 'bf16':
         trainer_config['precision'] = int(trainer_config['precision']) # TODO figure out why this is recognized as a string

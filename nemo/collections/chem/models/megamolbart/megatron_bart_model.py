@@ -58,8 +58,6 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-        if trainer:
-            self._set_ddp(trainer)
 
         # Handle irregular configuration settings
         cfg_model = cfg.model if cfg.get('model') else cfg
@@ -70,12 +68,13 @@ class MegaMolBARTModel(NLPModel):
             # TODO: must be changed when other tokenizers added
             cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
 
-        self._model_name = cfg_model.name
-        self.max_seq_len = cfg_model.max_seq_len
         self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
         self._vocab_size = len(self.tokenizer)
+        self._model_name = cfg_model.name
+        self.max_seq_len = cfg_model.max_seq_len
         self.val_sampling_alg = 'greedy'
 
+        # TODO THIS WAS PROBLEMATIC IN THE FUNCTION AND HAS TO BE PLACED BEFORE INITIALIZATION
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
         self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
@@ -96,6 +95,9 @@ class MegaMolBARTModel(NLPModel):
 
         if not self.cfg.get('fused_bf16'):
             set_jit_fusion_options()
+
+        if trainer:
+            self._set_ddp(trainer)
 
         # cfg = model_utils.convert_model_config_to_dict_config(cfg)
         # node_rank = trainer.node_rank if trainer else 0 # TODO fix this for model parallel checkpoint loading
@@ -128,7 +130,6 @@ class MegaMolBARTModel(NLPModel):
         # super().__init__(cfg=cfg_model, trainer=trainer)
 
         # Load model
-        # self.cfg = cfg # Save the entire config
         self.sampler = self.setup_sampler(self.tokenizer, cfg_model)
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
         self.d_model = cfg_model.d_model # for scheduler
@@ -173,29 +174,30 @@ class MegaMolBARTModel(NLPModel):
         if stage == 'predict':
             return
         # TODO: consider adding a ModelPT guard to check if model is being restored.
-        # TODO BUG: handle train_valid_test_num_samples and also consumed_samples on resume, can train_collate be setup here?
+        # TODO BUG: handle train_valid_test_num_samples for model parallel and also consumed_samples on resume, can train_collate be setup here?
         # allowing restored models to optionally setup datasets
         self.setup_training_data(self.cfg.model.train_ds)
         self.setup_validation_data(self.cfg.model.validation_ds)
         self.setup_test_data(self.cfg.model.validation_ds)  # TODO test_ds is not used
 
-    def setup_training_data(self, train_data_config: Optional[DictConfig]) -> None:
+    def setup_training_data(self, cfg: DictConfig) -> None:
         logging.info('Loading training data')
         collate_fn = self.train_collate.collate_fn
-        self._train_dl = self.setup_dataloader_from_config(train_data_config, collate_fn)
+        self._train_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'train', collate_fn)
 
-    def setup_validation_data(self, val_data_config: Optional[DictConfig]):
-        if val_data_config.get('filepath'): # TODO skip if limit_val_batches=0.0
+    def setup_validation_data(self, cfg: DictConfig):
+        
+        if cfg.model.validation_ds.get('filepath'): # TODO skip if limit_val_batches=0.0
             logging.info('Loading validation data')
             collate_fn = self.val_collate.collate_fn
-            self._validation_dl = self.setup_dataloader_from_config(val_data_config, collate_fn)
+            self._validation_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'validation', collate_fn)
         else:
             logging.info('Skipping validation data loading')
 
-    def setup_test_data(self, test_data_config: Optional[DictConfig]):
+    def setup_test_data(self, cfg: DictConfig):
         logging.info('Loading test data')
         collate_fn = self.test_collate.collate_fn
-        self._test_dl = self.setup_dataloader_from_config(test_data_config, collate_fn)
+        self._test_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'test', collate_fn)
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         cfg = dict(cfg.copy())
@@ -221,8 +223,8 @@ class MegaMolBARTModel(NLPModel):
                 datasets = pt_data.ConcatDataset(datasets)
         return datasets
 
-    def setup_dataloader_from_config(self, cfg: DictConfig, collate_fun: Callable):
-        dataset = self._setup_dataset_from_config(cfg)
+    def setup_dataloader_from_config(self, cfg: DictConfig, trainer: pl.Trainer, name: str, collate_fun: Callable):
+        dataset = self._setup_dataset_from_config(cfg, trainer, name)
 
         # if self.replace_sampler_ddp:
         #     app_state = AppState()
@@ -348,7 +350,7 @@ class MegaMolBARTModel(NLPModel):
 
         logging.info(f'Metrics from {mode} epoch end at step {self.global_step}: loss:{eval_loss}, perplexity:{eval_ppl}, token acc:{eval_token_acc}, molecular acc:{eval_mol_acc}')
 
-        self.log_dict(logs)
+        # self.log_dict(logs) # TODO BUG should this be removed?
         logs['log'] = logs.copy()
 
         logging.info(f'Finished final evaluation for {mode} step.')
