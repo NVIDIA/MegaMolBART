@@ -35,7 +35,6 @@ class MoleculeCsvDatasetConfig():
 
 class MoleculeABCDataset(MegatronDataset):
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
-    
     def __init__(self, filepath, cfg, trainer):
         """
         Args:
