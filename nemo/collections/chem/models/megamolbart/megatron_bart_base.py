@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from nemo.collections.chem.data import MoleculeCsvDatasetConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig
 from nemo.collections.chem.optimizer import AdamOptimConfig
-from nemo.core.classes.dataset import DatasetConfig
 from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
 from .megatron_bart_enc_dec import ParallelTransformerEncoder, ParallelTransformerDecoder
@@ -32,6 +31,7 @@ __all__ = ["MegatronBARTConfig", "MegatronBART"]
 @dataclass
 class MegatronBARTConfig(ModelConfig):
     name: str = 'MegatronBART'
+    tensor_model_parallel_size: int = 1
     decode_sampler: DecodeSamplerConfig = DecodeSamplerConfig()
     d_model: int = DEFAULT_D_MODEL
     num_layers: int = DEFAULT_NUM_LAYERS
@@ -41,9 +41,9 @@ class MegatronBARTConfig(ModelConfig):
     dropout: float = DEFAULT_DROPOUT
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
-    train_ds: DatasetConfig = MoleculeCsvDatasetConfig()
-    validation_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
-    test_ds: Optional[Union[DatasetConfig, None]] = MoleculeCsvDatasetConfig()
+    train_ds: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
+    validation_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
+    test_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
     optim: Optional[OptimConfig] = AdamOptimConfig()
 
 

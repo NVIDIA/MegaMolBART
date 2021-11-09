@@ -10,16 +10,15 @@ from dataclasses import dataclass
 import torch
 from nemo.core import Dataset, IterableDataset
 from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
-from nemo.core.classes.dataset import DatasetConfig
 from nemo.utils import logging
 
 __all__ = ['MoleculeCsvDatasetConfig', 'MoleculeDataset', 'MoleculeIterableDataset']
 
 
 @dataclass
-class MoleculeCsvDatasetConfig(DatasetConfig):
+class MoleculeCsvDatasetConfig():
     filepath: str = 'data.csv'
-    batch_size: int = 1
+    micro_batch_size: int = 1
     use_iterable: bool = False
     map_data: bool = False
     encoder_augment: bool = True
@@ -28,23 +27,26 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     canonicalize_input: bool = False
     metadata_path: Optional[str] = None
     num_samples: Optional[int] = None
+    drop_last: bool = False
+    shuffle: bool = False
+    num_workers: Optional[int] = None
+    pin_memory: bool = True
 
 
 class MoleculeABCDataset(MegatronDataset):
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
     
-    def __init__(self, cfg, trainer, name):
+    def __init__(self, filepath, cfg, trainer):
         """
         Args:
             dataset_cfg: dataset config
             trainer: Pytorch Lightning trainer
         """
-        self.cfg = cfg.model[name]
-        assert os.path.exists(self.cfg.filepath), FileNotFoundError(f"Could not find CSV file {self.cfg.filepath}")
-        super().__init__(cfg, trainer=trainer)
+        self.cfg = cfg
+        assert os.path.exists(filepath), FileNotFoundError(f"Could not find CSV file {filepath}")
+        super().__init__(cfg=self.cfg, trainer=trainer)
 
-
-        self.filepath = self.cfg.filepath
+        self.filepath = filepath
         self.map_data = self.cfg.map_data
         self.len = self._get_data_length(self.cfg.metadata_path)
         if self.cfg.num_samples:
@@ -106,8 +108,8 @@ class MoleculeABCDataset(MegatronDataset):
 
 class MoleculeDataset(Dataset, MoleculeABCDataset):
     """Dataset that reads GPU-specific portion of data into memory from CSV file"""
-    def __init__(self, cfg, trainer, name):
-        super().__init__(cfg, trainer=trainer, name=name)
+    def __init__(self, filepath, cfg, trainer):
+        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer)
         self._initialize_file(self.start)
         self._make_data_cache()
         
@@ -124,8 +126,8 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
 
 
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
-    def __init__(self, cfg, trainer, name):
-        super().__init__(cfg, trainer=trainer, name=name)
+    def __init__(self, filepath, cfg, trainer):
+        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer)
         
     def __iter__(self):  
         # Divide up for workers

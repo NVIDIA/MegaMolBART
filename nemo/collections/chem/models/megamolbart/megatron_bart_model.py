@@ -58,15 +58,13 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
+        super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized
+        self.cfg = cfg
+        cfg_model = cfg.model if cfg.get('model') else cfg # Handle irregular configuration settings
+        cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer') else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
 
-        # Handle irregular configuration settings
-        cfg_model = cfg.model if cfg.get('model') else cfg
-
-        if cfg.get('tokenizer'):
-            cfg_tokenizer = cfg.tokenizer
-        else:
-            # TODO: must be changed when other tokenizers added
-            cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
+        if self.cfg.get('use_cpu_initialization', False) is False:
+            torch.cuda.set_device(trainer.local_rank)
 
         self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
         self._vocab_size = len(self.tokenizer)
@@ -74,60 +72,28 @@ class MegaMolBARTModel(NLPModel):
         self.max_seq_len = cfg_model.max_seq_len
         self.val_sampling_alg = 'greedy'
 
-        # TODO THIS WAS PROBLEMATIC IN THE FUNCTION AND HAS TO BE PLACED BEFORE INITIALIZATION
+        # TODO THIS WAS NOT THREADSAFE PREVIOUSLY AND HAD TO BE PLACED BEFORE INITIALIZATION
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
         self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
 
-        super().__init__(cfg=cfg_model, trainer=trainer)
-        self.cfg = cfg
+        # logging.info('INIT')
+        # super().__init__(cfg=cfg, trainer=trainer)
+        # self.cfg = cfg
+        # if self.cfg.get('use_cpu_initialization', False) is False:
+        #     torch.cuda.set_device(trainer.local_rank)
 
-        if self.cfg.get('use_cpu_initialization', False) is False:
-            torch.cuda.set_device(trainer.local_rank)
-
+        logging.info('Model parallel setup')
         initialize_model_parallel_for_nemo(
             world_size=trainer.world_size,
             global_rank=trainer.global_rank,
             local_rank=trainer.local_rank,
-            tensor_model_parallel_size=cfg.get('tensor_model_parallel_size', 1),
+            tensor_model_parallel_size=cfg_model.get('tensor_model_parallel_size', 1),
             seed=self.cfg.get('seed', 1234),
         )
 
-        if not self.cfg.get('fused_bf16'):
+        if not self.cfg.get('fused_bf16', False):
             set_jit_fusion_options()
-
-        if trainer:
-            self._set_ddp(trainer)
-
-        # cfg = model_utils.convert_model_config_to_dict_config(cfg)
-        # node_rank = trainer.node_rank if trainer else 0 # TODO fix this for model parallel checkpoint loading
-        # self._set_app_state(cfg, node_rank)
-        # cfg = model_utils.maybe_update_config_version(cfg)
-
-        # # Handle irregular configuration settings
-        # # cfg_model = cfg.model if cfg.get('model') else cfg
-        # if cfg.get('tokenizer'):
-        #     cfg_tokenizer = cfg.tokenizer
-        # else:
-        #     # TODO: must be changed when other tokenizers added
-        #     cfg_tokenizer = OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
-
-        # self._model_name = cfg_model.name
-        # self.max_seq_len = cfg_model.max_seq_len
-        # self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
-        # self._vocab_size = len(self.tokenizer)
-        # self.val_sampling_alg = 'greedy'
-
-        # if trainer:
-        #     self._set_ddp(trainer)
-
-        # # Augmentation / collate functionality
-        # self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
-        # self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
-        # self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
-
-        # _ = self.setup_megatron(cfg_model) # Megatron initialization -- must be done before superclass init and model loaded            
-        # super().__init__(cfg=cfg_model, trainer=trainer)
 
         # Load model
         self.sampler = self.setup_sampler(self.tokenizer, cfg_model)
@@ -151,14 +117,6 @@ class MegaMolBARTModel(NLPModel):
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
 
-    def _set_ddp(self, trainer):
-        # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
-        if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
-            self.replace_sampler_ddp = True
-            trainer.accelerator_connector.replace_sampler_ddp = False
-        else:
-            self.replace_sampler_ddp = False
-
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
         if not os.path.exists(cfg.vocab_path):
@@ -174,58 +132,90 @@ class MegaMolBARTModel(NLPModel):
         if stage == 'predict':
             return
         # TODO: consider adding a ModelPT guard to check if model is being restored.
-        # TODO BUG: handle train_valid_test_num_samples for model parallel and also consumed_samples on resume, can train_collate be setup here?
+        # TODO BUG: handle consumed_samples on resume, can train_collate be setup here?
         # allowing restored models to optionally setup datasets
+        logging.info('Setting up datasets and dataloaders')
         self.setup_training_data(self.cfg.model.train_ds)
-        self.setup_validation_data(self.cfg.model.validation_ds)
-        self.setup_test_data(self.cfg.model.validation_ds)  # TODO test_ds is not used
+
+        if self.cfg.model.validation_ds.get('filepath', False):
+            self.setup_validation_data(self.cfg.model.validation_ds)
+
+        if self.cfg.do_testing:
+            self.setup_test_data(self.cfg.model.validation_ds)  # TODO BUG test_ds is not used
 
     def setup_training_data(self, cfg: DictConfig) -> None:
         logging.info('Loading training data')
+        cfg = cfg.copy()
+        self._train_ds = self._setup_dataset_from_config(cfg)
+
+        # Calculate number of samples for distributed training        
+        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO ERIC what is this calculation?
+        # num_samples = max_train_steps * global_batch_size
+        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
+        
         collate_fn = self.train_collate.collate_fn
-        self._train_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'train', collate_fn)
+        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg)
+        self._train_dl = self._setup_dataloader_from_config(self._train_ds, cfg, collate_fn)
 
     def setup_validation_data(self, cfg: DictConfig):
-        
-        if cfg.model.validation_ds.get('filepath'): # TODO skip if limit_val_batches=0.0
-            logging.info('Loading validation data')
-            collate_fn = self.val_collate.collate_fn
-            self._validation_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'validation', collate_fn)
-        else:
-            logging.info('Skipping validation data loading')
+        logging.info('Loading validation data')
+        cfg = cfg.copy()
+        self._validation_ds = self._setup_dataset_from_config(cfg)
+
+        # Calculate number of samples for distributed training
+        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO ERIC what is this calculation?
+        # num_samples = (max_train_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
+        # num_samples *= global_batch_size
+        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
+
+        collate_fn = self.val_collate.collate_fn
+        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg)
+        self._validation_dl = self._setup_dataloader_from_config(self._validation_ds, cfg, collate_fn)
 
     def setup_test_data(self, cfg: DictConfig):
         logging.info('Loading test data')
+        cfg = cfg.copy()
+        self._test_ds = self._setup_dataset_from_config(cfg)
+
+        # Calculate number of samples for distributed training
+        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # num_samples = self.trainer.limit_test_batches # TODO ERIC what is this calculation?
+        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
+
         collate_fn = self.test_collate.collate_fn
-        self._test_dl = self.setup_dataloader_from_config(cfg, self.trainer, 'test', collate_fn)
+        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg) 
+        self._test_dl = self._setup_dataloader_from_config(self._test_ds, cfg, collate_fn)
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
-        cfg = dict(cfg.copy())
+        # Setup config
+        cfg = cfg.copy()
+
+        OmegaConf.set_struct(cfg, False)
         filepath = cfg.pop('filepath', None)
         use_iterable = cfg.pop('use_iterable', False)
+        cfg['tensor_model_parallel_size'] = self.cfg.model.tensor_model_parallel_size
+        OmegaConf.set_struct(cfg, True)
 
+        # Get datasets and load data
         dataset_paths = expand_dataset_paths(filepath)
         logging.info(f'Loading data from {dataset_paths}')
-        datasets = []
+        dataset_list = []
         for path in dataset_paths:
             if use_iterable:
-                data = MoleculeIterableDataset(filepath=path, **cfg)
+                data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=self.trainer)
             else:
-                data = MoleculeDataset(filepath=path, **cfg)
-            datasets.append(data)
+                data = MoleculeDataset(filepath=path, cfg=cfg, trainer=self.trainer)
+            dataset_list.append(data)
 
-        if len(datasets) == 1:
-            datasets = datasets[0]
+        if len(dataset_list) == 1:
+            dataset = dataset_list[0]
         else:
-            if use_iterable:
-                datasets = ConcatIterableDataset(datasets)
-            else:
-                datasets = pt_data.ConcatDataset(datasets)
-        return datasets
+            dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
+        return dataset
 
-    def setup_dataloader_from_config(self, cfg: DictConfig, trainer: pl.Trainer, name: str, collate_fun: Callable):
-        dataset = self._setup_dataset_from_config(cfg, trainer, name)
-
+    def _setup_dataloader_from_config(self, dataset, cfg: DictConfig, collate_fun: Callable):
         # if self.replace_sampler_ddp:
         #     app_state = AppState()
         #     sampler = pt_data.DistributedSampler(dataset=dataset, num_replicas=app_state.world_size, 
@@ -239,7 +229,7 @@ class MegaMolBARTModel(NLPModel):
         
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
-            batch_size=cfg.batch_size,
+            batch_size=cfg.micro_batch_size, # TODO BUG change when ported to Megatron sampler
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
