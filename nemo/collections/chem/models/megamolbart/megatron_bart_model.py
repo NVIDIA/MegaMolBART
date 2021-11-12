@@ -13,9 +13,10 @@ from dataclasses import dataclass
 import torch
 import torch.distributed as dist
 import torch.utils.data as pt_data
-from torch.utils.data.dataloader import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_only
+
+from apex.transformer import parallel_state
 
 from nemo.core import optim
 from nemo.core.classes.common import typecheck
@@ -34,18 +35,10 @@ from nemo.collections.nlp.modules.common.megatron.megatron_init import (
     set_jit_fusion_options,
 )
 
-# from megatron import get_args, initialize_megatron
-# from megatron.model.bert_model import bert_attention_mask_func
-# from megatron.checkpointing import set_checkpoint_version
-# from megatron.model import get_language_model
-# from megatron.mpu import (
-#     get_data_parallel_world_size,
-#     get_data_parallel_rank,
-#     get_model_parallel_group,
-#     model_parallel_is_initialized,
-#     set_pipeline_model_parallel_rank,
-#     set_pipeline_model_parallel_world_size,
-# )
+from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
+    MegatronPretrainingRandomSampler,
+    MegatronPretrainingSampler,
+)
 
 from nemo.collections.chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
 from nemo.collections.chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
@@ -58,32 +51,15 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-        super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized
+        super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized?
         self.cfg = cfg
-        cfg_model = cfg.model if cfg.get('model') else cfg # Handle irregular configuration settings
-        cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer') else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
+        cfg_model = cfg.model if cfg.get('model', False) else cfg # Handle irregular configuration settings
+        cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer', False) else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
 
         if self.cfg.get('use_cpu_initialization', False) is False:
             torch.cuda.set_device(trainer.local_rank)
 
-        self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
-        self._vocab_size = len(self.tokenizer)
-        self._model_name = cfg_model.name
-        self.max_seq_len = cfg_model.max_seq_len
-        self.val_sampling_alg = 'greedy'
-
-        # TODO THIS WAS NOT THREADSAFE PREVIOUSLY AND HAD TO BE PLACED BEFORE INITIALIZATION
-        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
-        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
-        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
-
-        # logging.info('INIT')
-        # super().__init__(cfg=cfg, trainer=trainer)
-        # self.cfg = cfg
-        # if self.cfg.get('use_cpu_initialization', False) is False:
-        #     torch.cuda.set_device(trainer.local_rank)
-
-        logging.info('Model parallel setup')
+        logging.info('Model parallel setup beginning')
         initialize_model_parallel_for_nemo(
             world_size=trainer.world_size,
             global_rank=trainer.global_rank,
@@ -95,10 +71,17 @@ class MegaMolBARTModel(NLPModel):
         if not self.cfg.get('fused_bf16', False):
             set_jit_fusion_options()
 
-        # Load model
+        # Load tokenizer and model
+        self.tokenizer = self.setup_tokenizer(cfg_tokenizer)
         self.sampler = self.setup_sampler(self.tokenizer, cfg_model)
-        pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]
+
+        pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]        
+        self._vocab_size = len(self.tokenizer)
+        self._model_name = cfg_model.name
+        self.max_seq_len = cfg_model.max_seq_len
+        self.val_sampling_alg = 'greedy'
         self.d_model = cfg_model.d_model # for scheduler
+        
         self.model = MegatronBART( 
                                 self.sampler,
                                 pad_token_idx,
@@ -115,7 +98,12 @@ class MegaMolBARTModel(NLPModel):
         self.setup_optimization(cfg_model.optim)
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
-        self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True) 
+        self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
+
+        # TODO collate functions are not currently threadsafe and have to be declared in itit
+        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
+        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
 
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
@@ -127,6 +115,16 @@ class MegaMolBARTModel(NLPModel):
     @staticmethod
     def setup_sampler(tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
         return DecodeSampler(tokenizer, cfg.max_seq_len)
+
+    def compute_consumed_samples(self, global_step, micro_batch_size):
+        app_state = AppState()
+        consumed_samples = (
+            global_step
+            * app_state.data_parallel_size
+            * micro_batch_size
+            * self.trainer.accumulate_grad_batches
+        )
+        return int(consumed_samples)
 
     def setup(self, stage=None):
         if stage == 'predict':
@@ -149,14 +147,24 @@ class MegaMolBARTModel(NLPModel):
         self._train_ds = self._setup_dataset_from_config(cfg)
 
         # Calculate number of samples for distributed training        
-        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
-        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO ERIC what is this calculation?
+        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO what is this calculation?
         # num_samples = max_train_steps * global_batch_size
         # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
-        
-        collate_fn = self.train_collate.collate_fn
-        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg)
-        self._train_dl = self._setup_dataloader_from_config(self._train_ds, cfg, collate_fn)
+
+        # resume_checkpoint_path = self.trainer.checkpoint_connector.resume_checkpoint_path # TODO BUG add consumed sample calculation
+        # if resume_checkpoint_path:
+        #     consumed_samples = int(
+        #         float(re.findall(r"consumed_samples\=([0-9]+.[0-9]+)", resume_checkpoint_path)[0])
+        #     )
+        # else:
+        #     consumed_samples = 0
+        # logging.info(
+        #     f'Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}'
+        # )
+        consumed_samples = 0
+        collate_fn = self.train_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
+        self._train_dl = self._setup_dataloader_from_config(self._train_ds, cfg, collate_fn, consumed_samples)
 
     def setup_validation_data(self, cfg: DictConfig):
         logging.info('Loading validation data')
@@ -164,14 +172,13 @@ class MegaMolBARTModel(NLPModel):
         self._validation_ds = self._setup_dataset_from_config(cfg)
 
         # Calculate number of samples for distributed training
-        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
         # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO ERIC what is this calculation?
         # num_samples = (max_train_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
         # num_samples *= global_batch_size
         # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
 
-        collate_fn = self.val_collate.collate_fn
-        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg)
+        collate_fn = self.val_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._validation_dl = self._setup_dataloader_from_config(self._validation_ds, cfg, collate_fn)
 
     def setup_test_data(self, cfg: DictConfig):
@@ -180,12 +187,11 @@ class MegaMolBARTModel(NLPModel):
         self._test_ds = self._setup_dataset_from_config(cfg)
 
         # Calculate number of samples for distributed training
-        global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
+        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
         # num_samples = self.trainer.limit_test_batches # TODO ERIC what is this calculation?
         # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
 
-        collate_fn = self.test_collate.collate_fn
-        # collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg) 
+        collate_fn = self.test_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._test_dl = self._setup_dataloader_from_config(self._test_ds, cfg, collate_fn)
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
@@ -215,18 +221,38 @@ class MegaMolBARTModel(NLPModel):
             dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
         return dataset
 
-    def _setup_dataloader_from_config(self, dataset, cfg: DictConfig, collate_fun: Callable):
-        # if self.replace_sampler_ddp:
-        #     app_state = AppState()
-        #     sampler = pt_data.DistributedSampler(dataset=dataset, num_replicas=app_state.world_size, 
-        #                                          rank=app_state.local_rank,
-        #                                          shuffle=cfg.shuffle, drop_last=cfg.drop_last)
+    def _setup_dataloader_from_config(self, dataset, cfg: DictConfig, collate_fun: Callable, consumed_samples: int = 0):
+        """Buld dataloader given an input dataset."""
+
+        if dataset is None:
+            return None
+
+        # Megatron sampler
+        shuffle = cfg.get('shuffle', False)
+        # if shuffle:
+        #     batch_sampler = MegatronPretrainingRandomSampler(
+        #         total_samples=len(dataset),
+        #         consumed_samples=consumed_samples,
+        #         micro_batch_size=cfg.micro_batch_size,
+        #         data_parallel_rank=0, # parallel_state.get_data_parallel_rank() # TODO BUG FIX THIS
+        #         data_parallel_size=2  # parallel_state.get_data_parallel_world_size() # TODO BUG FIX THIS
+        #     )
         # else:
-        #     sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler
-        #     sampler = sampler_name(dataset)
-        sampler_name = pt_data.RandomSampler if cfg.shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around init_process_group
+        #     batch_sampler = MegatronPretrainingSampler(
+        #         total_samples=len(dataset),
+        #         consumed_samples=consumed_samples,
+        #         micro_batch_size=cfg.micro_batch_size,
+        #         data_parallel_rank=0, # parallel_state.get_data_parallel_rank() # TODO BUG FIX THIS
+        #         data_parallel_size=2  # parallel_state.get_data_parallel_world_size() # TODO BUG FIX THIS
+        #     )
+
+        # dataloader = pt_data.DataLoader(
+        #     dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=True, 
+        # )
+
+        sampler_name = pt_data.RandomSampler if shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around init_process_group
         sampler = sampler_name(dataset)
-        
+
         dataloader = pt_data.DataLoader(dataset,
             sampler=sampler,
             batch_size=cfg.micro_batch_size, # TODO BUG change when ported to Megatron sampler
@@ -234,6 +260,7 @@ class MegaMolBARTModel(NLPModel):
             pin_memory=cfg.get("pin_memory", False), 
             drop_last=cfg.get("drop_last", False),
             collate_fn=collate_fun)
+
         return dataloader
 
     @typecheck()
@@ -259,16 +286,23 @@ class MegaMolBARTModel(NLPModel):
 
         end_time = time.monotonic()
         duration = end_time - start_time
+        global_step = self.trainer.global_step
+        micro_batch_size = self.cfg.model.train_ds.micro_batch_size
+        consumed_samples = 0 # self.compute_consumed_samples(global_step, micro_batch_size) # TODO BUG fix when data_parallel_group is correct
 
         self.log('lr', lr)
         self.log('train_loss', loss.item(), on_epoch=True)
         self.log('train_char_acc', char_acc, on_epoch=True, sync_dist=True)
         self.log('step_time', duration, on_step=True)
+        self.log('global_step', global_step, prog_bar=True)
+        self.log('consumed_samples', consumed_samples, prog_bar=True)
 
         tensorboard_logs = {'train/loss': loss.item(),
                             'train/char_acc': char_acc, 
                             'trainer/lr': lr,
-                            'trainer/step_time': duration}
+                            'trainer/step_time': duration,
+                            'trainer/global_step': global_step,
+                            'trainer/consumed_samples': consumed_samples}
 
         return {'loss': loss, 
                 'log': tensorboard_logs}
@@ -313,7 +347,7 @@ class MegaMolBARTModel(NLPModel):
         logging.info(f'Finishing training epoch {self.current_epoch}')
         return super().training_epoch_end(outputs)
 
-    def _eval_epoch_end(self, outputs: List[Dict], mode: str) -> Dict:
+    def _eval_epoch_end(self, outputs: List[Dict], mode: str, micro_batch_size: int) -> Dict:
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
@@ -332,15 +366,19 @@ class MegaMolBARTModel(NLPModel):
         mol_acc_label = f'{mode}/molecular_accuracy'
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
+        consumed_samples_label = f'{mode}/consumed_samples'
+        consumed_samples = 0 # self.compute_consumed_samples(self.trainer.global_step, micro_batch_size)# TODO BUG fix when data_parallel_group is correct
+
         logs =  {f'{mode}/step_avg': self.global_step,
                  f'{loss_label}_avg': eval_loss, 
                  f'{ppl_label}_avg': eval_ppl,
                  f'{token_label}_avg': eval_token_acc,
-                 f'{mol_acc_label}_avg': eval_mol_acc}
+                 f'{mol_acc_label}_avg': eval_mol_acc,
+                 f'{consumed_samples_label}': consumed_samples}
 
         logging.info(f'Metrics from {mode} epoch end at step {self.global_step}: loss:{eval_loss}, perplexity:{eval_ppl}, token acc:{eval_token_acc}, molecular acc:{eval_mol_acc}')
 
-        # self.log_dict(logs) # TODO BUG should this be removed?
+        self.log_dict(logs, sync_dist=True)
         logs['log'] = logs.copy()
 
         logging.info(f'Finished final evaluation for {mode} step.')
@@ -352,7 +390,9 @@ class MegaMolBARTModel(NLPModel):
         :param outputs: list of individual outputs of each validation step.
         """
         mode = 'val'
-        self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
+        micro_batch_size = self.cfg.model.validation_ds.micro_batch_size
+        logs = self._eval_epoch_end(outputs, mode, micro_batch_size)
+        return logs
 
     def test_epoch_end(self, outputs: List[Dict]) -> Dict:
         """
@@ -360,7 +400,9 @@ class MegaMolBARTModel(NLPModel):
         :param outputs: list of individual outputs of each test step.
         """
         mode = 'test'
-        self.log_dict(self._eval_epoch_end(outputs, mode), sync_dist=True)
+        micro_batch_size = self.cfg.model.test_ds.micro_batch_size
+        logs = self._eval_epoch_end(outputs, mode, micro_batch_size)
+        return logs
 
     @rank_zero_only
     def log_param_stats(self):

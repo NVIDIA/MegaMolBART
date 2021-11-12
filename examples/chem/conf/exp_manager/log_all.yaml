@@ -10,3 +10,5 @@ checkpoint_callback_params:
   save_last: True
   save_top_k: 5
   mode: max
+  filename: '${model.name}--{val_molecular_accuracy:.2f}-{step}-{consumed_samples}'
+  # model_parallel_size: ${model.tensor_model_parallel_size} # TODO ERIC WHAT iS THIS USED FOR

@@ -1,4 +1,3 @@
-tensor_model_parallel_size: 1
 max_seq_len: 512
 dropout: 0.1
 pretrained: False
