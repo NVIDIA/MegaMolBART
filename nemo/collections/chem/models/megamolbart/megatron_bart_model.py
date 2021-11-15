@@ -1,5 +1,6 @@
 
 import os
+import re
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from pathlib import Path
 import tempfile
@@ -53,7 +54,12 @@ class MegaMolBARTModel(NLPModel):
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
         super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized?
         self.cfg = cfg
-        cfg_model = cfg.model if cfg.get('model', False) else cfg # Handle irregular configuration settings
+
+        # if trainer:
+        #     self._set_ddp()
+
+        # These handle irregular configuration settings upon restore from old checkpoints
+        cfg_model = cfg.model if cfg.get('model', False) else cfg
         cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer', False) else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
 
         if self.cfg.get('use_cpu_initialization', False) is False:
@@ -94,7 +100,7 @@ class MegaMolBARTModel(NLPModel):
                                 cfg_model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams)
+        optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams) # TODO scale LR for global_batch_size
         self.setup_optimization(cfg_model.optim)
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
@@ -104,6 +110,14 @@ class MegaMolBARTModel(NLPModel):
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
         self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
+
+    # def _set_ddp(self, trainer):
+    #     # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
+    #     if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
+    #         self.replace_sampler_ddp = True
+    #         trainer.accelerator_connector.replace_sampler_ddp = False
+    #     else:
+    #         self.replace_sampler_ddp = False
 
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
@@ -129,8 +143,7 @@ class MegaMolBARTModel(NLPModel):
     def setup(self, stage=None):
         if stage == 'predict':
             return
-        # TODO: consider adding a ModelPT guard to check if model is being restored.
-        # TODO BUG: handle consumed_samples on resume, can train_collate be setup here?
+        # TODO: consider adding a ModelPT guard to check if model is being restored
         # allowing restored models to optionally setup datasets
         logging.info('Setting up datasets and dataloaders')
         self.setup_training_data(self.cfg.model.train_ds)
@@ -146,22 +159,17 @@ class MegaMolBARTModel(NLPModel):
         cfg = cfg.copy()
         self._train_ds = self._setup_dataset_from_config(cfg)
 
-        # Calculate number of samples for distributed training        
-        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
-        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO what is this calculation?
-        # num_samples = max_train_steps * global_batch_size
-        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
+        resume_checkpoint_path = self.trainer.checkpoint_connector.resume_checkpoint_path
+        if resume_checkpoint_path:
+            consumed_samples = int(
+                float(re.findall(r"consumed_samples\=([0-9]+.[0-9]+)", resume_checkpoint_path)[0])
+            )
+        else:
+            consumed_samples = 0
+        logging.info(
+            f'Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}'
+        )
 
-        # resume_checkpoint_path = self.trainer.checkpoint_connector.resume_checkpoint_path # TODO BUG add consumed sample calculation
-        # if resume_checkpoint_path:
-        #     consumed_samples = int(
-        #         float(re.findall(r"consumed_samples\=([0-9]+.[0-9]+)", resume_checkpoint_path)[0])
-        #     )
-        # else:
-        #     consumed_samples = 0
-        # logging.info(
-        #     f'Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}'
-        # )
         consumed_samples = 0
         collate_fn = self.train_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._train_dl = self._setup_dataloader_from_config(self._train_ds, cfg, collate_fn, consumed_samples)
@@ -171,13 +179,6 @@ class MegaMolBARTModel(NLPModel):
         cfg = cfg.copy()
         self._validation_ds = self._setup_dataset_from_config(cfg)
 
-        # Calculate number of samples for distributed training
-        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
-        # max_train_steps = self.trainer.max_steps * self.trainer.accumulate_grad_batches # TODO ERIC what is this calculation?
-        # num_samples = (max_train_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
-        # num_samples *= global_batch_size
-        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
-
         collate_fn = self.val_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._validation_dl = self._setup_dataloader_from_config(self._validation_ds, cfg, collate_fn)
 
@@ -185,11 +186,6 @@ class MegaMolBARTModel(NLPModel):
         logging.info('Loading test data')
         cfg = cfg.copy()
         self._test_ds = self._setup_dataset_from_config(cfg)
-
-        # Calculate number of samples for distributed training
-        # global_batch_size = self.trainer.world_size * cfg.micro_batch_size / self.cfg.model.tensor_model_parallel_size
-        # num_samples = self.trainer.limit_test_batches # TODO ERIC what is this calculation?
-        # cfg['num_samples'] = min(cfg.get('num_samples', np.inf), num_samples)
 
         collate_fn = self.test_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._test_dl = self._setup_dataloader_from_config(self._test_ds, cfg, collate_fn)
@@ -229,37 +225,38 @@ class MegaMolBARTModel(NLPModel):
 
         # Megatron sampler
         shuffle = cfg.get('shuffle', False)
-        # if shuffle:
-        #     batch_sampler = MegatronPretrainingRandomSampler(
-        #         total_samples=len(dataset),
-        #         consumed_samples=consumed_samples,
-        #         micro_batch_size=cfg.micro_batch_size,
-        #         data_parallel_rank=0, # parallel_state.get_data_parallel_rank() # TODO BUG FIX THIS
-        #         data_parallel_size=2  # parallel_state.get_data_parallel_world_size() # TODO BUG FIX THIS
-        #     )
-        # else:
-        #     batch_sampler = MegatronPretrainingSampler(
-        #         total_samples=len(dataset),
-        #         consumed_samples=consumed_samples,
-        #         micro_batch_size=cfg.micro_batch_size,
-        #         data_parallel_rank=0, # parallel_state.get_data_parallel_rank() # TODO BUG FIX THIS
-        #         data_parallel_size=2  # parallel_state.get_data_parallel_world_size() # TODO BUG FIX THIS
-        #     )
+        if shuffle:
+            batch_sampler = MegatronPretrainingRandomSampler(
+                total_samples=len(dataset),
+                consumed_samples=consumed_samples,
+                micro_batch_size=cfg.micro_batch_size,
+                data_parallel_rank=parallel_state.get_data_parallel_rank(),
+                data_parallel_size=parallel_state.get_data_parallel_world_size()
+            )
+        else:
+            batch_sampler = MegatronPretrainingSampler(
+                total_samples=len(dataset),
+                consumed_samples=consumed_samples,
+                micro_batch_size=cfg.micro_batch_size,
+                data_parallel_rank=parallel_state.get_data_parallel_rank(),
+                data_parallel_size=parallel_state.get_data_parallel_world_size()
+            )
 
-        # dataloader = pt_data.DataLoader(
-        #     dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=True, 
-        # )
+        dataloader = pt_data.DataLoader(
+            dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=cfg.get("pin_memory", True) 
+        )
 
-        sampler_name = pt_data.RandomSampler if shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around init_process_group
-        sampler = sampler_name(dataset)
+        # # TODO REMOVE
+        # sampler_name = pt_data.RandomSampler if shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around loading issue
+        # sampler = sampler_name(dataset)
 
-        dataloader = pt_data.DataLoader(dataset,
-            sampler=sampler,
-            batch_size=cfg.micro_batch_size, # TODO BUG change when ported to Megatron sampler
-            num_workers=cfg.get("num_workers", 0),
-            pin_memory=cfg.get("pin_memory", False), 
-            drop_last=cfg.get("drop_last", False),
-            collate_fn=collate_fun)
+        # dataloader = pt_data.DataLoader(dataset,
+        #     sampler=sampler,
+        #     batch_size=cfg.micro_batch_size, # TODO BUG change when ported to Megatron sampler
+        #     num_workers=cfg.get("num_workers", 0),
+        #     pin_memory=cfg.get("pin_memory", False), 
+        #     drop_last=cfg.get("drop_last", False),
+        #     collate_fn=collate_fun)
 
         return dataloader
 
@@ -288,7 +285,7 @@ class MegaMolBARTModel(NLPModel):
         duration = end_time - start_time
         global_step = self.trainer.global_step
         micro_batch_size = self.cfg.model.train_ds.micro_batch_size
-        consumed_samples = 0 # self.compute_consumed_samples(global_step, micro_batch_size) # TODO BUG fix when data_parallel_group is correct
+        consumed_samples = self.compute_consumed_samples(global_step, micro_batch_size)
 
         self.log('lr', lr)
         self.log('train_loss', loss.item(), on_epoch=True)
@@ -319,7 +316,7 @@ class MegaMolBARTModel(NLPModel):
         (mol_strs, log_lhs) = self.model.sample_molecules(batch, sampling_alg=self.val_sampling_alg) 
         metrics = self.sampler.calc_sampling_metrics(mol_strs, target_smiles)
 
-        # molecular_accuracy is entered twice so there is a version w/o slash which interferes with checkpointing
+        # Molecular_accuracy is entered twice so a version w/o slash exists bc it interferes with checkpoint name
         logs = {
             f'{mode}/step': self.global_step,
             f'{mode}/loss': loss,
@@ -367,7 +364,7 @@ class MegaMolBARTModel(NLPModel):
         eval_mol_acc = torch.tensor([x[mol_acc_label] for x in outputs]).mean().item()
 
         consumed_samples_label = f'{mode}/consumed_samples'
-        consumed_samples = 0 # self.compute_consumed_samples(self.trainer.global_step, micro_batch_size)# TODO BUG fix when data_parallel_group is correct
+        consumed_samples = self.compute_consumed_samples(self.trainer.global_step, micro_batch_size)
 
         logs =  {f'{mode}/step_avg': self.global_step,
                  f'{loss_label}_avg': eval_loss, 

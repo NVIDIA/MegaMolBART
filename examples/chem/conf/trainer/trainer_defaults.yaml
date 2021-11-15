@@ -1,5 +1,5 @@
 accelerator: ddp
-replace_sampler_ddp: True
+replace_sampler_ddp: False
 prepare_data_per_node: true
 profiler: null # null, simple, advanced, pytorch. https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html
 amp_backend: native
