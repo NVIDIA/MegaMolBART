@@ -217,47 +217,28 @@ class MegaMolBARTModel(NLPModel):
             dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
         return dataset
 
-    def _setup_dataloader_from_config(self, dataset, cfg: DictConfig, collate_fun: Callable, consumed_samples: int = 0):
+    def _setup_dataloader_from_config(self, dataset, cfg: DictConfig, collate_fn: Callable, consumed_samples: int = 0):
         """Buld dataloader given an input dataset."""
 
         if dataset is None:
             return None
 
         # Megatron sampler
+        sampler_kwargs = dict(total_samples=len(dataset),
+                              consumed_samples=consumed_samples,
+                              micro_batch_size=cfg.micro_batch_size,
+                              data_parallel_rank=parallel_state.get_data_parallel_rank(),
+                              data_parallel_size=parallel_state.get_data_parallel_world_size())
         shuffle = cfg.get('shuffle', False)
         if shuffle:
-            batch_sampler = MegatronPretrainingRandomSampler(
-                total_samples=len(dataset),
-                consumed_samples=consumed_samples,
-                micro_batch_size=cfg.micro_batch_size,
-                data_parallel_rank=parallel_state.get_data_parallel_rank(),
-                data_parallel_size=parallel_state.get_data_parallel_world_size()
-            )
+            batch_sampler = MegatronPretrainingRandomSampler(**sampler_kwargs)
         else:
-            batch_sampler = MegatronPretrainingSampler(
-                total_samples=len(dataset),
-                consumed_samples=consumed_samples,
-                micro_batch_size=cfg.micro_batch_size,
-                data_parallel_rank=parallel_state.get_data_parallel_rank(),
-                data_parallel_size=parallel_state.get_data_parallel_world_size()
-            )
+            batch_sampler = MegatronPretrainingSampler(**sampler_kwargs)
 
         dataloader = pt_data.DataLoader(
-            dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=cfg.get("pin_memory", True) 
+            dataset, batch_sampler=batch_sampler, collate_fn=collate_fn, 
+            num_workers=cfg.num_workers, pin_memory=cfg.get("pin_memory", True) 
         )
-
-        # # TODO REMOVE
-        # sampler_name = pt_data.RandomSampler if shuffle else pt_data.SequentialSampler # TODO BUG this is a hack to work around loading issue
-        # sampler = sampler_name(dataset)
-
-        # dataloader = pt_data.DataLoader(dataset,
-        #     sampler=sampler,
-        #     batch_size=cfg.micro_batch_size, # TODO BUG change when ported to Megatron sampler
-        #     num_workers=cfg.get("num_workers", 0),
-        #     pin_memory=cfg.get("pin_memory", False), 
-        #     drop_last=cfg.get("drop_last", False),
-        #     collate_fn=collate_fun)
-
         return dataloader
 
     @typecheck()
