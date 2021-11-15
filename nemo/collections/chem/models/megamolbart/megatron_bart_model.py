@@ -83,7 +83,7 @@ class MegaMolBARTModel(NLPModel):
         self._model_name = cfg_model.name
         self.max_seq_len = cfg_model.max_seq_len
         self.val_sampling_alg = 'greedy'
-        self.d_model = cfg_model.d_model # for scheduler
+        self.d_model = cfg_model.d_model
         
         self.model = MegatronBART( 
                                 self.sampler,
@@ -106,7 +106,7 @@ class MegaMolBARTModel(NLPModel):
         # TODO collate functions are not currently threadsafe and have to be declared in itit
         self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
-        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.test_ds)
 
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
@@ -141,7 +141,7 @@ class MegaMolBARTModel(NLPModel):
             self.setup_validation_data(self.cfg.model.validation_ds)
 
         if self.cfg.do_testing:
-            self.setup_test_data(self.cfg.model.validation_ds)  # TODO BUG test_ds is not used
+            self.setup_test_data(self.cfg.model.test_ds)
 
     def setup_training_data(self, cfg: DictConfig) -> None:
         logging.info('Loading training data')
@@ -386,117 +386,3 @@ class MegaMolBARTModel(NLPModel):
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
 
-
-    # def _set_app_state(self, cfg, node_rank):
-    #     app_state = AppState()
-    #     if cfg.get('trainer'):
-    #         app_state._world_size = cfg.trainer.num_nodes * cfg.trainer.gpus
-    #         num_gpus = cfg.trainer.gpus
-    #     else:
-    #         app_state._world_size = 1
-    #         num_gpus = 1
-
-    #     app_state.local_rank = int(os.environ.get('LOCAL_RANK', 0))
-    #     # app_state.node_rank = node_rank # 'NODE_RANK' NOT USED BY SELENE
-    #     app_state.global_rank = node_rank * num_gpus + app_state.local_rank
-    #     app_state.model_parallel_size = None
-    #     app_state.model_parallel_rank = None
-    #     # app_state.device_id = None # TODO add these
-    #     # app_state.model_parallel_group = None
-    #     # app_state.data_parallel_size = None
-    #     # app_state.data_parallel_rank = None
-    #     # app_state.data_parallel_group = None
-    #     self._app_state = app_state
-
-
-
-    # @staticmethod
-    # def _update_megatron_args(
-    #     micro_batch_size: int = 1,
-    #     tensor_model_parallel_size: int = 1,
-    #     scaled_masked_softmax_fusion: bool = False,
-    #     bias_gelu_fusion: bool = False,
-    #     bias_dropout_fusion: bool = False):
-
-    #     def extra_args_provider(parser):
-    #         parser.set_defaults(micro_batch_size=micro_batch_size)
-    #         parser.set_defaults(tensor_model_parallel_size=tensor_model_parallel_size)
-    #         parser.set_defaults(scaled_masked_softmax_fusion=scaled_masked_softmax_fusion)
-    #         parser.set_defaults(bias_gelu_fusion=bias_gelu_fusion)
-    #         parser.set_defaults(bias_dropout_fusion=bias_dropout_fusion)
-    #         return parser
-
-    #     return extra_args_provider
-
-    # @staticmethod
-    # def _get_megatron_vocab_file() -> str:
-    #     """Generate fake Megatron vocab file with required tokens"""
-    #     fake_vocab_contents = '\n'.join(['[CLS]', '[SEP]', '[PAD]', '[MASK]'])
-    #     with tempfile.NamedTemporaryFile(mode='w', delete=False) as fh:
-    #         fh.write(fake_vocab_contents)
-    #         vocab_file = fh.name
-    #     return vocab_file
-
-    # def complete_lazy_init(self) -> None:
-    #     # Finish megatron-lm initialization
-    #     if hasattr(self, "_lazy_init_fn") and self._lazy_init_fn is not None:
-    #         logging.info('Completing lazy initialization of Megatron framework...')
-    #         self._lazy_init_fn()
-    #         self._lazy_init_fn = None
-
-    #         LOCAL_RANK = int(os.environ.get('LOCAL_RANK', -1))
-    #         RANK = int(os.environ.get('RANK', -1))
-    #         app_state = AppState()
-    #         logging.info(f'Env GPU rank setup: local rank {LOCAL_RANK}, global rank {RANK}')
-    #         logging.info(f'App GPU rank setup: local rank {app_state.local_rank}, global rank {app_state.global_rank}')
-
-    # def setup_megatron(self, cfg: DictConfig) -> dict:
-    #     """Initialize Megatron"""
-    #     app_state = AppState()
-    #     model_parallel_size = app_state.model_parallel_size
-    #     model_parallel_rank = app_state.model_parallel_rank
-
-    #     # Configure globals
-    #     set_pipeline_model_parallel_rank(0)  # Pipeline model parallelism not currently implemented in NeMo
-    #     set_pipeline_model_parallel_world_size(1)  # Pipeline model parallelism not currently implemented in NeMo
-
-    #     # megatron input arguments
-    #     args = {'num_layers': cfg.num_layers,
-    #             'hidden_size': cfg.d_model,
-    #             'num_attention_heads': cfg.num_heads,
-    #             'max_position_embeddings': cfg.max_seq_len,
-    #             'onnx_safe': True,
-    #             'lazy_mpu_init': True,
-    #             'tokenizer_type': 'BertWordPieceCase',
-    #             'vocab_file': self._get_megatron_vocab_file()}
-    #             # TODO vocab size may need to be set
-
-    #     # extra args provider
-    #     if model_parallel_size is not None:
-    #         app_state = AppState()
-    #         self._app_state = app_state
-    #         os.environ["WORLD_SIZE"] = str(app_state.world_size) # Must be set for model parallel megatron-lm
-    #         os.environ["RANK"] = str(model_parallel_rank)
-    #         extra_args_provider = self._update_megatron_args(tensor_model_parallel_size=model_parallel_size)
-    #     else:
-    #         extra_args_provider = self._update_megatron_args()
-
-    #     # Initialize part of Megatron global state that is needed for its constructor.
-    #     # We set 'lazy_mpu_init' flag on to make Megatron do only the initialization that does not depend
-    #     # on ddp be initialized yet (and we don't want Megatron to initialize DDP itself either)
-    #     # and to return a hook for us to call after PTL has torch.distributed initialized.
-    #     # (or if no PTL in case of inference - then we'll initialize torch.distributed)
-    #     # We call and clear this hook on first call to forward()
-    #     self._lazy_init_fn = initialize_megatron(
-    #         extra_args_provider=extra_args_provider, args_defaults=args, ignore_unknown_args=True
-    #     )
-
-    #     # Read Megatron arguments back
-    #     args = get_args()
-    #     logging.info(f'Megatron-lm argparse args: {args}')
-
-    #     # This loads a fake model from megatron, mostly for the sake of ensuring compatible checkpoint dict
-    #     _, self._language_model_key = get_language_model(
-    #         attention_mask_func=bert_attention_mask_func, num_tokentypes=2, add_pooler=False
-    #     )
-    #     return args

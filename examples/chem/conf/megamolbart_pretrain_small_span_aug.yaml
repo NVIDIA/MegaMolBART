@@ -2,6 +2,7 @@ defaults:
   - trainer: trainer_defaults
   - model/dataset@model.train_ds: train_ds_defaults
   - model/dataset@model.validation_ds: validation_ds_defaults
+  - model/dataset@model.test_ds: validation_ds_defaults
   - exp_manager: log_all
   - model: small
   - model/optim@model.optim: adam
@@ -59,5 +60,13 @@ model:
     decoder_augment: false
     filepath: ${dataset_path}/val/x[000..146].csv
     metadata_path: ${dataset_path}/val/metadata.txt
+    micro_batch_size: 512
+    num_workers: 8
+
+  test_ds:
+    encoder_mask: false # not done in test set
+    decoder_augment: false
+    filepath: ${dataset_path}/test/x[000..146].csv
+    metadata_path: ${dataset_path}/test/metadata.txt
     micro_batch_size: 512
     num_workers: 8
