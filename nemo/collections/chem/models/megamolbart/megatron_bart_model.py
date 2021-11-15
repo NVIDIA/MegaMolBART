@@ -55,9 +55,6 @@ class MegaMolBARTModel(NLPModel):
         super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized?
         self.cfg = cfg
 
-        # if trainer:
-        #     self._set_ddp()
-
         # These handle irregular configuration settings upon restore from old checkpoints
         cfg_model = cfg.model if cfg.get('model', False) else cfg
         cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer', False) else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
@@ -111,14 +108,6 @@ class MegaMolBARTModel(NLPModel):
         self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
         self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds) # TODO test_ds is not used
 
-    # def _set_ddp(self, trainer):
-    #     # Sampler is replaced manually below because PTL seems to use global_rank instead of local_rank
-    #     if trainer.accelerator_connector.replace_sampler_ddp & (trainer.accelerator_connector.distributed_backend == 'ddp'):
-    #         self.replace_sampler_ddp = True
-    #         trainer.accelerator_connector.replace_sampler_ddp = False
-    #     else:
-    #         self.replace_sampler_ddp = False
-
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
         if not os.path.exists(cfg.vocab_path):
@@ -143,8 +132,8 @@ class MegaMolBARTModel(NLPModel):
     def setup(self, stage=None):
         if stage == 'predict':
             return
-        # TODO: consider adding a ModelPT guard to check if model is being restored
-        # allowing restored models to optionally setup datasets
+            
+        # TODO: consider adding a ModelPT guard to check if model is being restored allowing restored models to optionally setup datasets
         logging.info('Setting up datasets and dataloaders')
         self.setup_training_data(self.cfg.model.train_ds)
 
