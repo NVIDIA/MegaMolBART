@@ -18,12 +18,14 @@ from nemo.core.config.modelPT import NemoConfig
 from nemo.core.config.pytorch_lightning import TrainerConfig
 from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
 from nemo.collections.nlp.modules.common.megatron.megatron_utils import compute_model_parallel_rank
+from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
 
 from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
 from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig
+from nemo.collections.chem.nlp_overrides import MegaMolBARTNLPDDPPlugin
 
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
+
 
 def recursive_make_dirs(directory):
     logging.info(f'Creating directory {str(directory)}...')
@@ -39,7 +41,8 @@ def configure_trainer_plugins(cfg: DictConfig) -> DictConfig:
         trainer_cfg['precision'] = int(trainer_cfg['precision'])
 
     # Configure plugins
-    plugins = [NLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])]
+    # plugins = [NLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])]
+    plugins = [MegaMolBARTNLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])] # TODO revert to NLPDDPPlugin when find_unused_parameters bug is solved
     if cfg.trainer.precision == 16:
         scaler = GradScaler(
             init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
