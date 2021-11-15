@@ -6,6 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.trainer.trainer import Trainer
 import pytorch_lightning as pl
 from pytorch_lightning.plugins.environments.torchelastic_environment import TorchElasticEnvironment
+from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from pytorch_lightning.trainer.connectors.checkpoint_connector import CheckpointConnector
 from pytorch_lightning.callbacks.timer import Timer
 from preprocess import Preprocess
@@ -15,20 +16,14 @@ from nemo.utils.config_utils import update_model_config
 from nemo.core.config import hydra_runner
 from nemo.core.config.modelPT import NemoConfig
 from nemo.core.config.pytorch_lightning import TrainerConfig
-from nemo.utils.exp_manager import exp_manager, ExpManagerConfig#, StatelessTimer # TODO BUG this is missing from code
+from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
 from nemo.collections.nlp.modules.common.megatron.megatron_utils import compute_model_parallel_rank
 
 from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
 from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
 from nemo.collections.chem.decoder import DecodeSamplerConfig
 
-from pytorch_lightning.plugins import DDPPlugin
-from nemo.collections.nlp.parts.nlp_overrides import (
-    NLPDDPPlugin,
-    NLPNativeBfloat16PrecisionPlugin,
-    NLPNativeMixedPrecisionPlugin,
-    NLPPrecisionPlugin,
-)
+from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
 
 def recursive_make_dirs(directory):
     logging.info(f'Creating directory {str(directory)}...')
@@ -45,20 +40,12 @@ def configure_trainer_plugins(cfg: DictConfig) -> DictConfig:
 
     # Configure plugins
     plugins = [NLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])]
-    if trainer_cfg['precision'] == 16:
-        logging.info('Detected mixed precision, adding NLPNativeMixedPrecisionPlugin') # TODO THIS WORKS
-        plugins.append(
-            NLPNativeMixedPrecisionPlugin(
-                init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
-                growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
-            )
+    if cfg.trainer.precision == 16:
+        scaler = GradScaler(
+            init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
+            growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
         )
-    elif trainer_cfg['precision'] == 'bf16':
-        logging.info('Detected bfloat 16 precision, adding NLPNativeBfloat16PrecisionPlugin')  # TODO UNTESTED
-        plugins.append(NLPNativeBfloat16PrecisionPlugin())
-    else:
-        logging.info('Adding NLPPrecisionPlugin') # TODO BUG DOES NOT WORK
-        plugins.append(NLPPrecisionPlugin())
+        plugins.append(NativeMixedPrecisionPlugin(precision=16, device='cuda', scaler=scaler))
 
     if cfg.get('cluster_type', None) == 'BCP':
         plugins.append(TorchElasticEnvironment())
@@ -72,22 +59,20 @@ def configure_trainer_plugins(cfg: DictConfig) -> DictConfig:
 def update_checkpoint_name(cfg: DictConfig, trainer: Trainer):
     "Update config checkpoint name for model parallel if needed"
     resume_from_checkpoint = trainer.resume_from_checkpoint
-    model_parallel_size = cfg.model.tensor_model_parallel_size
     if resume_from_checkpoint is not None:
-        if model_parallel_size > 1:
-            mp_rank = compute_model_parallel_rank(trainer.local_rank, cfg.model.tensor_model_parallel_size)
-            resume_from_checkpoint = Path(resume_from_checkpoint)
-            resume_from_checkpoint = resume_from_checkpoint.parent.parent.joinpath(f'mp_rank_{mp_rank:02d}').joinpath(
-                resume_from_checkpoint.name
-            )
-            resume_from_checkpoint = str(resume_from_checkpoint)
+        mp_rank = compute_model_parallel_rank(trainer.local_rank, cfg.model.tensor_model_parallel_size)
+        resume_from_checkpoint = Path(resume_from_checkpoint)
+        resume_from_checkpoint = resume_from_checkpoint.parent.parent.joinpath(f'mp_rank_{mp_rank:02d}').joinpath(
+            resume_from_checkpoint.name
+        )
+        resume_from_checkpoint = str(resume_from_checkpoint)
 
         logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
         trainer.checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
     return trainer
 
 
-def use_stateless_timer(cfg: DictConfig, trainer: Trainer): # TODO BUG ADD THIS BACK
+def use_stateless_timer(cfg: DictConfig, trainer: Trainer):
     for idx, callback in enumerate(trainer.callbacks):
         if isinstance(callback, Timer):
             trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time)
@@ -122,7 +107,7 @@ def main(cfg: MegaMolBARTPretrain) -> None:
 
     trainer = pl.Trainer(**trainer_config)
     trainer = update_checkpoint_name(cfg, trainer)
-    # use_stateless_timer(trainer)
+    use_stateless_timer(cfg, trainer)
 
     log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
     recursive_make_dirs(log_dir)
