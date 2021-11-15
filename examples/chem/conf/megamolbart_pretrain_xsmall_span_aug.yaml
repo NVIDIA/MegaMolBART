@@ -38,6 +38,7 @@ trainer:
   # auto_scale_batch_size: None/binsearch
 
 tokenizer:
+  mask_scheme: span
   vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
   mask_prob: 0.15
 

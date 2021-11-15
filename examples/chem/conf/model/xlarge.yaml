@@ -6,3 +6,4 @@ d_model: 1024 # the hidden_size
 d_feedforward: 4096 # set to 4 * hidden_size
 num_heads: 16
 num_layers: 8
+tensor_model_parallel_size: 1

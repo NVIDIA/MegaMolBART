@@ -49,7 +49,7 @@ model:
     decoder_augment: false
     filepath: ${dataset_path}/train/x[000..146].csv
     metadata_path: ${dataset_path}/train/metadata.txt
-    batch_size: 256
+    micro_batch_size: 256
     num_workers: 8
 
   validation_ds:
@@ -57,5 +57,5 @@ model:
     decoder_augment: false
     filepath: ${dataset_path}/val/x[000..146].csv
     metadata_path: ${dataset_path}/val/metadata.txt
-    batch_size: 512
+    micro_batch_size: 512
     num_workers: 8
