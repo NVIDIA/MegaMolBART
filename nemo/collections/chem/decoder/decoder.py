@@ -4,7 +4,13 @@ import torch
 from rdkit import Chem, RDLogger
 
 from dataclasses import dataclass
-from nemo.collections.chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
+
+try:
+    import nemo_collections_chem
+except:
+    import nemo.collections.chem as nemo_collections_chem
+
+from nemo_collections_chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
 
 @dataclass
 class DecodeSamplerConfig():

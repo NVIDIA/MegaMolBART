@@ -20,10 +20,15 @@ from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
 from nemo.collections.nlp.modules.common.megatron.megatron_utils import compute_model_parallel_rank
 from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
 
-from nemo.collections.chem.models import MegaMolBARTModel, MegatronBARTConfig
-from nemo.collections.chem.tokenizer import MolEncTokenizerFromVocabFileConfig
-from nemo.collections.chem.decoder import DecodeSamplerConfig
-from nemo.collections.chem.nlp_overrides import MegaMolBARTNLPDDPPlugin
+try:
+    import nemo_collections_chem
+except:
+    import nemo.collections.chem as nemo_collections_chem
+
+from nemo_collections_chem.models import MegaMolBARTModel, MegatronBARTConfig
+from nemo_collections_chem.tokenizer import MolEncTokenizerFromVocabFileConfig
+from nemo_collections_chem.decoder import DecodeSamplerConfig
+from nemo_collections_chem.nlp_overrides import MegaMolBARTNLPDDPPlugin
 
 
 

@@ -47,6 +47,7 @@ tokenizer:
 
 model:
   name: pretrain_small_span_aug
+
   train_ds:
     encoder_mask: true # task = mask(span)_aug
     decoder_augment: true

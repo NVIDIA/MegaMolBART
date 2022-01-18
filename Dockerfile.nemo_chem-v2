@@ -1,0 +1,56 @@
+FROM nvcr.io/nvidia/pytorch:21.10-py3
+
+ARG GITHUB_ACCESS_TOKEN
+ARG GITHUB_BRANCH=main
+ARG NEMO_GITHUB_BRANCH=main
+ARG NEMO_GITHUB_REPO=https://github.com/NVIDIA
+ARG PROJECT_PATH=/workspace/
+
+
+# TODO delete this and revert to nemo container after release 1.5
+RUN apt update && rm -rf /var/lib/apt/lists/*
+
+# Ensure apt-get won't prompt for selecting options
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y \
+    libsndfile1 sox \
+    python-setuptools swig \
+    python-dev ffmpeg tmux && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install pudb
+
+RUN pip uninstall -y apex
+
+# Install PySMILESutils
+RUN pip install git+https://github.com/MolecularAI/pysmilesutils.git
+
+# Install RDKit
+RUN conda install -y -c conda-forge rdkit
+
+# Install Apex
+RUN git clone https://github.com/NVIDIA/apex && \
+        cd apex && \
+        pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
+
+# # Install pytorch lightning with fix
+# # TODO: switch to released version
+# RUN git clone https://github.com/MaximumEntropy/pytorch-lightning.git && \
+#         cd pytorch-lightning && \
+#         pip install .
+
+## NeMo_MegaMolBART
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git \
+    --branch ${GITHUB_BRANCH} ${PROJECT_PATH}/NeMo_MegaMolBART
+
+# Commit from megatron_gpt
+RUN git clone ${NEMO_GITHUB_REPO}/NeMo.git --branch ${NEMO_GITHUB_BRANCH} ${PROJECT_PATH}/NeMo && \
+        cd ${PROJECT_PATH}/NeMo && \
+        sh reinstall.sh && \
+        pushd nemo/collections/nlp/data/language_modeling/megatron && \
+        make && popd && \
+        bash nemo_text_processing/setup.sh
+
+RUN pip install wandb==0.10.21

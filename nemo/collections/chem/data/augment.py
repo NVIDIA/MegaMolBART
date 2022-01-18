@@ -1,10 +1,17 @@
 import torch
 from nemo.utils import logging
 from rdkit import Chem
-from nemo.collections.chem.tokenizer import MolEncTokenizer
 from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
+
+try:
+    import nemo_collections_chem
+except:
+    import nemo.collections.chem as nemo_collections_chem
+
+from nemo_collections_chem.tokenizer import MolEncTokenizer
+
 
 __all__ = ['MoleculeEnumeration']
 

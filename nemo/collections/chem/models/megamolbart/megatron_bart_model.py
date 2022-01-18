@@ -1,4 +1,3 @@
-
 import os
 import re
 from typing import Dict, List, Optional, Tuple, Union, Callable
@@ -41,10 +40,16 @@ from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
     MegatronPretrainingSampler,
 )
 
-from nemo.collections.chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
-from nemo.collections.chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
-from nemo.collections.chem.decoder import DecodeSampler
-from nemo.collections.chem.optimizer import TransformerLR, TransformerLRParams
+try:
+    import nemo_collections_chem
+except:
+    import nemo.collections.chem as nemo_collections_chem
+
+
+from nemo_collections_chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
+from nemo_collections_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
+from nemo_collections_chem.decoder import DecodeSampler
+from nemo_collections_chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
 
 __all__ = ["MegaMolBARTModel"]
@@ -87,8 +92,11 @@ class MegaMolBARTModel(NLPModel):
         
         self.model = MegatronBART( 
                                 self.sampler,
+                                cfg_model.encoder_type,
                                 pad_token_idx,
                                 self._vocab_size,
+                                cfg_model.blocks_model,
+                                cfg_model.steps_model,
                                 cfg_model.d_model,
                                 cfg_model.num_layers,
                                 cfg_model.num_heads,
@@ -385,4 +393,3 @@ class MegaMolBARTModel(NLPModel):
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
-

@@ -19,7 +19,7 @@
 #
 # This is my $LOCAL_ENV file
 #
-LOCAL_ENV=.cheminf_local_environment
+LOCAL_ENV=.cheminf_local_environment-v2
 #
 ###############################################################################
 
@@ -71,7 +71,7 @@ variables:
     JUPYTER_PORT
         Port for launching jupyter lab, e.g. 8888
     DATA_PATH
-        path to data directory. e.g., /scratch/data/zinc_csv_split
+        path to data directory. e.g., /scratch/data/ which contains zinc_csv_split
     DATA_MOUNT_PATH
         Path to data inside container. e.g., /data
     REGISTRY
@@ -90,19 +90,24 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
-PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
-JUPYTER_PORT=${JUPYTER_PORT:=8888}
-DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
+DATA_PATH=${DATA_PATH:=/tmp}
+DOCKERFILE=${DOCKERFILE:=Dockerfile.nemo_checm-v2}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
+GITHUB_BRANCH=${GITHUB_BRANCH:=main}
+JUPYTER_PORT=${JUPYTER_PORT:=8888}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
+NEMO_GITHUB_BRANCH=${NEMO_GITHUB_BRANCH:=main}
+NEMO_GITHUB_REPO=${NEMO_GITHUB_REPO:=https://github.com/NVIDIA}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace}
+PROJECT_PATH=${PROJECT_PATH:=$(dirname $(pwd))}
+REGISTRY=${REGISTRY:=NotSpecified}
+REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
-REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
-REGISTRY=${REGISTRY:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
 WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
-GITHUB_BRANCH=${GITHUB_BRANCH:=main}
+
+
 ###############################################################################
 #
 # if $LOCAL_ENV file exists, source it to specify my environment
@@ -126,19 +131,22 @@ fi
 ###############################################################################
 
 if [ $write_env -eq 1 ]; then
-    echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
-    echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
-    echo PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH} >> $LOCAL_ENV
-    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
-    echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
     echo DATA_MOUNT_PATH=${DATA_MOUNT_PATH} >> $LOCAL_ENV
-    echo RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH} >> $LOCAL_ENV
-    echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
-    echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
-    echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
-    echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
+    echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
+    echo DOCKERFILE=${DOCKERFILE} >> $LOCAL_ENV
     echo GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} >> $LOCAL_ENV
     echo GITHUB_BRANCH=${GITHUB_BRANCH} >> $LOCAL_ENV
+    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
+    echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
+    echo NEMO_GITHUB_BRANCH=${NEMO_GITHUB_BRANCH} >> $LOCAL_ENV
+    echo NEMO_GITHUB_REPO=${NEMO_GITHUB_REPO} >> $LOCAL_ENV
+    echo PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH} >> $LOCAL_ENV
+    echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
+    echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
+    echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
+    echo RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH} >> $LOCAL_ENV
+    echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
+    echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
 fi
 
 ###############################################################################
@@ -151,7 +159,7 @@ fi
 
 DOCKER_VERSION_WITH_GPU_SUPPORT="19.03.0"
 if [ -x "$(command -v docker)" ]; then
-    DOCKER_VERSION=$(docker version | grep -i version | head -1 | awk '{print $2'})
+    DOCKER_VERSION=$(docker version | grep -i version | head -1 | awk '{print $2}')
 fi
 
 PARAM_RUNTIME="--runtime=nvidia"
@@ -163,12 +171,12 @@ fi
 #DATE=$(date +%y%m%d)
 GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
 
+# -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
 DOCKER_CMD="docker run \
     --rm \
     --network host \
     ${PARAM_RUNTIME} \
     -p ${JUPYTER_PORT}:8888 \
-    -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
     --shm-size=1g \
     --ulimit memlock=-1 \
@@ -185,9 +193,10 @@ build() {
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
-        --build-arg GITHUB_SHA=${GITHUB_SHA} \
-        --build-arg NEMO_HOME=${PROJECT_MOUNT_PATH} \
-        -f Dockerfile.nemo_chem \
+        --build-arg NEMO_GITHUB_BRANCH=${NEMO_GITHUB_BRANCH} \
+        --build-arg NEMO_GITHUB_REPO=${NEMO_GITHUB_REPO} \
+        --build-arg PROJECT_PATH=${PROJECT_MOUNT_PATH} \
+        -f ${DOCKERFILE} \
         .
 
     set +e
@@ -214,6 +223,14 @@ dev() {
     set -x
     DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_dev " 
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
+    exit
+}
+
+attach() {
+    set -x
+    DOCKER_CMD="docker exec"
+    CONTAINER_ID=$(docker ps | grep megamolbart_training:latest | cut -d' ' -f1)
+    ${DOCKER_CMD} -it ${CONTAINER_ID}  /bin/bash
     exit
 }
 
@@ -244,6 +261,9 @@ case $1 in
     pull)
         ;&
     dev)
+        $@
+        ;;
+    attach)
         $@
         ;;
     root)
