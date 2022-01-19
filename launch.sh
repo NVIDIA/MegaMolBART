@@ -213,8 +213,16 @@ pull() {
 
 dev() {
     set -x
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_dev " 
+    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev " 
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
+    exit
+}
+
+attach() {
+    set -x
+    DOCKER_CMD="docker exec"
+    CONTAINER_ID=$(docker ps | grep nemo_megamolbart_dev | cut -d' ' -f1)
+    ${DOCKER_CMD} -it ${CONTAINER_ID} /bin/bash
     exit
 }
 
@@ -245,6 +253,9 @@ case $1 in
     pull)
         ;&
     dev)
+        $@
+        ;;
+    attach)
         $@
         ;;
     root)
