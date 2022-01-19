@@ -77,8 +77,8 @@ echo '*******STARTING********' \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.train_ds.batch_size=128 \
-    model.validation_ds.batch_size=128 \
+    model.train_ds.micro_batch_size=128 \
+    model.validation_ds.micro_batch_size=128 \
     model.encoder_type=${ENCODER_TYPE} \
     ++trainer.val_check_interval=0.5 \
     ++trainer.limit_val_batches=2 \
