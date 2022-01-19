@@ -186,7 +186,6 @@ build() {
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
-        --build-arg GITHUB_SHA=${GITHUB_SHA} \
         --build-arg NEMO_HOME=${PROJECT_MOUNT_PATH} \
         -f Dockerfile.nemo_chem \
         .
