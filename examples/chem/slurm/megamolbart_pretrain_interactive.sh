@@ -6,6 +6,8 @@ set -x
 ### CONFIG ###
 
 HOSTNAME=Hostname
+ENCODER_TYPE=${1:-seq2seq}
+
 SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs for consistency with SLURM scripts
 SLURM_TASKS_PER_NODE=8
 
@@ -77,6 +79,7 @@ echo '*******STARTING********' \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.train_ds.batch_size=128 \
     model.validation_ds.batch_size=128 \
+    model.encoder_type=${ENCODER_TYPE} \
     ++trainer.val_check_interval=0.5 \
     ++trainer.limit_val_batches=2 \
     ++trainer.limit_train_batches=10 \

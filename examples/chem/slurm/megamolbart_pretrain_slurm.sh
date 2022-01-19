@@ -13,6 +13,7 @@ set -x
 ### CONFIG ###
 
 HOSTNAME=Hostname
+ENCODER_TYPE=${1:-seq2seq}
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
@@ -77,7 +78,8 @@ echo '*******STARTING********' \
     trainer.gpus=${SLURM_NTASKS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
-    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED}
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
+    model.encoder_type=${ENCODER_TYPE}
 EOF
 
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh

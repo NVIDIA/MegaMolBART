@@ -16,6 +16,7 @@ DATA_FILES_SELECTED=x_OP_000..006_CL_.csv
 
 HOSTNAME=LOCALHOST
 PROJECT=MegaMolBART
+ENCODER_TYPE=${1:-seq2seq}
 
 ### END CONFIG ###
 
@@ -53,6 +54,7 @@ python megamolbart_pretrain.py \
     trainer.gpus=${GPUS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
-    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED}
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
+    model.encoder_type=${ENCODER_TYPE}
 
 set +x
