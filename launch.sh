@@ -100,14 +100,9 @@ RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
-<<<<<<< HEAD
 REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
 GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=NotSpecified}
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
-=======
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
-WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
->>>>>>> Cherry pick changes
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 ###############################################################################
 #
@@ -144,10 +139,7 @@ if [ $write_env -eq 1 ]; then
     echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
     echo REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN} >> $LOCAL_ENV
     echo GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} >> $LOCAL_ENV
-<<<<<<< HEAD
     echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
-=======
->>>>>>> Cherry pick changes
     echo GITHUB_BRANCH=${GITHUB_BRANCH} >> $LOCAL_ENV
 fi
 
