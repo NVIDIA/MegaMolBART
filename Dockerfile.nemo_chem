@@ -1,9 +1,8 @@
-FROM nemo_dev:latest
+FROM nvcr.io/nvidia/nemo:1.5.1 
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
 ARG GITHUB_SHA
 ARG NEMO_HOME=/workspace/nemo
-ARG NEMO_BASE_HOME=/workspace/nemo_base
 
 ENV GITHUB_SHA=${GITHUB_SHA}
 ENV GITHUB_BRANCH=${GITHUB_BRANCH}
@@ -16,6 +15,7 @@ ENV TERM=xterm
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y \
+    python-setuptools python-dev swig \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
@@ -32,5 +32,9 @@ RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_Me
     --branch ${GITHUB_BRANCH} /opt/NeMo_MegaMolBART \
     && rm -rf ${NEMO_HOME} \
     && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
-    && ln -s ${NEMO_HOME}/nemo/collections/chem ${NEMO_BASE_HOME}/nemo/collections/chem
-# TODO finish setup.py
+    && cd ${NEMO_HOME} \
+    && NEMO_BASE_HOME=$(/opt/conda/bin/python -c 'import nemo; print(nemo.__path__[0])') \
+    && ln -s ${NEMO_HOME}/nemo/collections/chem ${NEMO_BASE_HOME}/collections/chem
+
+# && ln -s nemo_collections_chem nemo/collections/chem \
+# && export PYTHONPATH=${NEMO_HOME}/nemo_collections_chem:$PYTHONPATH \

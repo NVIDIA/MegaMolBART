@@ -5,19 +5,19 @@ set -x
 ##### Development on a cluster with SLURM / Optional interactive or batch training
 ### CONFIG ###
 
-HOSTNAME=Selene
+HOSTNAME=Hostname
 SLURM_JOB_NUM_NODES=1 # These are used for interactive jobs for consistency with SLURM scripts
-SLURM_TASKS_PER_NODE=2
+SLURM_TASKS_PER_NODE=8
 
-ADDITIONAL_FLAGS=" --time 2:00:00 --partition interactive --account swdl --job-name swdl-clara:mgill_megamolbart "
+ADDITIONAL_FLAGS=" --time 2:00:00 --partition PARTITION_NAME --account ACCOUNT_NAME --job-name JOB_NAME "
 IS_BATCH=0 # 0 for interactive, 1 for sbatch
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..001_CL_.csv
-CONTAINER="FIXME"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:latest" # TODO update with public path
 
-STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
+STORAGE_DIR=${HOME}/megatron
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
@@ -65,6 +65,7 @@ echo '*******STARTING********' \
 && python megamolbart_pretrain.py \
     --config-path=conf \
     --config-name=megamolbart_pretrain_${MEGAMOLBART_CONFIG_FILE} \
+    dataset_path=${DATA_MOUNT} \
     exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE_MODE} \
     exp_manager.wandb_logger_kwargs.job_type=${EXP_NAME} \
     exp_manager.name=${EXP_NAME} \
@@ -73,9 +74,7 @@ echo '*******STARTING********' \
     trainer.gpus=${SLURM_TASKS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
-    model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
     model.train_ds.batch_size=128 \
     model.validation_ds.batch_size=128 \
     ++trainer.val_check_interval=0.5 \

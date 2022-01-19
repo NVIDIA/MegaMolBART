@@ -19,7 +19,7 @@
 #
 # This is my $LOCAL_ENV file
 #
-LOCAL_ENV=.cheminf_local_environment
+LOCAL_ENV=.env
 #
 ###############################################################################
 
@@ -90,7 +90,7 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training:210830}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
@@ -100,8 +100,9 @@ RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=""}
-WANDB_API_KEY=${WANDB_API_KEY:=$(grep password $HOME/.netrc | cut -d' ' -f4)}
+REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=NotSpecified}
+WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 ###############################################################################
 #
@@ -136,8 +137,9 @@ if [ $write_env -eq 1 ]; then
     echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
     echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
     echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
-    echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
+    echo REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN} >> $LOCAL_ENV
     echo GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} >> $LOCAL_ENV
+    echo WANDB_API_KEY=${WANDB_API_KEY} >> $LOCAL_ENV
     echo GITHUB_BRANCH=${GITHUB_BRANCH} >> $LOCAL_ENV
 fi
 
@@ -160,7 +162,6 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-#DATE=$(date +%y%m%d)
 GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
 
 DOCKER_CMD="docker run \
@@ -226,13 +227,13 @@ root() {
 
 jupyter() {
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
-        --port=8888 \
+        --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
+        --allow-root \
         --notebook-dir=/workspace \
-        --NotebookApp.password=\"\" \
-        --NotebookApp.token=\"\" \
+        --NotebookApp.password='' \
+        --NotebookApp.token='' \
         --NotebookApp.password_required=False
-    exit
 }
 
 

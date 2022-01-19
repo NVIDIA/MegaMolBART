@@ -1,25 +1,25 @@
 #!/bin/bash
-#SBATCH --nodes 2
+#SBATCH --nodes 4 
 #SBATCH --ntasks-per-node 8
 #SBATCH --mail-type=FAIL
-#SBATCH --time=4:00:00                          # Selene
-#SBATCH --partition luna                        # Selene
-#SBATCH --account swdl                          # Selene
-#SBATCH --job-name swdl-clara:mgill-megamolbart # Selene
+#SBATCH --time=4:00:00
+#SBATCH --partition PARTITION_NAME
+#SBATCH --account ACCOUNT_NAME
+#SBATCH --job-name JOB_NAME
 
 set -x
 
 ##### Development on a cluster with SLURM
 ### CONFIG ###
 
-HOSTNAME=Selene
+HOSTNAME=Hostname
 
 PROJECT=MegaMolBART
 MEGAMOLBART_CONFIG_FILE=small_span_aug
 DATA_FILES_SELECTED=x_OP_000..146_CL_.csv
-CONTAINER="FIXME"
+CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:latest" # TODO update with public path
 
-STORAGE_DIR=${HOME}/fs/megatron # ${HOME}/fs is a link to luster fs mount
+STORAGE_DIR=${HOME}/megatron
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
 CODE_DIR=${STORAGE_DIR}/code/NeMo
@@ -68,6 +68,7 @@ echo '*******STARTING********' \
 && python megamolbart_pretrain.py \
     --config-path=conf \
     --config-name=megamolbart_pretrain_${MEGAMOLBART_CONFIG_FILE} \
+    dataset_path=${DATA_MOUNT} \
     exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE_MODE} \
     exp_manager.wandb_logger_kwargs.job_type=${EXP_NAME} \
     exp_manager.name=${EXP_NAME} \
@@ -76,11 +77,7 @@ echo '*******STARTING********' \
     trainer.gpus=${SLURM_NTASKS_PER_NODE} \
     tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
-    model.train_ds.metadata_path=${DATA_MOUNT}/train/metadata.txt \
-    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.validation_ds.metadata_path=${DATA_MOUNT}/val/metadata.txt \
-    model.train_ds.batch_size=128 \
-    model.validation_ds.batch_size=128
+    model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED}
 EOF
 
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh

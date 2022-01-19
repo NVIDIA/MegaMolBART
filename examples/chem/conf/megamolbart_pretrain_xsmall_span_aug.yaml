@@ -2,7 +2,6 @@ defaults:
   - trainer: trainer_defaults
   - model/dataset@model.train_ds: train_ds_defaults
   - model/dataset@model.validation_ds: validation_ds_defaults
-  - model/dataset@model.test_ds: validation_ds_defaults
   - exp_manager: log_all
   - model: xsmall
   - model/optim@model.optim: adam
