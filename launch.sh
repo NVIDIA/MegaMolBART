@@ -182,7 +182,7 @@ build() {
     MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
     echo "Building MegaMolBART training container..."
     docker build --network host \
-        -t ${MEGAMOLBART_CONT_BASENAME}:latest \
+        -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_BRANCH} \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
@@ -197,7 +197,7 @@ build() {
 
 push() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker push ${MEGAMOLBART_CONT}:latest
+    docker push ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
     docker push ${MEGAMOLBART_CONT}:${GITHUB_SHA}
     exit
 }
@@ -205,7 +205,7 @@ push() {
 
 pull() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker pull ${MEGAMOLBART_CONT}
+    docker pull ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
     exit
 }
 
@@ -213,7 +213,7 @@ pull() {
 dev() {
     set -x
     DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev " 
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
     exit
 }
 
@@ -227,13 +227,13 @@ attach() {
 
 
 root() {
-    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT} bash
+    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
     exit
 }
 
 
 jupyter() {
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
