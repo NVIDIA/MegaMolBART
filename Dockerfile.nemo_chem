@@ -28,12 +28,11 @@ RUN pip install wandb==0.12.9
 
 ## NeMo_MegaMolBART
 # TODO update path to public one and remove access token and branch
-RUN rm -rf ${NEMO_HOME} \
-    && git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git /opt/NeMo_MegaMolBART \
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git /opt/NeMo_MegaMolBART \
     && cd /opt/NeMo_MegaMolBART \
     && git checkout ${GITHUB_BRANCH} \
+    && rm -rf ${NEMO_HOME} \
     && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
-    && cd ${NEMO_HOME} \
     && NEMO_BASE_HOME=$(python -c 'import nemo; print(nemo.__path__[0])') \
     && ln -s ${NEMO_HOME}/nemo/collections/chem ${NEMO_BASE_HOME}/collections/chem
 
