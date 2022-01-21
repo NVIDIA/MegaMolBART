@@ -25,35 +25,24 @@ LOCAL_ENV=.env
 
 usage() {
     cat <<EOF
-
 USAGE: launch.sh
-
 launch utility script
 ----------------------------------------
-
 launch.sh [command]
-
     valid commands:
-
     build
     pull
     push
     dev
     root
     jupyter
-
-
 Getting Started tl;dr
 ----------------------------------------
-
     ./launch.sh build
     ./launch.sh dev
 For more detailed info on getting started, see README.md
-
-
 More Information
 ----------------------------------------
-
 Note: This script looks for a file called $LOCAL_ENV in the
 current directory. This file should define the following environment
 variables:
@@ -85,7 +74,6 @@ variables:
         This value is optional -- Weights and Biases will log data and not upload if missing.
     GITHUB_ACCESS_TOKEN
         GitHub API token to checkout private code repo (required for build only)
-
 EOF
     exit
 }
