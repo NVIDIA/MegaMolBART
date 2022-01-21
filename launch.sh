@@ -80,7 +80,7 @@ EOF
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo_chem}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
@@ -150,13 +150,7 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-if [ ${GITHUB_BRANCH} == '__dev__' ]; then
-    echo "Using dev mode -- latest commit of local repo will be used."
-    GITHUB_SHA=$(git rev-parse HEAD | head -c7)
-    GITHUB_BRANCH=${GITHUB_SHA}
-else
-    GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
-fi
+GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
 
 DOCKER_CMD="docker run \
     --rm \
@@ -171,14 +165,12 @@ DOCKER_CMD="docker run \
     -e HOME=${PROJECT_MOUNT_PATH} \
     -w ${PROJECT_MOUNT_PATH}"
 
-
 build() {
     set -e
     MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
-
     echo "Building MegaMolBART training container..."
     docker build --network host \
-        -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_BRANCH} \
+        -t ${MEGAMOLBART_CONT_BASENAME}:latest \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
@@ -193,7 +185,7 @@ build() {
 
 push() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker push ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
+    docker push ${MEGAMOLBART_CONT}:latest
     docker push ${MEGAMOLBART_CONT}:${GITHUB_SHA}
     exit
 }
@@ -201,7 +193,7 @@ push() {
 
 pull() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker pull ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
+    docker pull ${MEGAMOLBART_CONT}
     exit
 }
 
@@ -209,10 +201,9 @@ pull() {
 dev() {
     set -x
     DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev " 
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
     exit
 }
-
 
 attach() {
     set -x
@@ -224,13 +215,13 @@ attach() {
 
 
 root() {
-    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
+    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT} bash
     exit
 }
 
 
 jupyter() {
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} jupyter-lab --no-browser \
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
