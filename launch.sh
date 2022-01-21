@@ -162,7 +162,13 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
+if [ ${GITHUB_BRANCH} == '__dev__' ]; then
+    echo "Using dev mode -- latest commit of local repo will be used."
+    GITHUB_SHA=$(git rev-parse HEAD | head -c7)
+    GITHUB_BRANCH=${GITHUB_SHA}
+else
+    GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
+fi
 
 DOCKER_CMD="docker run \
     --rm \
@@ -177,16 +183,18 @@ DOCKER_CMD="docker run \
     -e HOME=${PROJECT_MOUNT_PATH} \
     -w ${PROJECT_MOUNT_PATH}"
 
+
 build() {
     set -e
     MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
+
     echo "Building MegaMolBART training container..."
     docker build --network host \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_BRANCH} \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
-        --build-arg NEMO_HOME=${PROJECT_MOUNT_PATH} \
+        --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
         -f Dockerfile.nemo_chem \
         .
 
@@ -216,6 +224,7 @@ dev() {
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
     exit
 }
+
 
 attach() {
     set -x

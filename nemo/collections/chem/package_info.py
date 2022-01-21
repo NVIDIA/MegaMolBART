@@ -24,7 +24,7 @@ VERSION = (MAJOR, MINOR, PATCH, PRE_RELEASE)
 __shortversion__ = '.'.join(map(str, VERSION[:3]))
 __version__ = '.'.join(map(str, VERSION[:3])) + ''.join(VERSION[3:])
 
-__package_name__ = 'nemo_chem'
+__package_name__ = 'megamolbart'
 __contact_names__ = 'NVIDIA'
 __homepage__ = 'https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/models/megamolbart'
 __repository_url__ = ''
