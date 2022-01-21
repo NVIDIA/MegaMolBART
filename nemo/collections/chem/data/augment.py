@@ -5,12 +5,7 @@ from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
 
-try:
-    import nemo_collections_chem
-except:
-    import nemo.collections.chem as nemo_collections_chem
-
-from nemo_collections_chem.tokenizer import MolEncTokenizer
+from nemo_chem.tokenizer import MolEncTokenizer
 
 
 __all__ = ['MoleculeEnumeration']

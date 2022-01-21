@@ -22,7 +22,7 @@ CONTAINER="nvcr.io#nvidian/clara-lifesciences/megamolbart_training_nemo:latest" 
 STORAGE_DIR=${HOME}/megatron
 WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
 DATA_DIR=${STORAGE_DIR}/data/zinc_csv_split
-CODE_DIR=${STORAGE_DIR}/code/NeMo
+CODE_DIR=${STORAGE_DIR}/code/nemo_chem
 OUTPUT_DIR=${STORAGE_DIR}/nemo
 
 ### END CONFIG ###
@@ -33,7 +33,7 @@ OUTFILE="${RESULTS_DIR}/slurm-%j-%n.out" # Ignored in interactive mode
 ERRFILE="${RESULTS_DIR}/error-%j-%n.out" # Ignored in interactive mode
 
 DATA_MOUNT=/data
-CODE_MOUNT=/workspace/nemo
+CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 RESULTS_MOUNT=${OUTPUT_MOUNT}/${PROJECT}/${MEGAMOLBART_CONFIG_FILE}/${EXP_NAME}
 WORKDIR=${CODE_MOUNT}

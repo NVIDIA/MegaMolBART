@@ -5,7 +5,7 @@ set -x
 ### CONFIG ###
 
 DATA_MOUNT=/data/zinc_csv
-CODE_MOUNT=/workspace/nemo
+CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 
 JOB_NUM_NODES=1

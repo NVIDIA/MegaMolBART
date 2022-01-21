@@ -40,16 +40,10 @@ from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
     MegatronPretrainingSampler,
 )
 
-try:
-    import nemo_collections_chem
-except:
-    import nemo.collections.chem as nemo_collections_chem
-
-
-from nemo_collections_chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
-from nemo_collections_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
-from nemo_collections_chem.decoder import DecodeSampler
-from nemo_collections_chem.optimizer import TransformerLR, TransformerLRParams
+from nemo_chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
+from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
+from nemo_chem.decoder import DecodeSampler
+from nemo_chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
 
 __all__ = ["MegaMolBARTModel"]

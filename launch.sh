@@ -92,7 +92,7 @@ EOF
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo}
+PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo_chem}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
