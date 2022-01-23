@@ -2,6 +2,7 @@
 
 import re
 import os
+import torch
 import random
 from pathlib import Path
 from dataclasses import dataclass
