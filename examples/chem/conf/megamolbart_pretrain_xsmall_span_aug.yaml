@@ -39,7 +39,6 @@ trainer:
 
 tokenizer:
   mask_scheme: span
-  vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
   mask_prob: 0.15
 
 model:

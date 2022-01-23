@@ -40,7 +40,6 @@ trainer:
 tokenizer:
   mask_scheme: span
   mask_prob: 0.1
-  vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
 
 model:
   name: pretrain_small_span

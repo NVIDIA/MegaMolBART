@@ -74,7 +74,6 @@ echo '*******STARTING********' \
     exp_manager.exp_dir=${RESULTS_MOUNT} \
     trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     trainer.gpus=${SLURM_TASKS_PER_NODE} \
-    tokenizer.vocab_path=${CODE_MOUNT}/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
     model.train_ds.micro_batch_size=128 \
