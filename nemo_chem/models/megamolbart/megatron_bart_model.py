@@ -51,24 +51,26 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
-        super().__init__(cfg=cfg, trainer=trainer) # TODO BUG number of GPUS not correctly initialized?
+        super().__init__(cfg=cfg, trainer=trainer)
         self.cfg = cfg
 
         # These handle irregular configuration settings upon restore from old checkpoints
         cfg_model = cfg.model if cfg.get('model', False) else cfg
-        cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer', False) else OmegaConf.create(MolEncTokenizerFromVocabFileConfig()) # TODO: change when other tokenizers added
+        # TODO: will need to change when other tokenizers added
+        cfg_tokenizer = cfg.tokenizer if cfg.get('tokenizer', False) else OmegaConf.create(MolEncTokenizerFromVocabFileConfig())
 
-        if self.cfg.get('use_cpu_initialization', False) is False:
+        if (self.cfg.get('use_cpu_initialization', False) is False) & (trainer is not None):
             torch.cuda.set_device(trainer.local_rank)
 
-        logging.info('Model parallel setup beginning')
-        initialize_model_parallel_for_nemo(
-            world_size=trainer.world_size,
-            global_rank=trainer.global_rank,
-            local_rank=trainer.local_rank,
-            tensor_model_parallel_size=cfg_model.get('tensor_model_parallel_size', 1),
-            seed=self.cfg.get('seed', 1234),
-        )
+        logging.info('Model setup beginning')
+        if trainer is not None:
+            initialize_model_parallel_for_nemo(
+                world_size=trainer.world_size,
+                global_rank=trainer.global_rank,
+                local_rank=trainer.local_rank,
+                tensor_model_parallel_size=cfg_model.get('tensor_model_parallel_size', 1),
+                seed=self.cfg.get('seed', 1234),
+            )
 
         if not self.cfg.get('fused_bf16', False):
             set_jit_fusion_options()
