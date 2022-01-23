@@ -78,7 +78,8 @@ echo '*******STARTING********' \
     trainer.gpus=${SLURM_NTASKS_PER_NODE} \
     model.train_ds.filepath=${DATA_MOUNT}/train/${DATA_FILES_SELECTED} \
     model.validation_ds.filepath=${DATA_MOUNT}/val/${DATA_FILES_SELECTED} \
-    model.encoder_type=${ENCODER_TYPE}
+    model.encoder_type=${ENCODER_TYPE} \
+    ++tokenizer.vocab_path=${CODE_MOUNT}/nemo_chem/vocab/megamolbart_vocab.txt
 EOF
 
 SCRIPT_PATH=${RESULTS_DIR}/job_script.sh

@@ -79,6 +79,7 @@ echo '*******STARTING********' \
     model.train_ds.micro_batch_size=128 \
     model.validation_ds.micro_batch_size=128 \
     model.encoder_type=${ENCODER_TYPE} \
+    ++tokenizer.vocab_path=${CODE_MOUNT}/nemo_chem/vocab/megamolbart_vocab.txt \
     ++trainer.val_check_interval=0.5 \
     ++trainer.limit_val_batches=2 \
     ++trainer.limit_train_batches=10 \
