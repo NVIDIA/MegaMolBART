@@ -1,11 +1,14 @@
 # coding=utf-8
 
 import re
-import torch
+import os
 import random
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Any
+
+import nemo_chem
+VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
 
 # Defaults
 DEFAULT_MAX_SEQ_LEN = 512
@@ -40,7 +43,7 @@ class MolEncTokenizerBaseConfig():
 
 @dataclass
 class MolEncTokenizerFromVocabFileConfig():
-    vocab_path: str = '/workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt'
+    vocab_path: str = os.path.join(VOCAB_DIR, 'megamolbart_vocab.txt')
     regex: str = DEFAULT_REGEX
     chem_tokens_start_idx: int = DEFAULT_CHEM_TOKEN_START
     pad_token_idx: int = 0
