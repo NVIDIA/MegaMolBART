@@ -1,7 +1,7 @@
 FROM nvcr.io/nvidia/nemo:1.5.1 
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
-ARG NEMO_MEGAMOLBART_HOME=/workspace/nemo_chem
+ARG NEMO_CHEM_HOME=/workspace/nemo_chem
 ARG CONDA_ENV=base
 
 ENV GITHUB_BRANCH=${GITHUB_BRANCH}
@@ -30,9 +30,9 @@ RUN pip install wandb==0.12.9
 
 ## NeMo_MegaMolBART
 # TODO update path to public one and remove access token and branch
-RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_MEGAMOLBART_HOME} \
-    && cd ${NEMO_MEGAMOLBART_HOME} \
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
+    && cd ${NEMO_CHEM_HOME} \
     && git checkout ${GITHUB_BRANCH}
 
-RUN cd ${NEMO_MEGAMOLBART_HOME} && conda run -n ${CONDA_ENV} pip install .
-WORKDIR ${NEMO_MEGAMOLBART_HOME}
+RUN cd ${NEMO_CHEM_HOME} && conda run -n ${CONDA_ENV} pip install .
+WORKDIR ${NEMO_CHEM_HOME}
