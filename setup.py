@@ -1,32 +1,39 @@
 import os
 import sys
 import re
-import nemo
 from setuptools import setup, find_packages
+import importlib.util
 
-nemo_chem_path = os.path.join(*['nemo', 'collections', 'chem'])
-# sys.argv += ['--install-scripts', nemo_path]
-# print(sys.argv)
+package_dir = 'nemo_chem'
 
-def copy_dir(dest_dir=nemo_chem_path):
-    base_dir = os.path.dirname(os.path.realpath(__file__))
-    base_dir = os.path.join(base_dir, 'nemo', 'collections', 'chem')
+spec = importlib.util.spec_from_file_location('package_info', os.path.join(package_dir, 'package_info.py'))
+package_info = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(package_info)
+package_name = package_info.__package_name__
 
-    pattern_list = [r"""^\.""", r"""\.code-workspace$""", r"""\.pyc$""", r"""__pycache__"""]
-    filter_func = lambda pattern: any([re.search(x[0], x[1]) is not None 
-                                    for x in [(pattern, rel_path), (pattern, f)]])
-    data_files = []
-    for root, _, files in os.walk(base_dir):
-        for f in files:
-            rel_path = os.path.relpath(os.path.join(root, f), base_dir)            
-            filter_file = any(list(map(filter_func, pattern_list)))
-            if (not filter_file) & (f != '__init__.py'):
-                data_files.append(rel_path)
-    return (dest_dir, data_files)
+if os.path.exists('README.rmd'):
+    with open("README.md", "r") as fh:
+        long_description = fh.read()
+    long_description_content_type = "text/markdown"
+else:
+    long_description = 'See ' + package_info.__homepage__
+    long_description_content_type = 'text'
+
+###
 
 setup(
-     name='nemo_chem',
-     version='0.0.1',
-     packages=find_packages(include=['nemo/collections/chem']),
-     data_files=[copy_dir()]
-    )
+    name=package_name,
+    version=package_info.__version__,
+    description=package_info.__description__,
+    long_description=long_description,
+    long_description_content_type=long_description_content_type,
+    url=package_info.__repository_url__,
+    download_url=package_info.__download_url__,
+    author=package_info.__contact_names__,
+    maintainer=package_info.__contact_names__,
+    license=package_info.__license__,
+    packages=find_packages(include=[package_dir, package_dir + '.*']),
+    include_package_data=True,
+    package_dir={package_name: package_dir},
+    package_data={package_name: ['vocab/*']}
+)

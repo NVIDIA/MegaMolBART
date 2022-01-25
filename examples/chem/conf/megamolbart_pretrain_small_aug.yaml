@@ -2,7 +2,6 @@ defaults:
   - trainer: trainer_defaults
   - model/dataset@model.train_ds: train_ds_defaults
   - model/dataset@model.validation_ds: validation_ds_defaults
-  - model/dataset@model.test_ds: validation_ds_defaults
   - exp_manager: log_all
   - model: small
   - model/optim@model.optim: adam
@@ -41,7 +40,6 @@ trainer:
 tokenizer:
   mask_scheme: span
   mask_prob: 0.1
-  vocab_path: /workspace/nemo/nemo/collections/chem/vocab/megamolbart_pretrain_vocab.txt
 
 model:
   name: pretrain_small_aug

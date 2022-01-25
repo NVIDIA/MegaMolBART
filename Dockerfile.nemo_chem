@@ -1,11 +1,9 @@
-FROM nemo_dev:latest
+FROM nvcr.io/nvidia/nemo:1.5.1 
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH=main
-ARG GITHUB_SHA
-ARG NEMO_HOME=/workspace/nemo
-ARG NEMO_BASE_HOME=/workspace/nemo_base
+ARG NEMO_CHEM_HOME=/workspace/nemo_chem
+ARG CONDA_ENV=base
 
-ENV GITHUB_SHA=${GITHUB_SHA}
 ENV GITHUB_BRANCH=${GITHUB_BRANCH}
 
 # Activating base environment
@@ -16,6 +14,7 @@ ENV TERM=xterm
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y \
+    python-setuptools python-dev swig \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,10 +26,13 @@ RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
 RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
     && cd /opt/pysmilesutils; pip install .
 
+RUN pip install wandb==0.12.9
+
 ## NeMo_MegaMolBART
-RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git \
-    --branch ${GITHUB_BRANCH} /opt/NeMo_MegaMolBART \
-    && rm -rf ${NEMO_HOME} \
-    && mv /opt/NeMo_MegaMolBART ${NEMO_HOME} \
-    && ln -s ${NEMO_HOME}/nemo/collections/chem ${NEMO_BASE_HOME}/nemo/collections/chem
-# TODO finish setup.py
+# TODO update path to public one and remove access token and branch
+RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
+    && cd ${NEMO_CHEM_HOME} \
+    && git checkout ${GITHUB_BRANCH}
+
+RUN cd ${NEMO_CHEM_HOME} && conda run -n ${CONDA_ENV} pip install .
+WORKDIR ${NEMO_CHEM_HOME}

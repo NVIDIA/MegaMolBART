@@ -15,14 +15,9 @@ from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
 from .megatron_bart_enc_dec import ParallelTransformerEncoder, ParallelTransformerDecoder
 
-try:
-    import nemo_collections_chem
-except:
-    import nemo.collections.chem as nemo_collections_chem
-
-from nemo_collections_chem.data import MoleculeCsvDatasetConfig
-from nemo_collections_chem.decoder import DecodeSamplerConfig
-from nemo_collections_chem.optimizer import AdamOptimConfig
+from nemo_chem.data import MoleculeCsvDatasetConfig
+from nemo_chem.decoder import DecodeSamplerConfig
+from nemo_chem.optimizer import AdamOptimConfig
 
 
 # Model parameters
