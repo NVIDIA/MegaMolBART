@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
 from .megatron_bart_enc_dec import ParallelTransformerEncoder, ParallelTransformerDecoder
+from .megatron_bart_enc_bottleneck import ParallelTransformerEncoderPerceiver
 
 from nemo_chem.data import MoleculeCsvDatasetConfig
 from nemo_chem.decoder import DecodeSamplerConfig
@@ -21,8 +22,8 @@ from nemo_chem.optimizer import AdamOptimConfig
 
 
 # Model parameters
-DEFAULT_BLOCKS_MODEL = None # TODO update when perceiver added
-DEFAULT_STEPS_MODEL = None # TODO update when perceiver added
+DEFAULT_BLOCKS_MODEL = 1
+DEFAULT_STEPS_MODEL = 16 # Latent Size = STEPS_MODEL * D_MODEL
 DEFAULT_D_MODEL = 256
 DEFAULT_NUM_LAYERS = 4
 DEFAULT_NUM_HEADS = 8
@@ -122,9 +123,9 @@ class MegatronBART(MegatronModule):
         self.register_buffer('pos_emb', self._positional_embs())
 
     def _build_encoder(self, encoder_type, blocks_model, steps_model, num_layers, d_model, num_heads, dropout, init_method):
-        """ Builds teh encoder. Supported encoder_type: seq2seq, perceiver"""
+        """ Builds the encoder. Supported encoder_type: seq2seq, perceiver"""
         encoder_type = encoder_type.lower()
-        assert encoder_type in ['seq2seq'], AssertionError(f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq]")
+        assert encoder_type in ['seq2seq', 'perceiver'], AssertionError(f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq, perceiver]")
         
         if encoder_type == 'seq2seq':
             encoder = ParallelTransformerEncoder(
@@ -135,8 +136,17 @@ class MegatronBART(MegatronModule):
                 bias=True,
                 init_method=init.xavier_uniform_,
             )
+       elif encoder_type == "perceiver":
+            encoder = ParallelTransformerEncoderPerceiver(
+                num_blocks=blocks_model,
+                num_layers=num_layers,
+                num_hidden_steps=steps_model,
+                d_model=d_model,
+                num_heads=num_heads,
+                bias=True,
+                init_method=init_method,
+            )
         else:
-            # TODO add perceiver encoder here
             raise TypeError(f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
 
         return encoder
@@ -178,6 +188,8 @@ class MegatronBART(MegatronModule):
         # update memory mask
         if self.encoder_type == "seq2seq":
             memory_pad_mask = encoder_pad_mask.clone()
+        elif self.encoder_type == "perceiver":
+            memory_pad_mask = torch.zeros((memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
         else:
             raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
@@ -366,6 +378,8 @@ class MegatronBART(MegatronModule):
             # update memory mask
             if self.encoder_type == "seq2seq":
                 mem_mask = enc_mask.clone()
+            elif self.encoder_type == "perceiver":
+                mem_mask = torch.zeros((memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
             else:
                 raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
