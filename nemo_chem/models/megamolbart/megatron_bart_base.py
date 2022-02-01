@@ -23,7 +23,7 @@ from nemo_chem.optimizer import AdamOptimConfig
 
 # Model parameters
 DEFAULT_BLOCKS_MODEL = 1
-DEFAULT_STEPS_MODEL = 16 # Latent Size = STEPS_MODEL * D_MODEL
+DEFAULT_STEPS_MODEL = 16  # Latent Size = STEPS_MODEL * D_MODEL
 DEFAULT_D_MODEL = 256
 DEFAULT_NUM_LAYERS = 4
 DEFAULT_NUM_HEADS = 8
@@ -51,8 +51,10 @@ class MegatronBARTConfig(ModelConfig):
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
     train_ds: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
-    validation_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
-    test_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
+    validation_ds: Optional[Union[MoleculeCsvDatasetConfig,
+                                  None]] = MoleculeCsvDatasetConfig()
+    test_ds: Optional[Union[MoleculeCsvDatasetConfig, None]
+                      ] = MoleculeCsvDatasetConfig()
     optim: Optional[OptimConfig] = AdamOptimConfig()
 
 
@@ -125,8 +127,9 @@ class MegatronBART(MegatronModule):
     def _build_encoder(self, encoder_type, blocks_model, steps_model, num_layers, d_model, num_heads, dropout, init_method):
         """ Builds the encoder. Supported encoder_type: seq2seq, perceiver"""
         encoder_type = encoder_type.lower()
-        assert encoder_type in ['seq2seq', 'perceiver'], AssertionError(f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq, perceiver]")
-        
+        assert encoder_type in ['seq2seq', 'perceiver'], AssertionError(
+            f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq, perceiver]")
+
         if encoder_type == 'seq2seq':
             encoder = ParallelTransformerEncoder(
                 num_layers=num_layers,
@@ -136,7 +139,7 @@ class MegatronBART(MegatronModule):
                 bias=True,
                 init_method=init.xavier_uniform_,
             )
-       elif encoder_type == "perceiver":
+        elif encoder_type == "perceiver":
             encoder = ParallelTransformerEncoderPerceiver(
                 num_blocks=blocks_model,
                 num_layers=num_layers,
@@ -147,7 +150,8 @@ class MegatronBART(MegatronModule):
                 init_method=init_method,
             )
         else:
-            raise TypeError(f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
+            raise TypeError(
+                f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
 
         return encoder
 
