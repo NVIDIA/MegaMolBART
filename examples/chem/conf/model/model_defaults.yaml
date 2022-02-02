@@ -2,6 +2,6 @@ max_seq_len: 512
 dropout: 0.1
 pretrained: False
 checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
-encoder_type: perceiver
+encoder_type: seq2seq
 blocks_model: 1
 steps_model: 8

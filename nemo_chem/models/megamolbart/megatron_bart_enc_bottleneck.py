@@ -42,12 +42,10 @@ class ParallelTransformerEncoderPerceiver(MegatronModule):
         self.init_hidden = nn.Parameter(nn.init.xavier_normal_(torch.empty(num_hidden_steps, d_model)))
 
         self.self_att_layers = nn.ModuleList([])
-        self.self_att_layers.extend([self.build_encoder_layer() for i in
-                                     range(self.num_blocks)])
+        self.self_att_layers.extend([self.build_encoder_layer() for i in range(self.num_blocks)])
 
         self.cross_att_layers = nn.ModuleList([])
-        self.cross_att_layers.extend([self.build_decoder_layer() for i in
-                                      range(self.num_blocks)])
+        self.cross_att_layers.extend([self.build_decoder_layer() for i in range(self.num_blocks)])
 
     def build_encoder_layer(self):
         layer = ParallelTransformerEncoder(
@@ -121,4 +119,3 @@ class ParallelTransformerEncoderPerceiver(MegatronModule):
             hidden += residual
 
         return hidden
-        

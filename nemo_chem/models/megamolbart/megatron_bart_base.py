@@ -51,10 +51,8 @@ class MegatronBARTConfig(ModelConfig):
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
     train_ds: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
-    validation_ds: Optional[Union[MoleculeCsvDatasetConfig,
-                                  None]] = MoleculeCsvDatasetConfig()
-    test_ds: Optional[Union[MoleculeCsvDatasetConfig, None]
-                      ] = MoleculeCsvDatasetConfig()
+    validation_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
+    test_ds: Optional[Union[MoleculeCsvDatasetConfig, None]] = MoleculeCsvDatasetConfig()
     optim: Optional[OptimConfig] = AdamOptimConfig()
 
 
@@ -118,8 +116,7 @@ class MegatronBART(MegatronModule):
         self.token_fc = tensor_parallel.RowParallelLinear(d_model, vocab_size,
                                                           input_is_parallel=False, init_method=init_method,
                                                           skip_bias_add=False)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='none',
-                                           ignore_index=pad_token_idx)
+        self.loss_fn = nn.CrossEntropyLoss(reduction='none', ignore_index=pad_token_idx)
         self.log_softmax = nn.LogSoftmax(dim=2)
         self._init_params(init_method)
         self.register_buffer('pos_emb', self._positional_embs())
@@ -150,8 +147,7 @@ class MegatronBART(MegatronModule):
                 init_method=init_method,
             )
         else:
-            raise TypeError(
-                f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
+            raise TypeError(f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
 
         return encoder
 
@@ -186,14 +182,14 @@ class MegatronBART(MegatronModule):
         tgt_mask = \
             self._generate_square_subsequent_mask(seq_len).to(decoder_embs.device)
 
-        memory = self.encoder(encoder_embs,
-                              src_key_padding_mask=encoder_pad_mask)
+        memory = self.encoder(encoder_embs, src_key_padding_mask=encoder_pad_mask)
 
         # update memory mask
         if self.encoder_type == "seq2seq":
             memory_pad_mask = encoder_pad_mask.clone()
         elif self.encoder_type == "perceiver":
-            memory_pad_mask = torch.zeros((memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
+            memory_pad_mask = torch.zeros(
+                (memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
         else:
             raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
@@ -224,8 +220,7 @@ class MegatronBART(MegatronModule):
         encoder_input = batch['encoder_input']
         encoder_pad_mask = batch['encoder_pad_mask'].transpose(0, 1)
         encoder_embs = self._construct_input(encoder_input)
-        model_output = self.encoder(encoder_embs,
-                                    src_key_padding_mask=encoder_pad_mask)
+        model_output = self.encoder(encoder_embs, src_key_padding_mask=encoder_pad_mask)
         return model_output
 
     def decode(self, batch):
@@ -383,7 +378,8 @@ class MegatronBART(MegatronModule):
             if self.encoder_type == "seq2seq":
                 mem_mask = enc_mask.clone()
             elif self.encoder_type == "perceiver":
-                mem_mask = torch.zeros((memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
+                mem_mask = torch.zeros(
+                    (memory.shape[0:2]), dtype=enc_mask.dtype, device=enc_mask.device).t()
             else:
                 raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
@@ -396,8 +392,8 @@ class MegatronBART(MegatronModule):
                     self.sampler.greedy_decode(decode_fn, batch_size, device=memory.device)
             elif sampling_alg == 'beam':
                 (mol_strs, log_lhs) = \
-                    self.sampler.beam_decode(decode_fn, batch_size,
-                        self.num_beams, device=memory.device)
+                    self.sampler.beam_decode(
+                        decode_fn, batch_size, self.num_beams, device=memory.device)
 
         # Must remember to unfreeze!
         # model.train()
@@ -427,8 +423,7 @@ class MegatronBART(MegatronModule):
         # FIXME: math.sqrt(self.d_model) is typically used in attention (??)
         # Scaling the embeddings like this is done in other transformer libraries
         token_embs = token_embs * math.sqrt(self.d_model)
-        positional_embs = self.pos_emb[:seq_len, :
-                                       ].unsqueeze(0).transpose(0, 1)
+        positional_embs = self.pos_emb[:seq_len, :].unsqueeze(0).transpose(0, 1)
         embs = token_embs + positional_embs
         embs = self.emb_dropout(embs)
         return embs
@@ -440,13 +435,10 @@ class MegatronBART(MegatronModule):
         which are created from sine and cosine waves of varying wavelength
         """
 
-        encs = torch.tensor([dim / self.d_model for dim in range(0,
-                                                                 self.d_model, 2)])
+        encs = torch.tensor([dim / self.d_model for dim in range(0, self.d_model, 2)])
         encs = 10000 ** encs
-        encs = [(torch.sin(pos / encs), torch.cos(pos / encs))
-                for pos in range(self.max_seq_len)]
-        encs = [torch.stack(enc, dim=1).flatten()[:self.d_model]
-                for enc in encs]
+        encs = [(torch.sin(pos / encs), torch.cos(pos / encs)) for pos in range(self.max_seq_len)]
+        encs = [torch.stack(enc, dim=1).flatten()[:self.d_model] for enc in encs]
         encs = torch.stack(encs)
         return encs
 
@@ -465,8 +457,7 @@ class MegatronBART(MegatronModule):
         """
 
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = mask.float().masked_fill(mask == 0, float('-inf'
-                                                         )).masked_fill(mask == 1, float(0.0))
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
 
     def _init_params(self, method):
