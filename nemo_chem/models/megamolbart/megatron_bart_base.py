@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from nemo.core.config.modelPT import OptimConfig, SchedConfig, ModelConfig
 
 from .megatron_bart_enc_dec import ParallelTransformerEncoder, ParallelTransformerDecoder
+from .megatron_bart_enc_bottleneck import ParallelTransformerEncoderPerceiver
 
 from nemo_chem.data import MoleculeCsvDatasetConfig
 from nemo_chem.decoder import DecodeSamplerConfig
@@ -21,8 +22,8 @@ from nemo_chem.optimizer import AdamOptimConfig
 
 
 # Model parameters
-DEFAULT_BLOCKS_MODEL = None # TODO update when perceiver added
-DEFAULT_STEPS_MODEL = None # TODO update when perceiver added
+DEFAULT_BLOCKS_MODEL = 1
+DEFAULT_STEPS_MODEL = 16  # Latent Size = STEPS_MODEL * D_MODEL
 DEFAULT_D_MODEL = 256
 DEFAULT_NUM_LAYERS = 4
 DEFAULT_NUM_HEADS = 8
@@ -115,17 +116,17 @@ class MegatronBART(MegatronModule):
         self.token_fc = tensor_parallel.RowParallelLinear(d_model, vocab_size,
                                                           input_is_parallel=False, init_method=init_method,
                                                           skip_bias_add=False)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='none',
-                                           ignore_index=pad_token_idx)
+        self.loss_fn = nn.CrossEntropyLoss(reduction='none', ignore_index=pad_token_idx)
         self.log_softmax = nn.LogSoftmax(dim=2)
         self._init_params(init_method)
         self.register_buffer('pos_emb', self._positional_embs())
 
     def _build_encoder(self, encoder_type, blocks_model, steps_model, num_layers, d_model, num_heads, dropout, init_method):
-        """ Builds teh encoder. Supported encoder_type: seq2seq, perceiver"""
+        """ Builds the encoder. Supported encoder_type: seq2seq, perceiver"""
         encoder_type = encoder_type.lower()
-        assert encoder_type in ['seq2seq'], AssertionError(f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq]")
-        
+        assert encoder_type in ['seq2seq', 'perceiver'], AssertionError(
+            f"Unknown encoder_type = {encoder_type}. encoder_type should be one of [seq2seq, perceiver]")
+
         if encoder_type == 'seq2seq':
             encoder = ParallelTransformerEncoder(
                 num_layers=num_layers,
@@ -135,8 +136,17 @@ class MegatronBART(MegatronModule):
                 bias=True,
                 init_method=init.xavier_uniform_,
             )
+        elif encoder_type == "perceiver":
+            encoder = ParallelTransformerEncoderPerceiver(
+                num_blocks=blocks_model,
+                num_layers=num_layers,
+                num_hidden_steps=steps_model,
+                d_model=d_model,
+                num_heads=num_heads,
+                bias=True,
+                init_method=init_method,
+            )
         else:
-            # TODO add perceiver encoder here
             raise TypeError(f'Unknown encoder_type = {encoder_type}. encoder_type should be in [seq2seq]')
 
         return encoder
@@ -172,12 +182,14 @@ class MegatronBART(MegatronModule):
         tgt_mask = \
             self._generate_square_subsequent_mask(seq_len).to(decoder_embs.device)
 
-        memory = self.encoder(encoder_embs,
-                              src_key_padding_mask=encoder_pad_mask)
+        memory = self.encoder(encoder_embs, src_key_padding_mask=encoder_pad_mask)
 
         # update memory mask
         if self.encoder_type == "seq2seq":
             memory_pad_mask = encoder_pad_mask.clone()
+        elif self.encoder_type == "perceiver":
+            memory_pad_mask = torch.zeros(
+                (memory.shape[0:2]), dtype=encoder_pad_mask.dtype, device=encoder_pad_mask.device).t()
         else:
             raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
@@ -208,8 +220,7 @@ class MegatronBART(MegatronModule):
         encoder_input = batch['encoder_input']
         encoder_pad_mask = batch['encoder_pad_mask'].transpose(0, 1)
         encoder_embs = self._construct_input(encoder_input)
-        model_output = self.encoder(encoder_embs,
-                                    src_key_padding_mask=encoder_pad_mask)
+        model_output = self.encoder(encoder_embs, src_key_padding_mask=encoder_pad_mask)
         return model_output
 
     def decode(self, batch):
@@ -366,6 +377,9 @@ class MegatronBART(MegatronModule):
             # update memory mask
             if self.encoder_type == "seq2seq":
                 mem_mask = enc_mask.clone()
+            elif self.encoder_type == "perceiver":
+                mem_mask = torch.zeros(
+                    (memory.shape[0:2]), dtype=enc_mask.dtype, device=enc_mask.device).t()
             else:
                 raise TypeError(f'Unknown encoder_type = {self.encoder_type}. encoder_type should be in [seq2seq]')
 
@@ -378,8 +392,8 @@ class MegatronBART(MegatronModule):
                     self.sampler.greedy_decode(decode_fn, batch_size, device=memory.device)
             elif sampling_alg == 'beam':
                 (mol_strs, log_lhs) = \
-                    self.sampler.beam_decode(decode_fn, batch_size,
-                        self.num_beams, device=memory.device)
+                    self.sampler.beam_decode(
+                        decode_fn, batch_size, self.num_beams, device=memory.device)
 
         # Must remember to unfreeze!
         # model.train()
@@ -409,8 +423,7 @@ class MegatronBART(MegatronModule):
         # FIXME: math.sqrt(self.d_model) is typically used in attention (??)
         # Scaling the embeddings like this is done in other transformer libraries
         token_embs = token_embs * math.sqrt(self.d_model)
-        positional_embs = self.pos_emb[:seq_len, :
-                                       ].unsqueeze(0).transpose(0, 1)
+        positional_embs = self.pos_emb[:seq_len, :].unsqueeze(0).transpose(0, 1)
         embs = token_embs + positional_embs
         embs = self.emb_dropout(embs)
         return embs
@@ -422,13 +435,10 @@ class MegatronBART(MegatronModule):
         which are created from sine and cosine waves of varying wavelength
         """
 
-        encs = torch.tensor([dim / self.d_model for dim in range(0,
-                                                                 self.d_model, 2)])
+        encs = torch.tensor([dim / self.d_model for dim in range(0, self.d_model, 2)])
         encs = 10000 ** encs
-        encs = [(torch.sin(pos / encs), torch.cos(pos / encs))
-                for pos in range(self.max_seq_len)]
-        encs = [torch.stack(enc, dim=1).flatten()[:self.d_model]
-                for enc in encs]
+        encs = [(torch.sin(pos / encs), torch.cos(pos / encs)) for pos in range(self.max_seq_len)]
+        encs = [torch.stack(enc, dim=1).flatten()[:self.d_model] for enc in encs]
         encs = torch.stack(encs)
         return encs
 
@@ -447,8 +457,7 @@ class MegatronBART(MegatronModule):
         """
 
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = mask.float().masked_fill(mask == 0, float('-inf'
-                                                         )).masked_fill(mask == 1, float(0.0))
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
 
     def _init_params(self, method):
