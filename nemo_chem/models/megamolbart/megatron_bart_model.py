@@ -52,8 +52,9 @@ __all__ = ["MegaMolBARTModel"]
 
 class MegaMolBARTModel(NLPModel):   
     def __init__(self, cfg: DictConfig, trainer: pl.Trainer = None) -> None:
+        optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams) # TODO check scaling of LR for global_batch_size
+
         super().__init__(cfg=cfg, trainer=trainer)
-        self.cfg = cfg
 
         # These handle irregular configuration settings upon restore from old checkpoints
         cfg_model = cfg.model if cfg.get('model', False) else cfg
@@ -102,7 +103,6 @@ class MegaMolBARTModel(NLPModel):
                                 cfg_model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        self.setup_optimization(cfg_model.optim)
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
@@ -182,6 +182,13 @@ class MegaMolBARTModel(NLPModel):
 
         collate_fn = self.test_collate.collate_fn # TODO a multiprocessing error is thrown if collate fn not defined in init
         self._test_dl = self._setup_dataloader_from_config(self._test_ds, cfg, collate_fn)
+
+    def configure_optimizers(self):
+        self.setup_optimization(self.cfg.model.optim)
+        if self._scheduler is None:
+            return self._optimizer
+        else:
+            return [self._optimizer], [self._scheduler]
 
     def _setup_dataset_from_config(self, cfg: DictConfig):
         # Setup config
