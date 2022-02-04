@@ -12,7 +12,7 @@ import nemo_chem
 VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
 
 # Defaults
-DEFAULT_MAX_SEQ_LEN = 512
+DEFAULT_SEQ_LEN = 512
 DEFAULT_CHEM_TOKEN_START = 272
 DEFAULT_BEGIN_TOKEN = "^"
 DEFAULT_END_TOKEN = "&"

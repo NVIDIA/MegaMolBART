@@ -5,22 +5,22 @@ from rdkit import Chem, RDLogger
 
 from dataclasses import dataclass
 
-from nemo_chem.tokenizer import DEFAULT_MAX_SEQ_LEN, MolEncTokenizer
+from nemo_chem.tokenizer import DEFAULT_SEQ_LEN, MolEncTokenizer
 
 @dataclass
 class DecodeSamplerConfig():
-    max_seq_len: int = DEFAULT_MAX_SEQ_LEN
+    seq_length: int = DEFAULT_SEQ_LEN
 
 class DecodeSampler:
     def __init__(
         self,
         tokenizer: MolEncTokenizer,
-        max_seq_len: int = DEFAULT_MAX_SEQ_LEN
+        seq_length: int = DEFAULT_SEQ_LEN
     ):
         self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
+        self.seq_length = seq_length
 
-        assert max_seq_len > 1, f"Max sequence must be at least 2, got {max_seq_len}"
+        assert seq_length > 1, f"Max sequence must be at least 2, got {seq_length}"
 
         self.begin_token_id = self.tokenizer.vocab[self.tokenizer.begin_token]
         self.pad_token_id = self.tokenizer.vocab[self.tokenizer.pad_token]
@@ -67,14 +67,14 @@ class DecodeSampler:
         """
 
         # Create tensors which will be reused
-        token_ids = [self.begin_token_id] + ([self.pad_token_id] * (self.max_seq_len - 1))
+        token_ids = [self.begin_token_id] + ([self.pad_token_id] * (self.seq_length - 1))
         token_ids = [token_ids] * batch_size
         token_ids = torch.tensor(token_ids, device=device).transpose(0, 1)
-        pad_mask = torch.zeros((self.max_seq_len, batch_size), device=device, dtype=torch.bool)
+        pad_mask = torch.zeros((self.seq_length, batch_size), device=device, dtype=torch.bool)
         log_lhs = torch.zeros((batch_size))
 
         # Iteratively apply the tokens to the model and build up the sequence
-        for i in range(1, self.max_seq_len):
+        for i in range(1, self.seq_length):
             token_ids_seq = token_ids[:i, :]
             pad_mask_seq = pad_mask[:i, :]
 
@@ -96,7 +96,7 @@ class DecodeSampler:
                 break
 
             # Ensure all sequences contain an end token
-            if i == self.max_seq_len - 1:
+            if i == self.seq_length - 1:
                 new_ids[~new_pad_mask] = self.end_token_id
 
             # Set the token to pad where required, update the token ids and update lls
@@ -129,10 +129,10 @@ class DecodeSampler:
         """
 
         # Create tensors which will be reused
-        token_ids = [self.begin_token_id] + ([self.pad_token_id] * (self.max_seq_len - 1))
+        token_ids = [self.begin_token_id] + ([self.pad_token_id] * (self.seq_length - 1))
         token_ids = [token_ids] * batch_size
         token_ids = torch.tensor(token_ids, device=device).transpose(0, 1)
-        pad_mask = torch.zeros((self.max_seq_len, batch_size), device=device, dtype=torch.bool)
+        pad_mask = torch.zeros((self.seq_length, batch_size), device=device, dtype=torch.bool)
 
         ts = token_ids[:1, :]
         ms = pad_mask[:1, :]
@@ -152,7 +152,7 @@ class DecodeSampler:
             token_ids_list[beam_idx][1, :] = ids
             pad_mask_list[beam_idx][1, :] = 0
 
-        for i in range(2, self.max_seq_len):
+        for i in range(2, self.seq_length):
             complete = self._update_beams_(i, decode_fn, token_ids_list, pad_mask_list, lls_list)
             if complete:
                 break
@@ -226,7 +226,7 @@ class DecodeSampler:
             beam_complete.append(new_pad_mask.sum().item() == new_pad_mask.numel())
 
             # Ensure all sequences contain an end token
-            if i == self.max_seq_len - 1:
+            if i == self.seq_length - 1:
                 new_ids[~new_pad_mask] = self.end_token_id
 
             # Set the tokens to pad if an end token as already been produced

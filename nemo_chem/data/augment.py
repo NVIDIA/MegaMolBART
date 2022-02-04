@@ -12,11 +12,11 @@ __all__ = ['MoleculeEnumeration']
 
 
 class MoleculeEnumeration:
-    def __init__(self, tokenizer: MolEncTokenizer, max_seq_len: int,
+    def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment, canonicalize_input, **kwargs):
         self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
+        self.seq_length = seq_length
         self.encoder_augment = encoder_augment
         self.encoder_mask = encoder_mask
         self.decoder_augment = decoder_augment
@@ -66,9 +66,9 @@ class MoleculeEnumeration:
         """
 
         seq_len = max([len(ts) for ts in tokens])
-        if seq_len > self.max_seq_len:
-            tokens_short = [ts[:self.max_seq_len] for ts in tokens]
-            mask_short = [ms[:self.max_seq_len] for ms in mask]
+        if seq_len > self.seq_length:
+            tokens_short = [ts[:self.seq_length] for ts in tokens]
+            mask_short = [ms[:self.seq_length] for ms in mask]
             return (tokens_short, mask_short)
         return (tokens, mask)
 

@@ -30,30 +30,30 @@ def test_sort_beams():
 
 @patch(tokenizer)
 def test_greedy_calls_decode(tokenizer):
-    max_seq_len = 3
+    seq_length = 3
     batch_size = 4
     num_tokens = 50
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
 
-    decode_fn = MagicMock(side_effect=[torch.rand((i+1, batch_size, num_tokens)) for i in range(max_seq_len)])
+    decode_fn = MagicMock(side_effect=[torch.rand((i+1, batch_size, num_tokens)) for i in range(seq_length)])
 
     mols, log_lhs = sampler.greedy_decode(decode_fn, batch_size)
 
-    expected_calls = max_seq_len - 1
+    expected_calls = seq_length - 1
     assert len(decode_fn.call_args_list) == expected_calls
 
 
 @patch(tokenizer)
 def test_greedy_chooses_max(tokenizer):
-    max_seq_len = 3
+    seq_length = 3
     batch_size = 1
     num_tokens = 5
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -83,11 +83,11 @@ def test_greedy_chooses_max(tokenizer):
 
 @patch(tokenizer)
 def test_greedy_stops_at_end_token(tokenizer):
-    max_seq_len = 3
+    seq_length = 3
     batch_size = 1
     num_tokens = 5
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -108,11 +108,11 @@ def test_greedy_stops_at_end_token(tokenizer):
 
 @patch(tokenizer)
 def test_greedy_lls(tokenizer):
-    max_seq_len = 3
+    seq_length = 3
     batch_size = 1
     num_tokens = 5
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -133,12 +133,12 @@ def test_greedy_lls(tokenizer):
 
 @patch(tokenizer)
 def test_beam_calls_decode(tokenizer):
-    max_seq_len = 3
+    seq_length = 3
     batch_size = 4
     num_beams = 5
     num_tokens = 50
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -149,18 +149,18 @@ def test_beam_calls_decode(tokenizer):
 
     mols, log_lhs = sampler.beam_decode(decode_fn, batch_size, k=5)
 
-    expected_calls = ((max_seq_len - 2) * num_beams) + 1
+    expected_calls = ((seq_length - 2) * num_beams) + 1
     assert len(decode_fn.call_args_list) == expected_calls
 
 
 @patch(tokenizer)
 def test_beam_chooses_correct_tokens(tokenizer):
-    max_seq_len = 4
+    seq_length = 4
     batch_size = 1
     num_tokens = 5
     num_beams = 2
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -191,12 +191,12 @@ def test_beam_chooses_correct_tokens(tokenizer):
 
 @patch(tokenizer)
 def test_beam_stops_at_end_token(tokenizer):
-    max_seq_len = 4
+    seq_length = 4
     batch_size = 1
     num_tokens = 5
     num_beams = 2
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0
@@ -227,12 +227,12 @@ def test_beam_stops_at_end_token(tokenizer):
 
 @patch(tokenizer)
 def test_beam_lls(tokenizer):
-    max_seq_len = 4
+    seq_length = 4
     batch_size = 1
     num_tokens = 5
     num_beams = 2
 
-    sampler = DecodeSampler(tokenizer, max_seq_len)
+    sampler = DecodeSampler(tokenizer, seq_length)
     sampler.begin_token_id = 1
     sampler.end_token_id = 2
     sampler.pad_token_id = 0

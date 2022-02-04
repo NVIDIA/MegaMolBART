@@ -84,7 +84,7 @@ class MegaMolBARTModel(NLPModel):
         pad_token_idx = self.tokenizer.vocab[self.tokenizer.pad_token]        
         self._vocab_size = len(self.tokenizer)
         self._model_name = cfg_model.name
-        self.max_seq_len = cfg_model.max_seq_len
+        self.seq_length = cfg_model.seq_length
         self.val_sampling_alg = 'greedy'
         self.d_model = cfg_model.d_model
         
@@ -99,7 +99,7 @@ class MegaMolBARTModel(NLPModel):
                                 cfg_model.num_layers,
                                 cfg_model.num_heads,
                                 cfg_model.d_feedforward,
-                                cfg_model.max_seq_len,
+                                cfg_model.seq_length,
                                 cfg_model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -108,9 +108,9 @@ class MegaMolBARTModel(NLPModel):
         self.test_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)
 
         # TODO collate functions are not currently threadsafe and have to be declared in itit
-        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.train_ds)
-        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.validation_ds)
-        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, max_seq_len=self.max_seq_len, **cfg_model.test_ds)
+        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self.seq_length, **cfg_model.train_ds)
+        self.val_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self.seq_length, **cfg_model.validation_ds)
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self.seq_length, **cfg_model.test_ds)
 
     @staticmethod
     def setup_tokenizer(cfg: DictConfig) -> MolEncTokenizer:
@@ -121,7 +121,7 @@ class MegaMolBARTModel(NLPModel):
 
     @staticmethod
     def setup_sampler(tokenizer: MolEncTokenizer, cfg: DictConfig) -> DecodeSampler:
-        return DecodeSampler(tokenizer, cfg.max_seq_len)
+        return DecodeSampler(tokenizer, cfg.seq_length)
 
     def compute_consumed_samples(self, global_step, micro_batch_size):
         app_state = AppState()
