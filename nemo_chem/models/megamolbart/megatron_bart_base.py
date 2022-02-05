@@ -46,7 +46,7 @@ class MegatronBARTConfig(ModelConfig):
     num_layers: int = DEFAULT_NUM_LAYERS
     num_heads: int = DEFAULT_NUM_HEADS
     d_feedforward: int = DEFAULT_D_FEEDFORWARD
-    seq_length: int = DEFAULT_SEQ_LEN
+    seq_len: int = DEFAULT_SEQ_LEN
     dropout: float = DEFAULT_DROPOUT
     pretrained: Optional[bool] = False
     checkpoint_file: Optional[str] = None
@@ -70,7 +70,7 @@ class MegatronBART(MegatronModule):
         num_layers,
         num_heads,
         d_feedforward,
-        seq_length,
+        seq_len,
         dropout
     ):
 
@@ -88,7 +88,7 @@ class MegatronBART(MegatronModule):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.d_feedforward = d_feedforward
-        self.seq_length = seq_length
+        self.seq_len = seq_len
         self.dropout = dropout
         self.emb_dropout = nn.Dropout(p=dropout)
         init_method = init.xavier_uniform_
@@ -431,13 +431,13 @@ class MegatronBART(MegatronModule):
     def _positional_embs(self):
         """ Produces a tensor of positional embeddings for the model
 
-        Returns a tensor of shape (self.seq_length, self.d_model) filled with positional embeddings,
+        Returns a tensor of shape (self.seq_len, self.d_model) filled with positional embeddings,
         which are created from sine and cosine waves of varying wavelength
         """
 
         encs = torch.tensor([dim / self.d_model for dim in range(0, self.d_model, 2)])
         encs = 10000 ** encs
-        encs = [(torch.sin(pos / encs), torch.cos(pos / encs)) for pos in range(self.seq_length)]
+        encs = [(torch.sin(pos / encs), torch.cos(pos / encs)) for pos in range(self.seq_len)]
         encs = [torch.stack(enc, dim=1).flatten()[:self.d_model] for enc in encs]
         encs = torch.stack(encs)
         return encs

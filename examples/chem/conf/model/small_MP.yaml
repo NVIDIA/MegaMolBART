@@ -1,0 +1,9 @@
+defaults:
+  - model_defaults_MP
+  
+name: small
+hidden_size: 512 # the hidden_size
+ffn_hidden_size: 2048 # Transformer FFN hidden size. Usually 4 * hidden_size.
+num_attention_heads: 8
+num_layers: 6
+tensor_model_parallel_size: 1  # TODO ADD BACK
