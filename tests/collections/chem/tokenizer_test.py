@@ -3,8 +3,7 @@
 import pytest
 import random
 import torch
-from nemo.collections.chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromSmilesConfig
-# from nemo.collections.chem.tokenizer.tokenizer import DEFAULT_REGEX
+from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromSmilesConfig
 
 # Use dummy SMILES strings
 smiles_data = [
