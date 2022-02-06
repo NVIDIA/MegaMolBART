@@ -2,9 +2,9 @@
 
 import torch
 from unittest.mock import patch, MagicMock, call
-from nemo.collections.chem.decoder import DecodeSampler
+from nemo_chem.decoder import DecodeSampler
 
-tokenizer = "nemo.collections.chem.tokenizer.MolEncTokenizer"
+tokenizer = "nemo_chem.tokenizer.MolEncTokenizer"
 
 def test_transpose_list():
     l = [[1, 2], [3, 4], [5, 6]]
