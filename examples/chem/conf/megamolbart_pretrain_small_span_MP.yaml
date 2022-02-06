@@ -45,11 +45,10 @@ tokenizer:
   mask_prob: 0.1
 
 model:
-  name: small_span_aug
-
+  name: pretrain_small_span
   train_ds:
-    encoder_mask: true # task = mask(span)_aug
-    decoder_augment: true
+    encoder_mask: true # task = mask(span)
+    decoder_augment: false
     filepath: ${dataset_path}/train/x[000..146].csv
     metadata_path: ${dataset_path}/train/metadata.txt
     micro_batch_size: 256

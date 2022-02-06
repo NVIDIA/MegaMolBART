@@ -3,7 +3,7 @@ defaults:
   - model/dataset@model.train_ds: train_ds_defaults
   - model/dataset@model.validation_ds: validation_ds_defaults
   - exp_manager: log_all
-  - model: small_MP
+  - model: xsmall_MP
   - model/optim@model.optim: adam
   - model/optim/sched@model.optim.sched: transformer
 
@@ -31,28 +31,27 @@ exp_manager:
 
 trainer:
   gpus: 8
-  num_nodes: 4
+  num_nodes: 1
   min_epochs: 10
   max_epochs: 10
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
-  val_check_interval: 2000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
+  val_check_interval: 0.5 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
   # auto_scale_batch_size: None/binsearch
 
 tokenizer:
   mask_scheme: span
-  mask_prob: 0.1
+  mask_prob: 0.15
 
 model:
-  name: small_span_aug
-
+  name: pretrain_xsmall_span_aug
   train_ds:
     encoder_mask: true # task = mask(span)_aug
     decoder_augment: true
     filepath: ${dataset_path}/train/x[000..146].csv
     metadata_path: ${dataset_path}/train/metadata.txt
-    micro_batch_size: 256
+    micro_batch_size: 32
     num_workers: 8
 
   validation_ds:
@@ -60,7 +59,7 @@ model:
     decoder_augment: false
     filepath: ${dataset_path}/val/x[000..146].csv
     metadata_path: ${dataset_path}/val/metadata.txt
-    micro_batch_size: 512
+    micro_batch_size: 32
     num_workers: 8
 
   test_ds:
@@ -68,5 +67,5 @@ model:
     decoder_augment: false
     filepath: ${dataset_path}/test/x[000..146].csv
     metadata_path: ${dataset_path}/test/metadata.txt
-    micro_batch_size: 512
+    micro_batch_size: 32
     num_workers: 8
