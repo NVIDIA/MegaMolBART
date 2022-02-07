@@ -471,3 +471,46 @@ class MolEncTokenizer:
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
         masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]
         return padded, masks
+
+    # NeMo compatbility
+    @property
+    def vocab_size(self):
+        return len(self.vocab)
+
+    def tokens_to_ids(self, token_data):
+        return self.convert_tokens_to_ids(token_data)
+
+    def ids_to_tokens(self, ids):
+        return self.convert_ids_to_tokens(ids)
+
+    @property
+    def pad_id(self):
+        return self.tokens_to_ids([self.pad_token])[0]
+
+    @property
+    def bos_token(self):
+        return self.begin_token
+
+    @property
+    def bos_id(self):
+        return self.tokens_to_ids([self.bos_token])[0]
+
+    @property
+    def eos_token(self):
+        return self.end_token
+
+    @property
+    def eos_id(self):
+        return self.tokens_to_ids([self.eos_token])[0]
+
+    @property
+    def sep_id(self):
+        return self.tokens_to_ids([self.sep_token])[0]
+
+    @property
+    def mask_id(self):
+        return self.tokens_to_ids([self.mask_token])[0]
+
+    # @property
+    # def cls_id(self):
+    #     return self.tokens_to_ids([self.cls_token])[0]
