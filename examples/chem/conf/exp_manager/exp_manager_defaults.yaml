@@ -4,3 +4,4 @@ resume_if_exists: True
 resume_past_end: True
 wandb_logger_kwargs:
   offline: False
+  
