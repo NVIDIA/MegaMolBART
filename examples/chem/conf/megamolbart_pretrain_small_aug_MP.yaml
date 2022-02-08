@@ -69,3 +69,4 @@ model:
     metadata_path: ${dataset_path}/test/metadata.txt
     micro_batch_size: 512
     num_workers: 8
+ 
