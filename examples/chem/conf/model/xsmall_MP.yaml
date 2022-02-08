@@ -1,0 +1,10 @@
+defaults:
+  - model_defaults_MP
+  
+name: xsmall
+hidden_size: 256 # the hidden_size
+ffn_hidden_size: 1024 # Transformer FFN hidden size. Usually 4 * hidden_size.
+num_attention_heads: 8
+num_layers: 4
+tensor_model_parallel_size: 1
+ 

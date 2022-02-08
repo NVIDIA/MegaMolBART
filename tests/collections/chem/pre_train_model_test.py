@@ -51,7 +51,7 @@ def tokenizer():
 
 @pytest.fixture
 def sampler(args, tokenizer):
-    _sampler = DecodeSampler(tokenizer, args.max_seq_len)
+    _sampler = DecodeSampler(tokenizer, args.seq_len)
     return _sampler
 
 @pytest.fixture
@@ -68,14 +68,14 @@ def model(args, tokenizer, sampler):
                           args.num_layers,
                           args.num_heads,
                           args.d_feedforward,
-                          args.max_seq_len,
+                          args.seq_len,
                           dropout=0.1)
     return _model.cuda()
 
 def test_pos_emb_shape(model, sampler, tokenizer, args):
     pos_embs = model._positional_embs()
 
-    assert pos_embs.shape[0] == args.max_seq_len
+    assert pos_embs.shape[0] == args.seq_len
     assert pos_embs.shape[1] == model.d_model  # hidden size
 
 def test_construct_input_shape(model, sampler, tokenizer, args):

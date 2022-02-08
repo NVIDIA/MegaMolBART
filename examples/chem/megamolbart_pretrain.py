@@ -41,6 +41,7 @@ def configure_trainer_plugins(cfg: DictConfig) -> DictConfig:
         trainer_cfg['precision'] = int(trainer_cfg['precision'])
 
     # Configure plugins
+    trainer_cfg.pop('strategy', None) # Must be null for DDDPlugin override
     # plugins = [NLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])]
     plugins = [MegaMolBARTNLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])] # TODO revert to NLPDDPPlugin when find_unused_parameters bug is solved
     if cfg.trainer.precision == 16:
