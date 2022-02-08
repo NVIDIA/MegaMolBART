@@ -5,3 +5,4 @@ checkpoint_file: null # /path/to/megatron/checkpoint/model_optim_rng.pt
 encoder_type: seq2seq
 blocks_model: 1
 steps_model: 8
+ 
