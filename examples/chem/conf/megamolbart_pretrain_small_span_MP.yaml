@@ -33,6 +33,7 @@ trainer:
   gpus: 8
   num_nodes: 4
   min_epochs: 10
+  
   max_epochs: 10
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
