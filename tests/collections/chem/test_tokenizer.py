@@ -43,6 +43,7 @@ def test_create_vocab():
 
     vocab = dict(sorted(tokenizer.vocab.items(), key=lambda x: x[1]))
     assert expected == vocab
+    assert len(vocab) ==  tokenizer.vocab_size == len(tokenizer)
 
 
 def test_pad_seqs_padding():
@@ -105,10 +106,25 @@ def test_mask_tokens_span():
 
 def test_convert_tokens_to_ids():
     tokenizer = MolEncTokenizer.from_smiles(smiles_data[2:3], cfg.regex)
-    ids = tokenizer.convert_tokens_to_ids(example_tokens)
     expected_ids = [[2, 6, 7, 8, 9, 10, 1, 3], [2, 6, 6, 5, 6, 11, 3]]
 
+    ids = tokenizer.convert_tokens_to_ids(example_tokens)
     assert expected_ids == ids
+
+    ids = tokenizer.tokens_to_ids(example_tokens)
+    assert expected_ids == ids
+
+
+def test_convert_ids_to_tokens():
+    tokenizer = MolEncTokenizer.from_smiles(smiles_data[2:3], cfg.regex)
+    ids = [[2, 6, 7, 8, 9, 10, 1, 3], [2, 6, 6, 5, 6, 11, 3]]
+    expected_tokens = [['^', 'C', '(', '=', 'O', ')', '?', '&'], ['^', 'C', 'C', '<SEP>', 'C', 'Br', '&']]
+
+    tokens = tokenizer.convert_ids_to_tokens(ids)
+    assert expected_tokens == tokens
+
+    tokens = tokenizer.ids_to_tokens(ids)
+    assert expected_tokens == tokens
 
 
 def test_tokenize_one_sentence():
