@@ -1,6 +1,0 @@
-name: TransformerLR
-lr: ${model.optim.lr}
-warm_up_steps: None
-d_model: ${model.d_model}
-last_epoch: -1
-micro_batch_size: ${model.train_ds.micro_batch_size}

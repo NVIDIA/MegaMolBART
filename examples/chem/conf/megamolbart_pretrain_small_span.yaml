@@ -5,7 +5,7 @@ defaults:
   - exp_manager: log_all
   - model: small
   - model/optim@model.optim: adam
-  - model/optim/sched@model.optim.sched: transformer
+  - model/optim/sched@model.optim.sched: noam
 
 name: &name MegaMolBART
 do_training: true # set to false if data preprocessing steps must be completed
