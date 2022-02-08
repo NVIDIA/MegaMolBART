@@ -18,7 +18,7 @@ from .megatron_bart_enc_bottleneck import ParallelTransformerEncoderPerceiver
 
 from nemo_chem.data import MoleculeCsvDatasetConfig
 from nemo_chem.decoder import DecodeSamplerConfig
-from nemo_chem.optimizer import AdamOptimConfig
+from nemo_chem.optimizer import AdamOptimConfig # TODO Change to nemo.core.config.optimizers.AdamParams if this code remains
 
 
 # Model parameters
