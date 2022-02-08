@@ -35,6 +35,8 @@ from nemo.collections.nlp.modules.common.megatron.megatron_init import (
     set_jit_fusion_options,
 )
 
+from nemo.core.optim.lr_scheduler import NoamAnnealing
+from nemo.core.config.schedulers import NoamAnnealingParams
 from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
     MegatronPretrainingRandomSampler,
     MegatronPretrainingSampler,
@@ -43,7 +45,6 @@ from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
 from nemo_chem.data import MoleculeDataset, MoleculeIterableDataset, ConcatIterableDataset, MoleculeEnumeration, expand_dataset_paths
 from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
 from nemo_chem.decoder import DecodeSampler
-from nemo_chem.optimizer import TransformerLR, TransformerLRParams
 from .megatron_bart_base import MegatronBART
 
 __all__ = ["MegaMolBARTModel"]
@@ -101,7 +102,6 @@ class MegaMolBARTModel(NLPModel):
                                 cfg_model.dropout)
 
         self.num_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        optim.lr_scheduler.register_scheduler('TransformerLR', TransformerLR, TransformerLRParams) # TODO scale LR for global_batch_size
         self.setup_optimization(cfg_model.optim)
 
         self.val_loss = GlobalAverageLossMetric(dist_sync_on_step=False, take_avg_loss=True)

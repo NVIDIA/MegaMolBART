@@ -1,0 +1,7 @@
+name: NoamAnnealing
+d_model: ${model.d_model}
+warmup_steps: null
+warmup_ratio: 0.008
+max_steps: 1000000
+min_lr: 1e-5
+ 
