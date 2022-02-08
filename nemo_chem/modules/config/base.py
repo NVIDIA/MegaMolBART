@@ -84,3 +84,4 @@ class MegatronBARTModuleConfig(Config):
     # train_ds: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
     # validation_ds: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
     # test_ds: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
+     
