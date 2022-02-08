@@ -8,7 +8,7 @@ checkpoint_callback_params:
   monitor: 'val_molecular_accuracy'
   always_save_nemo: True # nemo style checkpoints, which contain pytorch lightning checkpoints inside, not implemented for model parallel
   save_last: True
-  save_top_k: 10
+  save_top_k: 5
   mode: max
   filename: '${model.name}--{val_molecular_accuracy:.2f}-{step}-{consumed_samples}'
   model_parallel_size: ${model.tensor_model_parallel_size}
