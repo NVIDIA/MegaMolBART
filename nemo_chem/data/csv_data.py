@@ -26,7 +26,6 @@ class MoleculeCsvDatasetConfig():
     decoder_augment: bool = False
     canonicalize_input: bool = False
     metadata_path: Optional[str] = None
-    num_samples: Optional[int] = None
     drop_last: bool = False
     shuffle: bool = False
     num_workers: Optional[int] = None

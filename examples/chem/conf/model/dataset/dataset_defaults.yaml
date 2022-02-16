@@ -2,3 +2,4 @@ pin_memory: False
 shuffle: False
 drop_last: False
 use_iterable: False
+dataloader_type: 'single'

@@ -1,11 +1,15 @@
 from typing import List
 import re
 import braceexpand
-import numpy as np
-import torch.distributed as dist
-from nemo.utils import logging
+from omegaconf import DictConfig, open_dict
+import torch.utils.data as pt_data
+from pytorch_lightning.trainer.trainer import Trainer
 
-__all__ = ['expand_dataset_paths']
+from nemo.utils import logging
+from .csv_data import MoleculeDataset, MoleculeIterableDataset
+from .concat import ConcatIterableDataset
+
+__all__ = ['expand_dataset_paths', 'build_train_valid_test_datasets']
 
 
 def expand_dataset_paths(filepath: str) -> List[str]:
@@ -17,27 +21,59 @@ def expand_dataset_paths(filepath: str) -> List[str]:
     return dataset_paths
 
 
-# DEPRECATED
-def shard_dataset_paths_for_ddp(self, dataset_paths):
-    """Shard dataset paths for ddp"""
-    dataset_paths = np.array(dataset_paths)
-    num_dataset_paths = len(dataset_paths)
+def _build_train_valid_test_datasets(
+    cfg: DictConfig, 
+    trainer: Trainer
+):
+    # Setup config
+    cfg = cfg.copy()
 
-    # Split for data parallel
-    if dist.is_initialized():
-        world_size = dist.get_world_size()
-        if world_size > num_dataset_paths:
-            logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
-        rank = dist.get_rank()
-        logging.info(f'Torch distributed is initialized with world size {world_size} and rank {rank}.')
+    with open_dict(cfg):
+        filepath = cfg.pop('filepath', None)
+        use_iterable = cfg.pop('use_iterable', False)
+
+    # Get datasets and load data
+    dataset_paths = expand_dataset_paths(filepath)
+    logging.info(f'Loading data from {dataset_paths}')
+    dataset_list = []
+    for path in dataset_paths:
+        if use_iterable:
+            data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=trainer)
+        else:
+            data = MoleculeDataset(filepath=path, cfg=cfg, trainer=trainer)
+        dataset_list.append(data)
+
+        with open_dict(cfg):
+            cfg['num_samples'] -= len(data)
+
+        if cfg['num_samples'] < 1:
+            break
+
+    if len(dataset_list) == 1:
+        dataset = dataset_list[0]
     else:
-        world_size = 1
-        rank = 0
-        logging.info(f'Torch distributed is not initialized.')
+        dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
+    return dataset
 
-    num_chunks = min(num_dataset_paths, world_size)
-    split_dataset_paths = np.array_split(dataset_paths, num_chunks)
-    index = rank % num_chunks
-    logging.info(f'Selected dataset paths {split_dataset_paths} and index {index}')
-    dataset_paths = split_dataset_paths[index]          
-    return dataset_paths
+
+def build_train_valid_test_datasets(
+    cfg: DictConfig,
+    trainer: Trainer
+):
+    # Build individual datasets.
+    train_cfg = cfg.get('train_ds')
+    train_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
+
+    valid_cfg = cfg.get('validation_ds', False)
+    if valid_cfg:
+        valid_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
+    else:
+        valid_dataset = None
+
+    test_cfg = cfg.get('test_ds', False)
+    if test_cfg:
+        test_dataset = _build_train_valid_test_datasets(test_cfg, trainer)
+    else:
+        test_dataset = None
+
+    return (train_dataset, valid_dataset, test_dataset)

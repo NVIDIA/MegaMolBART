@@ -1,1 +1,1 @@
-from .megamolbart_lm_encoder_decoder_model import *
+from .megamolbart_model import *
