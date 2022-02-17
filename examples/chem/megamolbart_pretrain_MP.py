@@ -43,6 +43,7 @@ def recursive_make_dirs(directory):
         directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
+
 def update_dataset_config(cfg):
     # TODO find a more elegant way to enforce this
     with open_dict(cfg):
@@ -104,14 +105,12 @@ def main(cfg) -> None:
     with open_dict(cfg):
         cfg.model.precision = cfg.trainer.precision
 
-    model = MegaMolBARTModel(cfg, trainer) # TODO replace with higher up class
+    model = MegaMolBARTModel(cfg, trainer)
 
     logging.info("************** Model parameters and their sizes ***********")
     for name, param in model.named_parameters():
         logging.info(f'{name}: {param.size()}')
     logging.info("***********************************************************")
-
-    model.setup()
 
     if cfg.do_training:
         logging.info("************** Starting Training ***********")

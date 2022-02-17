@@ -171,7 +171,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                 data_parallel_size=parallel_state.get_data_parallel_world_size(),
             )
         else:
-            raise Exception('{} dataloader type is not supported.'.format(cfg.dataloader_type))
+            raise Exception(f'Dataloader type {cfg.dataloader_type} is not supported.')
 
         # Torch dataloader.
         return torch.utils.data.DataLoader(
