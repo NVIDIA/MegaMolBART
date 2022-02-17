@@ -48,18 +48,18 @@ def update_dataset_config(cfg):
     # TODO find a more elegant way to enforce this
     with open_dict(cfg):
         train_cfg = asdict(MoleculeCsvDatasetConfig())
-        train_cfg.update(cfg.model['train_ds'])
-        cfg.model['train_ds'] = train_cfg
-        
-        if cfg.model.get('validation_ds', False):
-            val_cfg = asdict(MoleculeCsvDatasetConfig())
-            val_cfg.update(cfg.model['validation_ds'])
-            cfg.model['validation_ds'] = val_cfg
+        train_cfg.update(cfg.model['train_dataset'])
+        cfg.model['train_dataset'] = train_cfg
 
-        if cfg.model.get('test_ds', False):
+        if cfg.model.get('validation_dataset', False):
+            val_cfg = asdict(MoleculeCsvDatasetConfig())
+            val_cfg.update(cfg.model['validation_dataset'])
+            cfg.model['validation_dataset'] = val_cfg
+
+        if cfg.model.get('test_dataset', False):
             test_cfg = asdict(MoleculeCsvDatasetConfig())
-            test_cfg.update(cfg.model['test_ds'])
-            cfg.model['test_ds'] = test_cfg
+            test_cfg.update(cfg.model['test_dataset'])
+            cfg.model['test_dataset'] = test_cfg
 
     return cfg
 

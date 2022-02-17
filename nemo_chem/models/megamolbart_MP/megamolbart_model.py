@@ -57,15 +57,15 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         )
 
     def calculate_train_val_test_num_samples(self, tensor_model_parallel_size: int):
-        train_global_batch_size = self.trainer.world_size * self._cfg.train_ds.micro_batch_size / tensor_model_parallel_size
+        train_global_batch_size = self.trainer.world_size * self._cfg.train_dataset.micro_batch_size / tensor_model_parallel_size
 
-        if self._cfg.get('validation_ds'):
-            valid_global_batch_size = self.trainer.world_size * self._cfg.validation_ds.micro_batch_size / tensor_model_parallel_size
+        if self._cfg.get('validation_dataset'):
+            valid_global_batch_size = self.trainer.world_size * self._cfg.validation_dataset.micro_batch_size / tensor_model_parallel_size
         else:
             valid_global_batch_size = 0
 
-        if self._cfg.get('test_ds'):
-            test_global_batch_size = self.trainer.world_size * self._cfg.test_ds.micro_batch_size / tensor_model_parallel_size
+        if self._cfg.get('test_dataset'):
+            test_global_batch_size = self.trainer.world_size * self._cfg.test_dataset.micro_batch_size / tensor_model_parallel_size
         else:
             test_global_batch_size = 0
 
@@ -86,16 +86,16 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         tensor_model_parallel_size = self._cfg.get('tensor_model_parallel_size', 1)
         train_valid_test_num_samples = self.calculate_train_val_test_num_samples(tensor_model_parallel_size)
         with open_dict(cfg):
-            cfg.train_ds['num_samples'] = train_valid_test_num_samples[0]
-            cfg.train_ds['tensor_model_parallel_size'] = tensor_model_parallel_size
+            cfg.train_dataset['num_samples'] = train_valid_test_num_samples[0]
+            cfg.train_dataset['tensor_model_parallel_size'] = tensor_model_parallel_size
 
-            if cfg.validation_ds:
-                cfg.validation_ds['num_samples'] = train_valid_test_num_samples[1]
-                cfg.validation_ds['tensor_model_parallel_size'] = tensor_model_parallel_size
+            if cfg.validation_dataset:
+                cfg.validation_dataset['num_samples'] = train_valid_test_num_samples[1]
+                cfg.validation_dataset['tensor_model_parallel_size'] = tensor_model_parallel_size
 
-            if cfg.test_ds:
-                cfg.test_ds['num_samples'] = train_valid_test_num_samples[2]
-                cfg.validation_ds['tensor_model_parallel_size'] = tensor_model_parallel_size
+            if cfg.test_dataset:
+                cfg.test_dataset['num_samples'] = train_valid_test_num_samples[2]
+                cfg.validation_dataset['tensor_model_parallel_size'] = tensor_model_parallel_size
 
         self._train_ds, self._validation_ds, self._test_ds = build_train_valid_test_datasets(
             cfg,
@@ -114,13 +114,13 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         if self._train_dl is not None and self._validation_dl is not None:
             return
         self.build_train_valid_test_datasets()
-        self.setup_training_data(self._cfg.train_ds)
+        self.setup_training_data(self._cfg.train_dataset)
 
-        if self._cfg.get('validation_ds', False):
-            self.setup_validation_data(self._cfg.validation_ds)
+        if self._cfg.get('validation_dataset', False):
+            self.setup_validation_data(self._cfg.validation_dataset)
 
-        if self._cfg.get('test_ds', False):
-            self.setup_test_data(self._cfg.test_ds)
+        if self._cfg.get('test_dataset', False):
+            self.setup_test_data(self._cfg.test_dataset)
 
     def setup_training_data(self, cfg):
         # TODO send to base class

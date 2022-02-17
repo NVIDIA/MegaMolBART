@@ -1,7 +1,7 @@
 defaults:
   - trainer: trainer_defaults
-  - model/dataset@model.train_ds: train_ds_defaults
-  - model/dataset@model.validation_ds: validation_ds_defaults
+  - model/dataset@model.train_dataset: train_ds_defaults
+  - model/dataset@model.validation_dataset: validation_ds_defaults
   - exp_manager: log_all
   - model: small_MP
   - model/optim@model.optim: adam
@@ -9,7 +9,7 @@ defaults:
 
 name: &name MegaMolBART
 do_training: true # set to false if data preprocessing steps must be completed
-do_testing: false # set to true to run evaluation on test data after training, requires test_ds section
+do_testing: false # set to true to run evaluation on test data after training, requires test_dataset section
 seed: 42
 dataset_path: /data/zinc_csv/
 restore_from_path: null # used when starting from a .nemo file
@@ -46,7 +46,7 @@ tokenizer:
 
 model:
   name: pretrain_small_aug
-  train_ds:
+  train_dataset:
     encoder_mask: false # task = aug
     decoder_augment: true
     filepath: ${dataset_path}/train/x[000..146].csv
@@ -54,7 +54,7 @@ model:
     micro_batch_size: 256
     num_workers: 8
 
-  validation_ds:
+  validation_dataset:
     encoder_mask: false # not done in validation set
     decoder_augment: false
     filepath: ${dataset_path}/val/x[000..146].csv
@@ -62,7 +62,7 @@ model:
     micro_batch_size: 512
     num_workers: 8
 
-  test_ds:
+  test_dataset:
     encoder_mask: false # not done in test set
     decoder_augment: false
     filepath: ${dataset_path}/test/x[000..146].csv

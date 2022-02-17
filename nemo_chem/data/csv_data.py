@@ -30,6 +30,7 @@ class MoleculeCsvDatasetConfig():
     shuffle: bool = False
     num_workers: Optional[int] = None
     pin_memory: bool = True # TODO: remove this if value is fixed
+    dataloader_type: str = 'single'
 
 
 class MoleculeABCDataset(MegatronDataset):

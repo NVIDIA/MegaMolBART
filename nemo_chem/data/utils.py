@@ -61,16 +61,16 @@ def build_train_valid_test_datasets(
     trainer: Trainer
 ):
     # Build individual datasets.
-    train_cfg = cfg.get('train_ds')
+    train_cfg = cfg.get('train_dataset')
     train_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
 
-    valid_cfg = cfg.get('validation_ds', False)
+    valid_cfg = cfg.get('validation_dataset', False)
     if valid_cfg:
         valid_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
     else:
         valid_dataset = None
 
-    test_cfg = cfg.get('test_ds', False)
+    test_cfg = cfg.get('test_dataset', False)
     if test_cfg:
         test_dataset = _build_train_valid_test_datasets(test_cfg, trainer)
     else:
