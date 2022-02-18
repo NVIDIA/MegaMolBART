@@ -198,6 +198,10 @@ class MolEncTokenizer:
         )
         return tokenizer
 
+    def vocab_size(self):
+        """ Return the size of the vocab being used."""
+        return len(self.vocab)
+
     @staticmethod
     def from_smiles(
         smiles,
@@ -285,12 +289,12 @@ class MolEncTokenizer:
             raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
 
         tokens = self._regex_match(sents1)
-        m_tokens, token_masks = self._mask_tokens(tokens, empty_mask=not mask)
+        m_tokens, token_masks = self.mask_tokens(tokens, empty_mask=not mask)
 
         sent_masks = None
         if sents2 is not None:
             sents2_tokens = self._regex_match(sents2)
-            sents2_m_tokens, sents2_masks = self._mask_tokens(sents2_tokens, empty_mask=not mask)
+            sents2_m_tokens, sents2_masks = self.mask_tokens(sents2_tokens, empty_mask=not mask)
             tokens, sent_masks = self._concat_sentences(tokens, sents2_tokens, self.sep_token)
             m_tokens, _ = self._concat_sentences(m_tokens, sents2_m_tokens, self.sep_token)
             token_masks, _ = self._concat_sentences(token_masks, sents2_masks, False)
@@ -305,10 +309,10 @@ class MolEncTokenizer:
         output = {}
 
         if pad:
-            tokens, orig_pad_masks = self._pad_seqs(tokens, self.pad_token)
-            m_tokens, masked_pad_masks = self._pad_seqs(m_tokens, self.pad_token)
-            token_masks, _ = self._pad_seqs(token_masks, False)
-            sent_masks, _ = self._pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
+            tokens, orig_pad_masks = self.pad_seqs(tokens, self.pad_token)
+            m_tokens, masked_pad_masks = self.pad_seqs(m_tokens, self.pad_token)
+            token_masks, _ = self.pad_seqs(token_masks, False)
+            sent_masks, _ = self.pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
             output["original_pad_masks"] = orig_pad_masks
             output["masked_pad_masks"] = masked_pad_masks
 
@@ -405,7 +409,7 @@ class MolEncTokenizer:
         cnt += 1
         coll[item] = cnt
 
-    def _mask_tokens(self, tokens, empty_mask=False):
+    def mask_tokens(self, tokens, empty_mask=False):
         if empty_mask:
             mask = [[False] * len(ts) for ts in tokens]
             return tokens, mask
@@ -471,7 +475,7 @@ class MolEncTokenizer:
             return token
 
     @staticmethod
-    def _pad_seqs(seqs, pad_token):
+    def pad_seqs(seqs, pad_token):
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
         masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]

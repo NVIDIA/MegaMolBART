@@ -1,4 +1,4 @@
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ __version__ = '.'.join(map(str, VERSION[:3])) + ''.join(VERSION[3:])
 __package_name__ = 'nemo_chem'
 __contact_names__ = 'NVIDIA'
 __homepage__ = 'https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/models/megamolbart'
-__repository_url__ = ''
+__repository_url__ = 'https://github.com/clara-parabricks/NeMo_MegaMolBART' # TODO FIX THIS
 __download_url__ = 'https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/models/megamolbart'
-__description__ = 'MegaMolBART with NeMo'
-__license__ = ''
+__description__ = 'MegaMolBART, a deep learning model for Chemistry. Trainable with NeMo.'
+__license__ = 'Apache2'
 __keywords__ = 'drug discovery, cheminformatics, deep learning, machine learning, gpu, NeMo, nvidia, pytorch, torch'
