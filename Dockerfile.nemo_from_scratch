@@ -1,0 +1,54 @@
+##Useful when you are either making changes on the nemo side or are using a branch/release that hasn't been containerized yet.
+## For all default uses, please use the Dockerfile.nemo_chem. Use this ONLY if you know what you're doing.
+FROM nvcr.io/nvidia/pytorch:22.01-py3
+
+RUN apt update && rm -rf /var/lib/apt/lists/*
+
+# Ensure apt-get won't prompt for selecting options
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y \
+    libsndfile1 sox \
+    python-setuptools swig \
+    python-dev ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+# NVIDIA NeMo
+RUN git clone https://github.com/NVIDIA/NeMo.git && \
+	cd NeMo && \
+	git checkout main && \
+	sh reinstall.sh
+
+# make torchtext not available to "fix" import error
+RUN sed -i "s/_module_available(\"torchtext\")/False/g" /opt/conda/lib/python3.8/site-packages/pytorch_lightning/utilities/imports.py
+
+
+ARG GITHUB_ACCESS_TOKEN
+ARG GITHUB_BRANCH=main
+ARG NEMO_CHEM_HOME=/workspace/nemo_chem
+ARG CONDA_ENV=base
+
+ENV GITHUB_BRANCH=${GITHUB_BRANCH}
+
+# Activating base environment
+RUN echo "source activate base" > /etc/bash.bashrc
+ENV TERM=xterm
+
+## Installing tmux and vim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y \
+    python-setuptools python-dev swig \
+    wget git unzip tmux vim && \
+    rm -rf /var/lib/apt/lists/*
+
+## Environment setup --  multithreaded dataloading very sensitive to libboost version. Do not change w/o testing.
+COPY conda/env.yml /tmp/env.yml
+RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
+
+## PySMILES
+RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
+    && cd /opt/pysmilesutils; pip install .
+
+RUN pip install wandb==0.12.9
