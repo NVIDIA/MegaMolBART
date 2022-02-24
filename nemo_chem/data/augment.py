@@ -123,10 +123,10 @@ class MoleculeEnumeration:
         collate_output = {
             "encoder_input": enc_token_ids,
             "encoder_pad_mask": enc_pad_mask,
-            "decoder_input": dec_token_ids[:-1, :],
-            "decoder_pad_mask": dec_pad_mask[:-1, :],
-            "target": dec_token_ids.clone()[1:, :],
-            "target_pad_mask": dec_pad_mask.clone()[1:, :],
+            "decoder_input": dec_token_ids, #[:-1, :],
+            "decoder_pad_mask": dec_pad_mask, #[:-1, :],
+            # "target": dec_token_ids.clone()[1:, :], # TODO check correctness of mask assignment
+            # "target_pad_mask": dec_pad_mask.clone()[1:, :], # TODO check correctness of mask assignment
             "target_smiles": encoder_tokens['target_smiles']
         }
 

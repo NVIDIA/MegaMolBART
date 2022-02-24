@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from operator import itemgetter
 from omegaconf import open_dict
 from omegaconf.dictconfig import DictConfig
 import torch
@@ -12,6 +13,7 @@ from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
 )
 
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
+from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH
 from nemo_chem.data import MoleculeEnumeration, build_train_valid_test_datasets
@@ -32,14 +34,19 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer):
-        self._tokenizer_config = cfg.tokenizer  # TODO remove this with get_cheminformatics_tokenizer
+        self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg.model, trainer=trainer)
+
+        # TODO collate functions are not currently threadsafe and have to be declared in itit
+        self.train_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_len, **self._cfg.train_dataset)
+        self.valid_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_len, **self._cfg.validation_dataset)
+        self.test_collate = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_len, **self._cfg.test_dataset)
 
     def _build_tokenizer(self):
         """
         Tokenizer from MegaMolBART.
         """
-        vocab_path = self._tokenizer_config.get('vocab_path', DEFAULT_VOCAB_PATH) # TODO remove this with get_cheminformatics_tokenizer
+        vocab_path = self._tokenizer_config.get('vocab_path', DEFAULT_VOCAB_PATH) # TODO replace this with get_cheminformatics_tokenizer
         if not os.path.exists(vocab_path):
             raise ValueError(f'Vocab file not found at {vocab_path}')
 
@@ -76,7 +83,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             val_iters * valid_global_batch_size,
             test_iters * test_global_batch_size,
         ]
-        train_valid_test_num_samples = [100, 100, 0] # TODO FIX ME THIS IS A HACK, MAKE SURE THEY ARE INTEGERS
+        train_valid_test_num_samples = [100000, 100000, 0] # TODO FIX ME THIS IS A HACK, MAKE SURE THEY ARE INTEGERS
         return train_valid_test_num_samples
 
     def build_train_valid_test_datasets(self):
@@ -132,21 +139,25 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                 )
             else:
                 consumed_samples = 0
-            self._train_dl = self.build_pretraining_data_loader(cfg, self._train_ds, consumed_samples)
+
+            collate_fn = self.train_collate.collate_fn
+            self._train_dl = self.build_pretraining_data_loader(cfg, self._train_ds, consumed_samples, collate_fn)
 
     def setup_validation_data(self, cfg):
         # TODO send to base class
         if hasattr(self, '_validation_ds'):
             consumed_samples = 0
-            self._validation_dl = self.build_pretraining_data_loader(cfg, self._validation_ds, consumed_samples)
+            collate_fn = self.valid_collate.collate_fn
+            self._validation_dl = self.build_pretraining_data_loader(cfg, self._validation_ds, consumed_samples, collate_fn)
 
     def setup_test_data(self, cfg):
         # TODO send to base class
         if hasattr(self, '_test_ds'):
             consumed_samples = 0
-            self._test_dl = self.build_pretraining_data_loader(cfg, self._test_ds, consumed_samples)
+            collate_fn = self.test_collate.collate_fn
+            self._test_dl = self.build_pretraining_data_loader(cfg, self._test_ds, consumed_samples, collate_fn)
 
-    def build_pretraining_data_loader(self, cfg, dataset, consumed_samples):
+    def build_pretraining_data_loader(self, cfg, dataset, consumed_samples, collate_fn):
         # TODO send to base class
         """Buld dataloader given an input dataset."""
 
@@ -175,22 +186,73 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         # Torch dataloader.
         return torch.utils.data.DataLoader(
-            dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory,
+            dataset, batch_sampler=batch_sampler, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory, collate_fn=collate_fn
         )
 
-    # def training_step():
+    def training_step(self, batch, batch_idx):
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
 
-    # def validation_step():
+        tokens_loss = itemgetter("tokens_loss")(
+            self(tokens_enc, tokens_dec, enc_mask, dec_mask, tokentype_ids=None, lm_labels=labels,)
+        )
+        loss = self.loss_func(loss_mask, tokens_loss)
+        reduced_loss = average_losses_across_data_parallel_group([loss])
+
+        self.log('train_loss', loss)
+        # cache reduced loss while accumulating gradients
+        self._reduced_loss_buffer.append(reduced_loss[0])
+
+        if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
+            # Reduced loss for logging.
+            average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
+            self.log('reduced_train_loss', average_reduced_loss, prog_bar=True)
+            lr = self._optimizer.param_groups[0]['lr']
+            self.log('lr', lr)
+            self.log('global_step', self.trainer.global_step, prog_bar=True)
+            self.log('consumed_samples', self.compute_consumed_samples(self.trainer.global_step), prog_bar=True)
+            self._reduced_loss_buffer = []
+
+    def validation_step(self, batch, batch_idx):
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
+
+        tokens_loss = itemgetter("tokens_loss")(
+            self(tokens_enc, tokens_dec, enc_mask, dec_mask, tokentype_ids=None, lm_labels=labels,)
+        )
+        loss = self.loss_func(loss_mask, tokens_loss)
+        reduced_loss = average_losses_across_data_parallel_group([loss])
+        return reduced_loss
 
     # def validation_epoch_end():
 
-    # def test_step():
+    def test_step(self, batch, batch_idx):
+        return self.validation_step(batch, batch_idx)
 
     # def test_epoch_end()
 
-    # def loss_func():
+    # def loss_func(): # TODO check loss calculation
 
-    # def process_batch():
+    def process_batch(self, batch):
+        target_smiles = batch.pop('target_smiles')
+
+        # TODO check correctness of mask assignment, dimensions, and slicing
+        batch['encoder_input'] = batch['encoder_input']
+        batch['encoder_pad_mask'] = batch['encoder_pad_mask'].long()
+        batch['decoder_input'] = batch['decoder_input']
+        batch['decoder_pad_mask'] = batch['decoder_pad_mask'].long()
+
+        keys = ['encoder_input', 'decoder_input', 'encoder_pad_mask', 'decoder_pad_mask']
+        datatype = torch.int64
+        data_b = tensor_parallel.broadcast_data(keys, batch, datatype)
+
+        tokens_enc = data_b['encoder_input'].long()
+        tokens_dec = data_b['decoder_input'].long()
+        labels = data_b['decoder_input'].long()
+        loss_mask = data_b['decoder_pad_mask'].float() # TODO check that loss mask is correct
+
+        enc_mask = data_b['encoder_pad_mask']
+        dec_mask = data_b['decoder_pad_mask']
+
+        return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles
 
     # def predict_step():
 
