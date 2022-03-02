@@ -112,13 +112,17 @@ class MoleculeEnumeration:
         encoder_tokens = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
         decoder_tokens = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=False)
 
+        # Dimensions required by NeMo: [batch, sequence/padding] 
+        # This is why the transpose has been removed
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens['tokens'])
-        enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1) # TODO why is this transpose done?
-        enc_pad_mask = torch.tensor(encoder_tokens['pad_mask'], dtype=torch.bool).transpose(0, 1)
+        enc_token_ids = torch.tensor(enc_token_ids)#.transpose(0, 1) # TODO why is this transpose done?
+        enc_pad_mask = torch.tensor(encoder_tokens['pad_mask'], dtype=torch.bool)#.transpose(0, 1)
+        enc_pad_mask = ~enc_pad_mask # TODO ensure active = True, padded = False for NeMo
 
         dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens['tokens'])
-        dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
-        dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool).transpose(0, 1)
+        dec_token_ids = torch.tensor(dec_token_ids)#.transpose(0, 1)
+        dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool)#.transpose(0, 1)
+        dec_pad_mask = ~dec_pad_mask # TODO ensure active = True, padded = False for NeMo
 
         collate_output = {
             "encoder_input": enc_token_ids,

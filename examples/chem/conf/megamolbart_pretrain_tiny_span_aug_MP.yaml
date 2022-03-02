@@ -27,14 +27,16 @@ exp_manager:
     tags:
       - *name
       - ${model.name}
+    offline: true
   checkpoint_callback_params:
     filename: ${model.name}-span_aug--{val_molecular_accuracy:.2f}-{step}-{consumed_samples}
 
 trainer:
   gpus: 2
   num_nodes: 1
-  min_epochs: 10
-  max_epochs: 10
+  # min_epochs: 10
+  # max_epochs: 10
+  max_steps: 100000
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch

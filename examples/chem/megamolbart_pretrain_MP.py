@@ -15,7 +15,7 @@ from nemo.core.config import hydra_runner
 from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
 from nemo.core.config.modelPT import NemoConfig
 from nemo.core.config.pytorch_lightning import TrainerConfig
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
+from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin, MegatronHalfPrecisionPlugin, PipelineMixedPrecisionPlugin
 from nemo.utils.config_utils import update_model_config
 
 from nemo_chem.tokenizer import MolEncTokenizerFromVocabFileConfig
@@ -71,13 +71,19 @@ def main(cfg) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
-    plugins = [NLPDDPPlugin(num_nodes=cfg.trainer.num_nodes, find_unused_parameters=False)]
-    if cfg.trainer.precision == 16:
-        scaler = GradScaler(
-            init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
-            growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
-        )
-        plugins.append(NativeMixedPrecisionPlugin(precision=16, device='cuda', scaler=scaler))
+    plugins = [
+        NLPDDPPlugin()
+    ]
+    if cfg.trainer.precision in [16, 'bf16']:
+        scaler = None
+        if cfg.trainer.precision == 16:
+            scaler = GradScaler(
+                init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
+                growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
+                hysteresis=cfg.model.get('hysteresis', 2),
+            )
+        plugins.append(NativeMixedPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
+            
 
     if cfg.get('cluster_type', None) == 'BCP':
         plugins.append(TorchElasticEnvironment())

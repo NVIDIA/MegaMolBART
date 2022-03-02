@@ -1,4 +1,3 @@
-import logging
 import os
 import re
 from operator import itemgetter
@@ -7,6 +6,7 @@ from omegaconf.dictconfig import DictConfig
 import torch
 from pytorch_lightning.trainer.trainer import Trainer
 
+from nemo.utils import AppState, logging
 from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
     MegatronPretrainingRandomSampler,
     MegatronPretrainingSampler,
@@ -64,6 +64,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         )
 
     def calculate_train_val_test_num_samples(self, tensor_model_parallel_size: int):
+        # TODO FIX SO COMPATIBLE WITH EPOCHS AND CHECK VAL_CHECK_INTERVAL CALC
         train_global_batch_size = self.trainer.world_size * self._cfg.train_dataset.micro_batch_size / tensor_model_parallel_size
 
         if self._cfg.get('validation_dataset'):
@@ -79,11 +80,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         val_iters = (self.trainer.max_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
         test_iters = self.trainer.limit_test_batches
         train_valid_test_num_samples = [
-            self.trainer.max_steps * train_global_batch_size,
-            val_iters * valid_global_batch_size,
-            test_iters * test_global_batch_size,
+            int(self.trainer.max_steps * train_global_batch_size),
+            int(val_iters * valid_global_batch_size),
+            int(test_iters * test_global_batch_size),
         ]
-        train_valid_test_num_samples = [100000, 100000, 0] # TODO FIX ME THIS IS A HACK, MAKE SURE THEY ARE INTEGERS
         return train_valid_test_num_samples
 
     def build_train_valid_test_datasets(self):
@@ -157,6 +157,17 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             collate_fn = self.test_collate.collate_fn
             self._test_dl = self.build_pretraining_data_loader(cfg, self._test_ds, consumed_samples, collate_fn)
 
+    def compute_consumed_samples(self, global_step, cfg):
+        # TODO send to base class
+        app_state = AppState()
+        consumed_samples = (
+            global_step
+            * app_state.data_parallel_size
+            * cfg.micro_batch_size
+            * self.trainer.accumulate_grad_batches
+        )
+        return int(consumed_samples)
+
     def build_pretraining_data_loader(self, cfg, dataset, consumed_samples, collate_fn):
         # TODO send to base class
         """Buld dataloader given an input dataset."""
@@ -209,8 +220,12 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             lr = self._optimizer.param_groups[0]['lr']
             self.log('lr', lr)
             self.log('global_step', self.trainer.global_step, prog_bar=True)
-            self.log('consumed_samples', self.compute_consumed_samples(self.trainer.global_step), prog_bar=True)
+            self.log('consumed_samples', self.compute_consumed_samples(self.trainer.global_step, self._cfg.train_dataset), prog_bar=True)
             self._reduced_loss_buffer = []
+            if self.cfg.precision == 16:
+                loss_scale = self.trainer.precision_plugin.scaler._scale
+                if loss_scale is not None:
+                    self.log('loss_scale', loss_scale)
 
     def validation_step(self, batch, batch_idx):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
@@ -222,7 +237,11 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         reduced_loss = average_losses_across_data_parallel_group([loss])
         return reduced_loss
 
-    # def validation_epoch_end():
+    def validation_epoch_end(self, outputs):
+        # TODO send to base class
+        averaged_loss = average_losses_across_data_parallel_group(outputs)
+        self.log('val_loss', averaged_loss[0], prog_bar=True)
+        self.log('consumed_samples', self.compute_consumed_samples(self.trainer.global_step, self._cfg.validation_dataset))
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
@@ -246,6 +265,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         tokens_enc = data_b['encoder_input'].long()
         tokens_dec = data_b['decoder_input'].long()
+
         labels = data_b['decoder_input'].long()
         loss_mask = data_b['decoder_pad_mask'].float() # TODO check that loss mask is correct
 
