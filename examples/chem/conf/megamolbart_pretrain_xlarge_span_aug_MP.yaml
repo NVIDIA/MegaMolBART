@@ -4,7 +4,7 @@ defaults:
   - model/dataset@model.validation_dataset: validation_ds_defaults
   - exp_manager: log_all
   - model: xlarge_MP
-  - model/optim@model.optim: adam
+  - model/optim@model.optim: adam_MP
   - model/optim/sched@model.optim.sched: noam
 
 name: &name MegaMolBART

@@ -2,26 +2,28 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from omegaconf import OmegaConf, open_dict
 from typing import Optional
-from pytorch_lightning.trainer.trainer import Trainer
+
 import pytorch_lightning as pl
+from pytorch_lightning.trainer.trainer import Trainer
+from pytorch_lightning.callbacks import ModelSummary
 from pytorch_lightning.plugins.environments.torchelastic_environment import TorchElasticEnvironment
 from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from pytorch_lightning.trainer.connectors.checkpoint_connector import CheckpointConnector
 from pytorch_lightning.callbacks.timer import Timer
-from preprocess import Preprocess
 
 from nemo.utils import logging
 from nemo.core.config import hydra_runner
 from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
 from nemo.core.config.modelPT import NemoConfig
 from nemo.core.config.pytorch_lightning import TrainerConfig
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin, MegatronHalfPrecisionPlugin, PipelineMixedPrecisionPlugin
+from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
 from nemo.utils.config_utils import update_model_config
 
 from nemo_chem.tokenizer import MolEncTokenizerFromVocabFileConfig
 from nemo_chem.decoder import DecodeSamplerConfig
 from nemo_chem.models.megamolbart_MP import MegaMolBARTModel
 from nemo_chem.data import MoleculeCsvDatasetConfig
+from preprocess import Preprocess
 
 # @dataclass
 # class MegaMolBARTPretrain(NemoConfig):
@@ -71,8 +73,17 @@ def main(cfg) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
+    megatron_amp_o2 = cfg.model.get('megatron_amp_O2', False)
     plugins = [
-        NLPDDPPlugin()
+        # NLPDDPPlugin() # TODO update when pipeline parallel is supported
+        NLPDDPPlugin(
+            num_nodes=cfg.trainer.num_nodes,
+            no_ddp_communication_hook=(
+                megatron_amp_o2 and cfg.trainer.precision == 'bf16'
+            ),  # Only bf16 uses fp32_grad_accum.
+            gradient_as_bucket_view=cfg.model.gradient_as_bucket_view,
+            find_unused_parameters=False,
+        )
     ]
     if cfg.trainer.precision in [16, 'bf16']:
         scaler = None
@@ -82,6 +93,7 @@ def main(cfg) -> None:
                 growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
                 hysteresis=cfg.model.get('hysteresis', 2),
             )
+        # TODO update when pipeline parallel is supported
         plugins.append(NativeMixedPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
             
 
@@ -91,7 +103,7 @@ def main(cfg) -> None:
     if cfg.seed:
         pl.seed_everything(cfg.seed, workers=True)
 
-    trainer = Trainer(plugins=plugins, **cfg.trainer)
+    trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
 
     log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
     recursive_make_dirs(log_dir)

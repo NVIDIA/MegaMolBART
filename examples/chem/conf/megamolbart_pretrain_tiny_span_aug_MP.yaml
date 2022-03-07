@@ -5,7 +5,7 @@ defaults:
   - model/dataset@model.test_dataset: validation_ds_defaults
   - exp_manager: log_all
   - model: tiny_MP
-  - model/optim@model.optim: adam
+  - model/optim@model.optim: adam_MP
   - model/optim/sched@model.optim.sched: noam
 
 name: &name MegaMolBART
@@ -32,14 +32,14 @@ exp_manager:
     filename: ${model.name}-span_aug--{val_molecular_accuracy:.2f}-{step}-{consumed_samples}
 
 trainer:
-  gpus: 2
+  gpus: 1
   num_nodes: 1
   # min_epochs: 10
   # max_epochs: 10
   max_steps: 100000
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
-  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
+  num_sanity_val_steps: 0 # set to 0 or small number to test validation before completing a full epoch
   val_check_interval: 2000 # fractions indicate epoch fractions, integers indicate iterations can also use check_val_every_n_epoc
   # auto_scale_batch_size: None/binsearch
 
@@ -53,15 +53,15 @@ model:
   train_dataset:
     encoder_mask: true # task = mask(span)_aug
     decoder_augment: true
-    filepath: ${dataset_path}/train/x[000..001].csv
-    metadata_path: ${dataset_path}/train/metadata.txt
+    filepath: ${dataset_path}/val/x000.csv
+    metadata_path: ${dataset_path}/val/metadata.txt
     micro_batch_size: 8
     num_workers: 0
 
   validation_dataset:
     encoder_mask: false # not done in validation set
     decoder_augment: false
-    filepath: ${dataset_path}/val/x[000..001].csv
+    filepath: ${dataset_path}/val/x000.csv
     metadata_path: ${dataset_path}/val/metadata.txt
     micro_batch_size: 8
     num_workers: 0
@@ -69,7 +69,7 @@ model:
   test_dataset:
     encoder_mask: false # not done in test set
     decoder_augment: false
-    filepath: ${dataset_path}/test/x[000..001].csv
+    filepath: ${dataset_path}/test/x000.csv
     metadata_path: ${dataset_path}/test/metadata.txt
     micro_batch_size: 8
     num_workers: 0
