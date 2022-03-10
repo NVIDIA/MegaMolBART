@@ -73,17 +73,8 @@ def main(cfg) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
-    megatron_amp_o2 = cfg.model.get('megatron_amp_O2', False)
     plugins = [
-        # NLPDDPPlugin() # TODO update when pipeline parallel is supported
-        NLPDDPPlugin(
-            num_nodes=cfg.trainer.num_nodes,
-            no_ddp_communication_hook=(
-                megatron_amp_o2 and cfg.trainer.precision == 'bf16'
-            ),  # Only bf16 uses fp32_grad_accum.
-            gradient_as_bucket_view=cfg.model.gradient_as_bucket_view,
-            find_unused_parameters=False,
-        )
+        NLPDDPPlugin() # TODO update when pipeline parallel is supported
     ]
     if cfg.trainer.precision in [16, 'bf16']:
         scaler = None
