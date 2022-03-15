@@ -1,6 +1,8 @@
 from typing import List
 import re
 import braceexpand
+import os
+from copy import deepcopy
 from omegaconf import DictConfig, open_dict
 import torch.utils.data as pt_data
 from pytorch_lightning.trainer.trainer import Trainer
@@ -14,7 +16,7 @@ __all__ = ['expand_dataset_paths', 'build_train_valid_test_datasets']
 
 def expand_dataset_paths(filepath: str) -> List[str]:
     """Expand dataset paths from braces"""
-    # TODO this should go in a Nemo fileutils module or similar
+    # TODO this should be moved to a Nemo fileutils module or similar
     filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
     filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
     dataset_paths = list(braceexpand.braceexpand(filepath))
@@ -23,14 +25,16 @@ def expand_dataset_paths(filepath: str) -> List[str]:
 
 def _build_train_valid_test_datasets(
     cfg: DictConfig, 
-    trainer: Trainer
+    trainer: Trainer,
+    num_samples: int,
+    filepath: str,
+    metadata_path: str,
+    use_iterable: bool
 ):
-    # Setup config
-    cfg = cfg.copy()
 
+    cfg = deepcopy(cfg)
     with open_dict(cfg):
-        filepath = cfg.pop('filepath', None)
-        use_iterable = cfg.pop('use_iterable', False)
+        cfg['metadata_path'] = metadata_path
 
     # Get datasets and load data
     dataset_paths = expand_dataset_paths(filepath)
@@ -38,15 +42,13 @@ def _build_train_valid_test_datasets(
     dataset_list = []
     for path in dataset_paths:
         if use_iterable:
-            data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=trainer)
+            data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
         else:
-            data = MoleculeDataset(filepath=path, cfg=cfg, trainer=trainer)
+            data = MoleculeDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
         dataset_list.append(data)
 
-        with open_dict(cfg):
-            cfg['num_samples'] -= len(data)
-
-        if cfg['num_samples'] < 1:
+        num_samples -= len(data)
+        if num_samples < 1:
             break
 
     if len(dataset_list) == 1:
@@ -58,22 +60,30 @@ def _build_train_valid_test_datasets(
 
 def build_train_valid_test_datasets(
     cfg: DictConfig,
-    trainer: Trainer
+    trainer: Trainer,
+    train_valid_test_num_samples: List[int]
 ):
+    cfg = deepcopy(cfg)
+    with open_dict(cfg):
+        dataset_path = cfg.pop('dataset_path', '')
+        dataset_files = cfg.pop('dataset_files')
+        metadata_file = cfg.pop('metadata_file')
+        use_iterable = cfg.pop('use_iterable', False)
+
     # Build individual datasets.
-    train_cfg = cfg.get('train_dataset')
-    train_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
+    filepath = os.path.join(dataset_path, 'train', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'train', metadata_file)
+    train_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[0],
+                                                     filepath, metadata_path, use_iterable)
 
-    valid_cfg = cfg.get('validation_dataset', False)
-    if valid_cfg:
-        valid_dataset = _build_train_valid_test_datasets(train_cfg, trainer)
-    else:
-        valid_dataset = None
+    filepath = os.path.join(dataset_path, 'val', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'val', metadata_file)
+    validation_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[1],
+                                                          filepath, metadata_path, use_iterable)
 
-    test_cfg = cfg.get('test_dataset', False)
-    if test_cfg:
-        test_dataset = _build_train_valid_test_datasets(test_cfg, trainer)
-    else:
-        test_dataset = None
+    filepath = os.path.join(dataset_path, 'test', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'test', metadata_file)
+    test_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[2],
+                                                    filepath, metadata_path, use_iterable)
 
-    return (train_dataset, valid_dataset, test_dataset)
+    return (train_dataset, validation_dataset, test_dataset)

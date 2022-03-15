@@ -17,7 +17,10 @@ __all__ = ['MoleculeCsvDatasetConfig', 'MoleculeDataset', 'MoleculeIterableDatas
 
 @dataclass
 class MoleculeCsvDatasetConfig():
-    filepath: str = 'data.csv'
+    dataset_path: str = ''
+    dataset_files: str = 'data.csv'
+    metadata_file: str = 'metadata.txt'
+    dataset_type: str = 'zinc_csv'
     micro_batch_size: int = 1
     use_iterable: bool = False
     map_data: bool = False
@@ -25,7 +28,6 @@ class MoleculeCsvDatasetConfig():
     encoder_mask: bool = False
     decoder_augment: bool = False
     canonicalize_input: bool = False
-    metadata_path: Optional[str] = None
     drop_last: bool = False
     shuffle: bool = False
     num_workers: Optional[int] = None

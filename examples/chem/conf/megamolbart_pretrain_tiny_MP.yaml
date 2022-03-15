@@ -2,7 +2,6 @@ name: &name MegaMolBART
 do_training: true # set to false if data preprocessing steps must be completed
 do_testing: false # set to true to run evaluation on test data after training, requires test_dataset section
 seed: 42
-dataset_path: /data/zinc_csv_split
 restore_from_path: null # used when starting from a .nemo file
 
 trainer:
@@ -46,7 +45,7 @@ exp_manager:
     save_top_k: 3
     mode: min
     always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
-    filename: '{name}--{val_loss:.2f}-{step}-{consumed_samples}'
+    filename: '${name}-${model.name}--{val_loss:.2f}-{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
 
 model:
@@ -100,38 +99,14 @@ model:
     mask_scheme: span
     mask_prob: 0.0 # TODO FIX ME
 
-  data:  # TODO FIX ME this is only for testing
+  data:  
+    dataset_path: /data/zinc_csv_split
+    dataset_files: x000.csv
     encoder_augment: False # TODO FIX ME
     encoder_mask: False # task = mask(span)_aug # TODO FIX ME
     decoder_augment: False # TODO FIX ME
-    filepath: ${dataset_path}/val/x000.csv
-    metadata_path: ${dataset_path}/val/metadata.txt
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 0
-
-  # train_dataset:
-  #   encoder_mask: False # task = mask(span)_aug # TODO FIX ME
-  #   decoder_augment: False # TODO FIX ME
-  #   filepath: ${dataset_path}/val/x000.csv
-  #   metadata_path: ${dataset_path}/val/metadata.txt
-  #   micro_batch_size: ${model.micro_batch_size}
-  #   num_workers: 0
-
-  # validation_dataset:
-  #   encoder_mask: False # not done in validation set
-  #   decoder_augment: False
-  #   filepath: ${dataset_path}/val/x000.csv
-  #   metadata_path: ${dataset_path}/val/metadata.txt
-  #   micro_batch_size: ${model.micro_batch_size}
-  #   num_workers: 0
-
-  # test_dataset:
-  #   encoder_mask: False # not done in test set
-  #   decoder_augment: False
-  #   filepath: ${dataset_path}/test/x000.csv
-  #   metadata_path: ${dataset_path}/test/metadata.txt
-  #   micro_batch_size: ${model.micro_batch_size}
-  #   num_workers: 0
 
   optim:
     name: fused_adam
@@ -142,7 +117,7 @@ model:
     eps: 1e-8
     weight_decay: 0.01
     sched:
-      name: InverseSquareRootAnnealing # TODO switch to noam
+      name: InverseSquareRootAnnealing # TODO switch to noam ?
       min_lr: 0.0
       last_epoch: -1
       warmup_ratio: 0.03 

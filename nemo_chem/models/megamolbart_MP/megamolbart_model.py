@@ -12,17 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
+from omegaconf import open_dict
+
 from pytorch_lightning.trainer.trainer import Trainer
 
-from nemo.collections.nlp.data.language_modeling.megatron.dataset_utils import build_train_valid_test_datasets
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import (
     MegatronLMEncoderDecoderModel,
 )
 from nemo.utils import logging
 
+from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH
+from nemo_chem.data import MoleculeEnumeration, build_train_valid_test_datasets
+
+
 __all__ = ["MegaMolBARTModel"]
 
+DATASET_ENUM = ['zinc_csv'] # TODO UPDATE WITH OTHER TYPES
 
 class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
@@ -30,91 +38,69 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer):
+        self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg, trainer=trainer)
+        self.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_length, **self._cfg.data).collate_fn # TODO remove when data loader complete
+
+    def _build_tokenizer(self):
+        """
+        Tokenizer from MegaMolBART.
+        """
+        vocab_path = self._tokenizer_config.get('vocab_path', DEFAULT_VOCAB_PATH) # TODO replace this with get_cheminformatics_tokenizer
+        if not os.path.exists(vocab_path):
+            raise ValueError(f'Vocab file not found at {vocab_path}')
+
+        self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
 
     def _build_vocab(self):
-        self._add_special_tokens_to_tokenizer()
-
-        super()._build_vocab()
-
-    def _add_special_tokens_to_tokenizer(self):
-        """BART related tokens (and Megatron regquired tokens)"""
-        if self._cfg.tokenizer.library == 'sentencepiece':
-            # Need to add cls, sep, mask tokens to the tokenizer if they don't exist.
-            # If cls, sep and mask are not attributes of the tokenizer, add it.
-            if not hasattr(self.tokenizer, 'cls_token'):
-                self.tokenizer.add_special_tokens({'cls_token': '<cls>'})
-            if not hasattr(self.tokenizer.tokenizer, 'sep_id'):
-                self.tokenizer.add_special_tokens({'sep_token': '<sep>'})
-            if not hasattr(self.tokenizer.tokenizer, 'mask_id'):
-                self.tokenizer.add_special_tokens({'mask_token': '<mask>'})
-
-            # bos, eos, pad and unk may be present in the provided spm .model file, if they are, use it.
-            if not hasattr(self.tokenizer, 'pad_token'):
-                if hasattr(self.tokenizer.tokenizer, 'pad_id') and self.tokenizer.tokenizer.pad_id() > 0:
-                    self.tokenizer.pad_token = self.tokenizer.tokenizer.id_to_piece(self.tokenizer.tokenizer.pad_id())
-                else:
-                    self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
-            else:
-                self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
-
-            if not hasattr(self.tokenizer, 'bos_token'):
-                if hasattr(self.tokenizer.tokenizer, 'bos_id') and self.tokenizer.tokenizer.bos_id() > 0:
-                    self.tokenizer.bos_token = self.tokenizer.tokenizer.id_to_piece(self.tokenizer.tokenizer.bos_id())
-                else:
-                    self.tokenizer.add_special_tokens({'bos_token': '<bos>'})
-            else:
-                self.tokenizer.add_special_tokens({'bos_token': '<s>'})
-
-            if not hasattr(self.tokenizer, 'eos_token'):
-                if hasattr(self.tokenizer.tokenizer, 'eos_id') and self.tokenizer.tokenizer.eos_id() > 0:
-                    self.tokenizer.eos_token = self.tokenizer.tokenizer.id_to_piece(self.tokenizer.tokenizer.eos_id())
-                else:
-                    self.tokenizer.add_special_tokens({'eos_token': '<eos>'})
-            else:
-                self.tokenizer.add_special_tokens({'eos_token': '</s>'})
+        """
+        Manipulate vocabulary (e.g., pad vocabulary for increased performance)/
+        """
+        # TODO: add to config to allow this to be disabled?
+        self.padded_vocab_size = self._vocab_size_with_padding(
+            orig_vocab_size=len(self.tokenizer),
+            make_vocab_size_divisible_by=self._cfg.get('make_vocab_size_divisible_by', 128),
+            tensor_model_parallel_size=self._cfg.get('tensor_model_parallel_size', 1),
+        )
 
     def build_train_valid_test_datasets(self):
-        logging.info('Building BART datasets.')
+        logging.info('Building MegaMolBART datasets.')
+        tensor_model_parallel_size = self._cfg.get('tensor_model_parallel_size', 1)
 
-        global_batch_size = self.trainer.world_size * self._cfg.micro_batch_size / self._cfg.tensor_model_parallel_size
+        global_batch_size = self.trainer.world_size * self._cfg.micro_batch_size / tensor_model_parallel_size
         eval_iters = (self.trainer.max_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
         test_iters = self.trainer.limit_test_batches
         train_valid_test_num_samples = [
-            self.trainer.max_steps * global_batch_size,
-            eval_iters * global_batch_size,
-            test_iters * global_batch_size,
+            int(self.trainer.max_steps * global_batch_size),
+            int(eval_iters * global_batch_size),
+            int(test_iters * global_batch_size),
         ]
-        # Make sure the user specifies dataset type as 'bart' only.
+
+        # Make sure the user specifies dataset type as 'megamolbart_csv' only.
         if self._cfg.data.get('dataset_type', None) is not None:
-            if self._cfg.data.get('dataset_type') not in ['bart']:
-                raise ValueError(f"dataset_type must be 'bart'. found {self._cfg.data.get('dataset_type')}")
+            if self._cfg.data.get('dataset_type') not in DATASET_ENUM:
+                raise ValueError(f"dataset_type must be in {DATASET_ENUM}. Found {self._cfg.data.get('dataset_type')}")
+
         self._train_ds, self._validation_ds, self._test_ds = build_train_valid_test_datasets(
-            cfg=self._cfg,
-            trainer=self.trainer,
-            tokenizer=self.tokenizer,
-            data_prefix=self._cfg.data.data_prefix,
-            data_impl=self._cfg.data.data_impl,
-            splits_string=self._cfg.data.splits_string,
-            train_valid_test_num_samples=train_valid_test_num_samples,
-            max_seq_length=self._cfg.data.seq_length,
-            masked_lm_prob=self._cfg.data.masked_lm_prob,
-            short_seq_prob=self._cfg.data.short_seq_prob,
-            seed=self._cfg.seed,
-            skip_warmup=self._cfg.data.skip_warmup,
-            dataset_type=self._cfg.data.get('dataset_type', 'bart'),
-            max_ngram_size=self._cfg.get('max_ngram_size', 10),
-            mean_ngram_size=self._cfg.get('mean_ngram_size', None),
-            geometric_dist=self._cfg.get('geometric_dist', True),
-            permutation=self._cfg.get('permutation', False),
-            whole_word_masking=self._cfg.get('whole_word_masking', True),
-            favor_long_ngrams=self._cfg.get('favor_long_ngrams', False),
+            self._cfg.data,
+            self.trainer,
+            train_valid_test_num_samples
         )
+
         logging.info(f'Length of train dataset: {len(self._train_ds)}')
         logging.info(f'Length of val dataset: {len(self._validation_ds)}')
         logging.info(f'Length of test dataset: {len(self._test_ds)}')
-        logging.info(f'Finished building BART datasets.')
+        logging.info(f'Finished building MegaMolBART datasets.')
         return self._train_ds, self._validation_ds, self._test_ds
+
+    def build_pretraining_data_loader(self, dataset, consumed_samples):
+        """Buld dataloader given an input dataset."""
+        dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
+
+        if dataloader is not None:
+            dataloader.collate_fn = self.collate_fn
+        
+        return dataloader
 
     def list_available_models(self):
         pass
