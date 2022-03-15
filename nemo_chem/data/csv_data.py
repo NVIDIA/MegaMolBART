@@ -35,7 +35,7 @@ class MoleculeCsvDatasetConfig():
 
 class MoleculeABCDataset(MegatronDataset):
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
-    def __init__(self, filepath, cfg, trainer):
+    def __init__(self, filepath, cfg, trainer, num_samples=None):
         """
         Args:
             dataset_cfg: dataset config
@@ -48,9 +48,9 @@ class MoleculeABCDataset(MegatronDataset):
         self.filepath = filepath
         self.map_data = self.cfg.map_data
         self.len = self._get_data_length(self.cfg.metadata_path)
-        if self.cfg.num_samples:
-            if self.cfg.num_samples > 0:
-                self.len = min(self.cfg.num_samples, self.len)
+        if num_samples:
+            if num_samples > 0:
+                self.len = min(num_samples, self.len)
         self.start = 0
         self.end = self.start + self.len
         self._cache = None
@@ -107,8 +107,8 @@ class MoleculeABCDataset(MegatronDataset):
 
 class MoleculeDataset(Dataset, MoleculeABCDataset):
     """Dataset that reads GPU-specific portion of data into memory from CSV file"""
-    def __init__(self, filepath, cfg, trainer):
-        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer)
+    def __init__(self, filepath, cfg, trainer, num_samples=None):
+        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
         self._initialize_file(self.start)
         self._make_data_cache()
         
@@ -125,8 +125,8 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
 
 
 class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
-    def __init__(self, filepath, cfg, trainer):
-        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer)
+    def __init__(self, filepath, cfg, trainer, num_samples=None):
+        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
         
     def __iter__(self):  
         # Divide up for workers
