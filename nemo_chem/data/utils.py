@@ -1,43 +1,89 @@
 from typing import List
 import re
 import braceexpand
-import numpy as np
-import torch.distributed as dist
-from nemo.utils import logging
+import os
+from copy import deepcopy
+from omegaconf import DictConfig, open_dict
+import torch.utils.data as pt_data
+from pytorch_lightning.trainer.trainer import Trainer
 
-__all__ = ['expand_dataset_paths']
+from nemo.utils import logging
+from .csv_data import MoleculeDataset, MoleculeIterableDataset
+from .concat import ConcatIterableDataset
+
+__all__ = ['expand_dataset_paths', 'build_train_valid_test_datasets']
 
 
 def expand_dataset_paths(filepath: str) -> List[str]:
     """Expand dataset paths from braces"""
-    # TODO this should go in a Nemo fileutils module or similar
+    # TODO this should eventually be moved to a Nemo fileutils module or similar
     filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
     filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
     dataset_paths = list(braceexpand.braceexpand(filepath))
     return dataset_paths
 
 
-# DEPRECATED
-def shard_dataset_paths_for_ddp(self, dataset_paths):
-    """Shard dataset paths for ddp"""
-    dataset_paths = np.array(dataset_paths)
-    num_dataset_paths = len(dataset_paths)
+def _build_train_valid_test_datasets(
+    cfg: DictConfig, 
+    trainer: Trainer,
+    num_samples: int,
+    filepath: str,
+    metadata_path: str,
+    use_iterable: bool
+):
 
-    # Split for data parallel
-    if dist.is_initialized():
-        world_size = dist.get_world_size()
-        if world_size > num_dataset_paths:
-            logging.warning(f'World size ({world_size}) is larger than number of data files ({num_dataset_paths}). Data will be duplicated.')
-        rank = dist.get_rank()
-        logging.info(f'Torch distributed is initialized with world size {world_size} and rank {rank}.')
+    cfg = deepcopy(cfg)
+    with open_dict(cfg):
+        cfg['metadata_path'] = metadata_path
+
+    # Get datasets and load data
+    dataset_paths = expand_dataset_paths(filepath)
+    logging.info(f'Loading data from {dataset_paths}')
+    dataset_list = []
+    for path in dataset_paths:
+        if use_iterable:
+            data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
+        else:
+            data = MoleculeDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
+        dataset_list.append(data)
+
+        num_samples -= len(data)
+        if num_samples < 1:
+            break
+
+    if len(dataset_list) == 1:
+        dataset = dataset_list[0]
     else:
-        world_size = 1
-        rank = 0
-        logging.info(f'Torch distributed is not initialized.')
+        dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
+    return dataset
 
-    num_chunks = min(num_dataset_paths, world_size)
-    split_dataset_paths = np.array_split(dataset_paths, num_chunks)
-    index = rank % num_chunks
-    logging.info(f'Selected dataset paths {split_dataset_paths} and index {index}')
-    dataset_paths = split_dataset_paths[index]          
-    return dataset_paths
+
+def build_train_valid_test_datasets(
+    cfg: DictConfig,
+    trainer: Trainer,
+    train_valid_test_num_samples: List[int]
+):
+    cfg = deepcopy(cfg)
+    with open_dict(cfg):
+        dataset_path = cfg.pop('dataset_path', '')
+        dataset_files = cfg.pop('dataset_files')
+        metadata_file = cfg.pop('metadata_file')
+        use_iterable = cfg.pop('use_iterable', False)
+
+    # Build individual datasets.
+    filepath = os.path.join(dataset_path, 'train', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'train', metadata_file)
+    train_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[0],
+                                                     filepath, metadata_path, use_iterable)
+
+    filepath = os.path.join(dataset_path, 'val', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'val', metadata_file)
+    validation_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[1],
+                                                          filepath, metadata_path, use_iterable)
+
+    filepath = os.path.join(dataset_path, 'test', dataset_files)
+    metadata_path = os.path.join(dataset_path, 'test', metadata_file)
+    test_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[2],
+                                                    filepath, metadata_path, use_iterable)
+
+    return (train_dataset, validation_dataset, test_dataset)

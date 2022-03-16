@@ -81,7 +81,7 @@ class MegatronBARTModuleConfig(Config):
 
     # decode_sampler: DecodeSamplerConfig = DecodeSamplerConfig()    # TODO add to model
     # optim: Optional[OptimConfig] = AdamOptimConfig()
-    # train_ds: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
-    # validation_ds: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
-    # test_ds: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
+    # train_dataset: MoleculeCsvDatasetConfig = MoleculeCsvDatasetConfig()
+    # validation_dataset: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
+    # test_dataset: Optional[MoleculeCsvDatasetConfig] = MoleculeCsvDatasetConfig()
      

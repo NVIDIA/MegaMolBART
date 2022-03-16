@@ -108,26 +108,35 @@ class MoleculeEnumeration:
 
         return token_output
 
-    def collate_fn(self, batch: List[str]):
+    def collate_fn(self, batch: List[str], label_pad: int = -1):
         encoder_tokens = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
         decoder_tokens = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=False)
 
+        # Dimensions required by NeMo: [batch, sequence/padding] 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens['tokens'])
-        enc_token_ids = torch.tensor(enc_token_ids).transpose(0, 1) # TODO why is this transpose done?
-        enc_pad_mask = torch.tensor(encoder_tokens['pad_mask'], dtype=torch.bool).transpose(0, 1)
+        enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64) # TODO ensure transpose is removed
+        
+        enc_pad_mask = torch.tensor(encoder_tokens['pad_mask'], dtype=torch.bool) # TODO ensure transpose is removed
+        enc_pad_mask = ~enc_pad_mask # TODO ensure active = True, padded = False for NeMo, must invert in the tokenizer created
+        enc_pad_mask = enc_pad_mask.type(torch.int64)
 
         dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens['tokens'])
-        dec_token_ids = torch.tensor(dec_token_ids).transpose(0, 1)
-        dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool).transpose(0, 1)
+        dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64) # TODO ensure transpose is removed
+        
+        dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool) # TODO ensure transpose is removed
+        labels = dec_token_ids.clone()
+        labels[dec_pad_mask] = label_pad # TODO note this won't work if mask sign isn't corrected
 
-        collate_output = {
-            "encoder_input": enc_token_ids,
-            "encoder_pad_mask": enc_pad_mask,
-            "decoder_input": dec_token_ids[:-1, :],
-            "decoder_pad_mask": dec_pad_mask[:-1, :],
-            "target": dec_token_ids.clone()[1:, :],
-            "target_pad_mask": dec_pad_mask.clone()[1:, :],
-            "target_smiles": encoder_tokens['target_smiles']
-        }
+        dec_pad_mask = ~dec_pad_mask # TODO ensure active = True, padded = False for NeMo
+        dec_pad_mask = dec_pad_mask.type(torch.int64)
+
+        loss_mask = dec_pad_mask.clone()
+
+        collate_output = {'text_enc': enc_token_ids,
+                          'text_dec': dec_token_ids,
+                          'labels': labels,
+                          'loss_mask': loss_mask,
+                          'enc_mask': enc_pad_mask,
+                          'dec_mask': dec_pad_mask}
 
         return collate_output

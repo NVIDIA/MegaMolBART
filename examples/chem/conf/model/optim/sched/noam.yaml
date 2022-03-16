@@ -1,5 +1,5 @@
 name: NoamAnnealing
-d_model: ${model.d_model}
+d_model: ${model.hidden_size}
 warmup_steps: null
 warmup_ratio: 0.008
 max_steps: 1000000

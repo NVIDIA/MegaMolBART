@@ -7,9 +7,12 @@ import random
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Any
-
 import nemo_chem
-VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
+
+__all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH']
+
+DEFAULT_VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
+DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart_vocab.txt')
 
 # Defaults
 DEFAULT_SEQ_LEN = 512
@@ -44,7 +47,7 @@ class MolEncTokenizerBaseConfig():
 
 @dataclass
 class MolEncTokenizerFromVocabFileConfig():
-    vocab_path: str = os.path.join(VOCAB_DIR, 'megamolbart_vocab.txt')
+    vocab_path: str = DEFAULT_VOCAB_PATH
     regex: str = DEFAULT_REGEX
     chem_tokens_start_idx: int = DEFAULT_CHEM_TOKEN_START
     pad_token_idx: int = 0
