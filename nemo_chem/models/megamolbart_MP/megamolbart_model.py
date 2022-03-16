@@ -52,17 +52,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
 
-    def _build_vocab(self):
-        """
-        Manipulate vocabulary (e.g., pad vocabulary for increased performance)/
-        """
-        # TODO: add to config to allow this to be disabled?
-        self.padded_vocab_size = self._vocab_size_with_padding(
-            orig_vocab_size=len(self.tokenizer),
-            make_vocab_size_divisible_by=self._cfg.get('make_vocab_size_divisible_by', 128),
-            tensor_model_parallel_size=self._cfg.get('tensor_model_parallel_size', 1),
-        )
-
     def build_train_valid_test_datasets(self):
         logging.info('Building MegaMolBART datasets.')
         tensor_model_parallel_size = self._cfg.get('tensor_model_parallel_size', 1)

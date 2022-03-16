@@ -108,7 +108,7 @@ class MoleculeEnumeration:
 
         return token_output
 
-    def collate_fn(self, batch: List[str]):
+    def collate_fn(self, batch: List[str], label_pad: int = -1):
         encoder_tokens = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
         decoder_tokens = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=False)
 
@@ -125,7 +125,7 @@ class MoleculeEnumeration:
         
         dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool) # TODO ensure transpose is removed
         labels = dec_token_ids.clone()
-        labels[dec_pad_mask] = -1 # TODO note this won't work if mask sign isn't corrected
+        labels[dec_pad_mask] = label_pad # TODO note this won't work if mask sign isn't corrected
 
         dec_pad_mask = ~dec_pad_mask # TODO ensure active = True, padded = False for NeMo
         dec_pad_mask = dec_pad_mask.type(torch.int64)

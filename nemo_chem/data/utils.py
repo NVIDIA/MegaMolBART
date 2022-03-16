@@ -16,7 +16,7 @@ __all__ = ['expand_dataset_paths', 'build_train_valid_test_datasets']
 
 def expand_dataset_paths(filepath: str) -> List[str]:
     """Expand dataset paths from braces"""
-    # TODO this should be moved to a Nemo fileutils module or similar
+    # TODO this should eventually be moved to a Nemo fileutils module or similar
     filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
     filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
     dataset_paths = list(braceexpand.braceexpand(filepath))

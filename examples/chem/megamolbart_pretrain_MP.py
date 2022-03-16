@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pathlib import Path
+
 from dataclasses import asdict
 from omegaconf.omegaconf import OmegaConf, open_dict
 from pytorch_lightning import Trainer
@@ -30,17 +30,12 @@ from nemo.utils.exp_manager import StatelessTimer, exp_manager
 
 from nemo_chem.models.megamolbart_MP import MegaMolBARTModel
 from nemo_chem.data import MoleculeCsvDatasetConfig
+from nemo_chem.utils import recursive_make_dirs
 from preprocess import Preprocess
 
 
-def recursive_make_dirs(directory):
-    logging.info(f'Creating directory {str(directory)}...')
-    if isinstance(directory, str):
-        directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-
-
 def update_dataset_config(cfg):
+    """Update a configuration with existing defaults"""
     with open_dict(cfg):
         dataset_cfg = asdict(MoleculeCsvDatasetConfig())
         dataset_cfg.update(cfg.model['data'])
@@ -49,6 +44,7 @@ def update_dataset_config(cfg):
 
 
 def setup_trainer(cfg):
+    """Trainer setup functions"""
     megatron_amp_o2 = cfg.model.get('megatron_amp_O2', False)
     plugins = [
         NLPDDPPlugin(
@@ -80,7 +76,7 @@ def setup_trainer(cfg):
     resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
     trainer.checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
     
-    # Override timer callback to a stateless one
+    # Override timer callback and convert to a stateless one
     for idx, callback in enumerate(trainer.callbacks):
         if isinstance(callback, Timer):
             trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time,)
