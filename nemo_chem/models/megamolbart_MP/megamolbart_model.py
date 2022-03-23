@@ -17,8 +17,6 @@ from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
 from omegaconf import open_dict
 from rdkit import Chem
-from collections import defaultdict
-from multiprocessing import Pool
 
 import torch
 from pytorch_lightning.trainer.trainer import Trainer
@@ -153,29 +151,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         for metric_name in metrics:
             self.log(metric_name, metrics[metric_name], prog_bar=False)
 
-        # self._val_metrics_inputs['token_logits'].append(ret_dict['token_logits'])
-        # self._val_metrics_inputs['loss_mask'].append(loss_mask)
-        # self._val_metrics_inputs['labels'].append(labels)
-        # self._val_metrics_inputs['tokens_enc'].append(tokens_enc)
-        # self._val_metrics_inputs['enc_mask'].append(enc_mask)  
-        # self._val_metrics_inputs['target_smiles'].append(target_smiles)
-
         return reduced_loss
-
-    # def validation_epoch_end(self, outputs):
-    #     token_logits  = self._val_metrics_inputs['token_logits']
-    #     loss_mask     = self._val_metrics_inputs['loss_mask']
-    #     labels        = self._val_metrics_inputs['labels']
-    #     tokens_enc    = self._val_metrics_inputs['tokens_enc']
-    #     enc_mask      = self._val_metrics_inputs['enc_mask']
-    #     target_smiles = self._val_metrics_inputs['target_smiles']
-    #     arg_list = zip(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
-    #     results = [self.calculate_metrics(*args) for args in arg_list]
-
-    #     for metric_name in metrics:
-    #         self.log(metric_name, metrics[metric_name], prog_bar=False)
-
-    #     self._val_metrics_inputs = defaultdict(list)
 
     @staticmethod
     def _calculate_character_accuracy(token_logits, loss_mask, labels):
