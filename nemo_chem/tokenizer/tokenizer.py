@@ -488,7 +488,7 @@ class MolEncTokenizer:
 
     @property
     def pad_id(self):
-        return self.tokens_to_ids([self.pad_token])[0]
+        return self.tokens_to_ids([[self.pad_token]])[0][0]
 
     @property
     def bos_token(self):
@@ -496,7 +496,7 @@ class MolEncTokenizer:
 
     @property
     def bos_id(self):
-        return self.tokens_to_ids([self.bos_token])[0]
+        return self.tokens_to_ids([[self.bos_token]])[0][0]
 
     @property
     def eos_token(self):
@@ -504,16 +504,16 @@ class MolEncTokenizer:
 
     @property
     def eos_id(self):
-        return self.tokens_to_ids([self.eos_token])[0]
+        return self.tokens_to_ids([[self.eos_token]])[0][0]
 
     @property
     def sep_id(self):
-        return self.tokens_to_ids([self.sep_token])[0]
+        return self.tokens_to_ids([[self.sep_token]])[0][0]
 
     @property
     def mask_id(self):
-        return self.tokens_to_ids([self.mask_token])[0]
+        return self.tokens_to_ids([[self.mask_token]])[0][0]
 
     # @property
     # def cls_id(self):
-    #     return self.tokens_to_ids([self.cls_token])[0]
+    #     return self.tokens_to_ids([[self.cls_token]])[0][0]
