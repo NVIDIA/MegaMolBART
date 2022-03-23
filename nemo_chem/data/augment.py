@@ -133,10 +133,11 @@ class MoleculeEnumeration:
         loss_mask = dec_pad_mask.clone()
 
         collate_output = {'text_enc': enc_token_ids,
-                          'text_dec': dec_token_ids,
-                          'labels': labels,
-                          'loss_mask': loss_mask,
                           'enc_mask': enc_pad_mask,
-                          'dec_mask': dec_pad_mask}
+                          'text_dec': dec_token_ids,
+                          'dec_mask': dec_pad_mask,
+                          'labels': labels, # token labels
+                          'target_smiles': batch, # smiles strings
+                          'loss_mask': loss_mask}
 
         return collate_output
