@@ -5,7 +5,7 @@ seed: 42
 restore_from_path: null # used when starting from a .nemo file
 
 trainer:
-  devices: 2
+  devices: 1
   num_nodes: 1
   accelerator: gpu
   precision: 16
@@ -52,11 +52,11 @@ model:
   name: tiny_span_aug
   # model parallelism 
   micro_batch_size: 4
-  tensor_model_parallel_size: 2
+  tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1 # T5 PP is not supported yet. Use 1 for now.
 
   # model architecture
-  make_vocab_size_divisible_by: 128 # Pad the vocab size to be divisible by this value for computation efficiency.
+  make_vocab_size_divisible_by: 1 # Pad the vocab size to be divisible by this value for computation efficiency. Default: 128
   pre_process: True # add embedding
   post_process: True # add pooler
 
