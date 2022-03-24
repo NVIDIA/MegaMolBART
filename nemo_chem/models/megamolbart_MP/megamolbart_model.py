@@ -149,7 +149,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         token_logits = ret_dict['token_logits']
         metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
         for metric_name in metrics:
-            self.log(metric_name, metrics[metric_name], prog_bar=False)
+            self.log(f'val_{metric_name}', metrics[metric_name], prog_bar=False)
 
         return reduced_loss
 
