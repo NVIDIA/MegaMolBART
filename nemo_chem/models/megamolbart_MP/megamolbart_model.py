@@ -48,7 +48,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg, trainer=trainer)
         self.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_length, **self._cfg.data).collate_fn # TODO remove when data loader complete
-        # self._val_metrics_inputs = defaultdict(list)
 
     def _build_tokenizer(self):
         """
@@ -93,9 +92,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     def build_pretraining_data_loader(self, dataset, consumed_samples):
         """Buld dataloader given an input dataset."""
         dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
-
-        if dataloader is not None:
-            dataloader.collate_fn = self.collate_fn
+        
+        # Add collate function and unpin memory to avoid crash with CUDA misaligned address
+        dataloader.pin_memory = False
+        dataloader.collate_fn = self.collate_fn
         
         return dataloader
 
@@ -112,6 +112,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def training_step(self, batch, batch_idx):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
+
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
         
@@ -124,7 +125,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
             # Reduced loss for logging.
             average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-            self.log('reduced_train_loss', average_reduced_loss, prog_bar=True)
+            self.log('reduced_loss', average_reduced_loss, prog_bar=True)
             
             lr = self._optimizer.param_groups[0]['lr']
             self.log('lr', lr)
@@ -149,27 +150,64 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         token_logits = ret_dict['token_logits']
         metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
         for metric_name in metrics:
-            self.log(f'val_{metric_name}', metrics[metric_name], prog_bar=False)
+            self.log(f'{metric_name}', metrics[metric_name], prog_bar=True)
 
         return reduced_loss
 
     @staticmethod
     def _calculate_character_accuracy(token_logits, loss_mask, labels):
-        """Character (token) level accuracy"""
+        """Character (token) level accuracy
+
+        Args:
+            token_logits (torch.Tensor, float): softmax values for all tokens
+            loss_mask (torch.Tensor, float): binary mask for ignored data (1=active, 0=mask), must be float
+            labels (torch.Tensor, long): token IDs for correct output
+
+        Returns:
+            float: character accuracy value
+        """
+
+        # Get most likely token
         _, predicted_tokens = torch.max(token_logits, dim=2)
         correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask
+
+        # Calculate percent of correct tokens
         num_correct = correct_tokens.sum().cpu().detach().item()
         total = loss_mask.sum().cpu().detach().item()
         character_accuracy = num_correct / total
         return character_accuracy
 
     def _sample_molecules(self, tokens_enc, enc_mask):
+        """Sample SMILES molecules from encoder hidden state
+
+        Args:
+            tokens_enc (torch.Tensor, long): token ID values for samples
+            enc_mask (torch.Tensor, long): boolean mask for padded sections
+
+        Returns:
+            string: sampled SMILE values
+        """
+
+        # Decode encoder hidden state to tokens
         predicted_tokens_dec, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
         tokens = self.tokenizer.convert_ids_to_tokens(predicted_tokens_dec.tolist())
+
+        # Convert to SMILES string
         sampled_smiles = self.tokenizer.detokenize(tokens)
         return sampled_smiles
 
     def _calculate_molecular_accuracy(self, tokens_enc, enc_mask, target_smiles):
+        """Calculate molecular accuracy (with canonicalization)
+
+        Args:
+            tokens_enc (torch.Tensor, long): token ID values for samples
+            enc_mask (torch.Tensor, long): boolean mask for padded sections
+            target_smiles (str): ground truth for canonicalized SMILES
+
+        Returns:
+            float, float: molecular accuracy and percent invalid
+        """
+
         sampled_smiles = self._sample_molecules(tokens_enc, enc_mask)
         sampled_mols = [Chem.MolFromSmiles(smi) for smi in sampled_smiles]
         invalid = [mol is None for mol in sampled_mols]
@@ -186,6 +224,19 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return molecular_accuracy, percent_invalid
 
     def calculate_metrics(self, token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles):
+        """Calculate metrics for character accuracy, molecular accuracy, and invalid molecules
+
+        Args:
+            token_logits (torch.Tensor, float): softmax values for all tokens
+            loss_mask (torch.Tensor, float): binary mask for ignored data (1=active, 0=mask), must be float
+            labels (torch.Tensor, long): token IDs for correct output
+            tokens_enc (torch.Tensor, long): token ID values for samples
+            enc_mask (torch.Tensor, long): boolean mask for padded sections
+            target_smiles (str): ground truth for canonicalized SMILES
+
+        Returns:
+            dict: dictionary of metric values
+        """
         character_accuracy = self._calculate_character_accuracy(token_logits, loss_mask, labels)
         molecular_accuracy, percent_invalid = self._calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles)
         metrics = {'character_accuracy': character_accuracy,
