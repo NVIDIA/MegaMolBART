@@ -21,13 +21,11 @@ from rdkit import Chem
 import torch
 from pytorch_lightning.trainer.trainer import Trainer
 
-from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import (
-    MegatronLMEncoderDecoderModel,
-)
+from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
 
 from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH
-from nemo_chem.data import MoleculeEnumeration, build_train_valid_test_datasets
+from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 # Disable logging of invalid SMILES moloecules
@@ -37,8 +35,6 @@ lg.setLevel(RDLogger.CRITICAL)
 
 __all__ = ["MegaMolBARTModel"]
 
-DATASET_ENUM = ['zinc_csv'] # TODO UPDATE WITH OTHER TYPES
-
 class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
     MegaMolBART pretraining
@@ -47,7 +43,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     def __init__(self, cfg: DictConfig, trainer: Trainer):
         self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg, trainer=trainer)
-        self.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_length, **self._cfg.data).collate_fn # TODO remove when data loader complete
 
     def _build_tokenizer(self):
         """
@@ -72,10 +67,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             int(test_iters * global_batch_size),
         ]
 
-        # Make sure the user specifies dataset type as 'megamolbart_csv' only.
         if self._cfg.data.get('dataset_type', None) is not None:
-            if self._cfg.data.get('dataset_type') not in DATASET_ENUM:
-                raise ValueError(f"dataset_type must be in {DATASET_ENUM}. Found {self._cfg.data.get('dataset_type')}")
+            dataset_types = DatasetTypes.__members__
+            if self._cfg.data.get('dataset_type') not in dataset_types:
+                raise ValueError(f"dataset_type must be in {dataset_types}. Found {self._cfg.data.get('dataset_type')}")
 
         self._train_ds, self._validation_ds, self._test_ds = build_train_valid_test_datasets(
             self._cfg.data,
@@ -94,15 +89,11 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
         
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
+        # TODO remove when data loader complete
         dataloader.pin_memory = False
-        dataloader.collate_fn = self.collate_fn
+        dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_length, **self._cfg.data).collate_fn
         
         return dataloader
-
-    def process_batch(self, batch):
-        """Custom batch processing to append SMILES strings for metrics"""
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = super().process_batch(batch)
-        return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, batch['target_smiles']
 
     def _eval_step(self, tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask):
         ret_dict = self(tokens_enc, tokens_dec, enc_mask, dec_mask, tokentype_ids=None, lm_labels=labels,)
@@ -111,7 +102,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss, ret_dict
 
     def training_step(self, batch, batch_idx):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
@@ -138,7 +129,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, target_smiles = self.process_batch(batch)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
 
@@ -147,6 +138,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         reduced_loss = average_losses_across_data_parallel_group([loss])
         self.log('reduced_loss', reduced_loss, prog_bar=True)
 
+        target_smiles = batch['target_smiles']
         token_logits = ret_dict['token_logits']
         metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
         for metric_name in metrics:
