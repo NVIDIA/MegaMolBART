@@ -14,12 +14,14 @@ __all__ = ['MoleculeEnumeration']
 class MoleculeEnumeration:
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
-                decoder_augment, canonicalize_input, **kwargs):
+                decoder_augment: bool, decoder_mask: bool, 
+                canonicalize_input, **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.encoder_augment = encoder_augment
         self.encoder_mask = encoder_mask
         self.decoder_augment = decoder_augment
+        self.decoder_mask = decoder_mask
         self.canonicalize_input = canonicalize_input
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
@@ -51,6 +53,8 @@ class MoleculeEnumeration:
         else:
             aug_smiles = Chem.MolToSmiles(mol, canonical=False)
 
+        assert len(aug_smiles) > 0, AssertionError('Augmented SMILES string is empty')
+        assert len(canon_smiles) > 0, AssertionError('Canonical SMILES string is empty')
         return aug_smiles, canon_smiles
 
     def _check_seq_len(self, tokens: List[List[str]], mask: List[List[int]]):
@@ -77,10 +81,8 @@ class MoleculeEnumeration:
 
         Args:
             batch (List[str]): Batch of input SMILES strings
-            tokenizer: Tokenizer instantiation.
-            mask (bool, optional): Mask decoder tokens. Defaults to False.
-            canonicalize_input (bool, optional): Canonicalize input SMILES. Defaults to False.
-            smiles_augmenter (optional): Function to augment SMILES. Defaults to None.
+            augment_data (bool): Augment SMILES
+            mask_data (bool, optional): Mask decoder tokens. Defaults to False.
 
         Returns:
             dict: token output
@@ -90,54 +92,69 @@ class MoleculeEnumeration:
         smiles = [x[0] for x in smiles_list]
         canon_targets = [x[1] for x in smiles_list]
 
-        # Tokenize with padding and optional masking
-        token_output = self.tokenizer.tokenize(smiles, pad=True, mask=mask_data)
-        key = 'masked' if mask_data else 'original'
-        token_label, mask_label = f'{key}_tokens', f'{key}_pad_masks'
-        tokens = token_output[token_label]
-        mask = token_output[mask_label]
+        # Tokenize with optional masking, padding is done later due to differences in encoder/decoder bos/eos tokens
+        token_output = self.tokenizer.tokenize(smiles, pad=False, mask=mask_data)
+
+        if mask_data:
+            tokens = token_output['masked_tokens']
+            mask = token_output['token_masks']
+        else:
+            tokens = token_output['original_tokens']
+            mask = [[False] * len(ts) for ts in tokens]
 
         # Verify sequence length
         tokens, mask = self._check_seq_len(tokens, mask)
 
         token_output = {
             "tokens": tokens,
-            "pad_mask": mask,
+            "mask": mask,
             "target_smiles": canon_targets
         }
 
         return token_output
 
     def collate_fn(self, batch: List[str], label_pad: int = -1):
-        encoder_tokens = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
-        decoder_tokens = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=False)
+        """Collate function for NeMo MegaMolBART. Format of data has been altered for NeMo per 'NB' comments. 
+        This code should be cleaned up and validated once new tokenizer from NeMo is incorporated."""
 
-        # Dimensions required by NeMo: [batch, sequence/padding] 
-        enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens['tokens'])
-        enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64) # TODO ensure transpose is removed
+        # Dimensions required by NeMo: [batch, sequence + padding] 
+        # Encoder
+        encoder_dict = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
+        encoder_tokens = encoder_dict['tokens']
+
+        enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
+        enc_token_ids, encoder_mask = self.tokenizer._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
-        enc_pad_mask = torch.tensor(encoder_tokens['pad_mask'], dtype=torch.bool) # TODO ensure transpose is removed
-        enc_pad_mask = ~enc_pad_mask # TODO ensure active = True, padded = False for NeMo, must invert in the tokenizer created
-        enc_pad_mask = enc_pad_mask.type(torch.int64)
+        enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64) # NB ensure transpose is removed
+        encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
+        encoder_mask = (encoder_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
 
-        dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens['tokens'])
-        dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64) # TODO ensure transpose is removed
+        # Decoder
+        decoder_dict = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=self.decoder_mask)
+        decoder_tokens = decoder_dict['tokens']
+
+        dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens)
+
+        label_ids = [example + [self.tokenizer.eos_id] for example in dec_token_ids] # must assign before added bos_id
+        dec_token_ids = [[self.tokenizer.bos_id] + example for example in dec_token_ids]
+        dec_token_ids, decoder_mask = self.tokenizer._pad_seqs(dec_token_ids, self.tokenizer.pad_id)
+
+        dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64) # NB ensure transpose is removed
+        decoder_mask = torch.tensor(decoder_mask, dtype=torch.int64)
+        decoder_mask = (decoder_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
         
-        dec_pad_mask = torch.tensor(decoder_tokens['pad_mask'], dtype=torch.bool) # TODO ensure transpose is removed
-        labels = dec_token_ids.clone()
-        labels[dec_pad_mask] = label_pad # TODO note this won't work if mask sign isn't corrected
-
-        dec_pad_mask = ~dec_pad_mask # TODO ensure active = True, padded = False for NeMo
-        dec_pad_mask = dec_pad_mask.type(torch.int64)
-
-        loss_mask = dec_pad_mask.clone()
-
+        label_token_ids, loss_mask = self.tokenizer._pad_seqs(label_ids, self.tokenizer.pad_id)
+        label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
+        loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
+        label_token_ids[loss_mask] = label_pad # NB assumes mask is inverted fro NeMo expectation
+        loss_mask = (loss_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
+        
         collate_output = {'text_enc': enc_token_ids,
-                          'enc_mask': enc_pad_mask,
+                          'enc_mask': encoder_mask,
                           'text_dec': dec_token_ids,
-                          'dec_mask': dec_pad_mask,
-                          'labels': labels, # token labels
-                          'target_smiles': batch, # smiles strings
-                          'loss_mask': loss_mask}
+                          'dec_mask': decoder_mask,
+                          'labels': label_token_ids, # token labels
+                          'loss_mask': loss_mask,
+                          'target_smiles': batch} # smiles strings
 
         return collate_output

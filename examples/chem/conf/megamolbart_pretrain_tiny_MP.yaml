@@ -104,6 +104,7 @@ model:
     encoder_augment: True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: False  # TODO Check this
+    decoder_mask: False
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 8
 

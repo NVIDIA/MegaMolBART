@@ -280,7 +280,7 @@ class MolEncTokenizer:
         return len(self.vocab)
 
     def tokenize(self, sents1, sents2=None, mask=False, pad=False):
-        # TODO this function can likely be streamlined
+        # TODO this function needs cleanup
         if sents2 is not None and len(sents1) != len(sents2):
             raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
 
@@ -295,10 +295,12 @@ class MolEncTokenizer:
             m_tokens, _ = self._concat_sentences(m_tokens, sents2_m_tokens, self.sep_token)
             token_masks, _ = self._concat_sentences(token_masks, sents2_masks, False)
 
-        tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens]
-        m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
-        token_masks = [[False] + ts + [False] for ts in token_masks]
-        sent_masks = [[0] + mask + [1] for mask in sent_masks] if sent_masks is not None else None
+        # TODO this removes bos/eos addition since NeMo handles differently. 
+        # Now handled in collate function
+        # tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens] 
+        # m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
+        # token_masks = [[False] + ts + [False] for ts in token_masks]
+        # sent_masks = [[0] + mask + [1] for mask in sent_masks] if sent_masks is not None else None
 
         output = {}
 
