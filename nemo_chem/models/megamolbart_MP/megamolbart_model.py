@@ -128,6 +128,12 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)            
             self.log('consumed_samples', consumed_samples, prog_bar=True)
 
+            tensorboard_logs = {'global_step': self.trainer.global_step,
+                                'reduced_loss': average_reduced_loss,
+                                'lr': lr,
+                                'consumed_samples': consumed_samples}
+            self.log('train', tensorboard_logs)
+
             self._reduced_loss_buffer = []
 
         return loss
@@ -145,8 +151,17 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         target_smiles = batch['target_smiles']
         token_logits = ret_dict['token_logits']
         metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
+
+        tensorboard_logs = {
+            'global_step': self.trainer.global_step,
+            'reduced_loss': reduced_loss,
+        }
+
         for metric_name in metrics:
             self.log(f'{metric_name}', metrics[metric_name], prog_bar=True)
+            tensorboard_logs[f'{metric_name}'] = metrics[metric_name]
+            
+        self.log('val', tensorboard_logs)
 
         return reduced_loss
 

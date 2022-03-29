@@ -125,9 +125,9 @@ class MoleculeEnumeration:
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
         enc_token_ids, encoder_mask = self.tokenizer._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
-        enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64) # NB ensure transpose is removed
+        enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
-        encoder_mask = (encoder_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
+        encoder_mask = (encoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
 
         # Decoder
         decoder_dict = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=self.decoder_mask)
@@ -135,19 +135,19 @@ class MoleculeEnumeration:
 
         dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens)
 
-        label_ids = [example + [self.tokenizer.eos_id] for example in dec_token_ids] # must assign before added bos_id
+        label_ids = [example + [self.tokenizer.eos_id] for example in dec_token_ids] # assign label_ids before adding bos_id to decoder
         dec_token_ids = [[self.tokenizer.bos_id] + example for example in dec_token_ids]
         dec_token_ids, decoder_mask = self.tokenizer._pad_seqs(dec_token_ids, self.tokenizer.pad_id)
 
-        dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64) # NB ensure transpose is removed
+        dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64)
         decoder_mask = torch.tensor(decoder_mask, dtype=torch.int64)
-        decoder_mask = (decoder_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
+        decoder_mask = (decoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
         
         label_token_ids, loss_mask = self.tokenizer._pad_seqs(label_ids, self.tokenizer.pad_id)
         label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
         loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
-        label_token_ids[loss_mask] = label_pad # NB assumes mask is inverted fro NeMo expectation
-        loss_mask = (loss_mask < 0.5).to(torch.int64) # NB ensure active = True/1, padded = False/0 for NeMo
+        label_token_ids[loss_mask] = label_pad # Assumes mask is inverted relative to NeMo expectation
+        loss_mask = (loss_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
         
         collate_output = {'text_enc': enc_token_ids,
                           'enc_mask': encoder_mask,
