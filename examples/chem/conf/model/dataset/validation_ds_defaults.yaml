@@ -1,9 +1,0 @@
-defaults:
-  - dataset_defaults
-
-encoder_augment: False
-encoder_mask: False
-decoder_augment: False
-canonicalize_input: False
-micro_batch_size: 32
-num_workers: 10

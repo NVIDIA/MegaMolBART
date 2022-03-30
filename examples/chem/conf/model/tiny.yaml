@@ -1,9 +1,0 @@
-defaults:
-  - model_defaults
-  
-name: pretrain_tiny
-d_model: 36 # the hidden_size
-d_feedforward: 144 # set to 4 * hidden_size
-num_heads: 3
-num_layers: 2
-tensor_model_parallel_size: 1
