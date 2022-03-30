@@ -488,6 +488,9 @@ class MolEncTokenizer:
     def ids_to_tokens(self, ids):
         return self.convert_ids_to_tokens(ids)
 
+    def tokens_to_text(self, tokens_list):
+        return self.detokenize(tokens_list)
+        
     @property
     def pad_id(self):
         return self.tokens_to_ids([[self.pad_token]])[0][0]
