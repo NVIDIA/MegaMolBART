@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+from typing import Dict
 from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
 from omegaconf import open_dict
@@ -150,6 +151,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         target_smiles = batch['target_smiles']
         token_logits = ret_dict['token_logits']
+        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
         metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
 
         tensorboard_logs = {
@@ -188,24 +190,42 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         character_accuracy = num_correct / total
         return character_accuracy
 
-    def _sample_molecules(self, tokens_enc, enc_mask):
-        """Sample SMILES molecules from encoder hidden state
+    def complete(self, request: Dict):
+        """Autoregressively sample SMILES molecules from encoder hidden state
 
         Args:
-            tokens_enc (torch.Tensor, long): token ID values for samples
-            enc_mask (torch.Tensor, long): boolean mask for padded sections
+            request (dict): A python dictionary with the following fields: 
+                * tokens_enc (torch.Tensor, long): token ID values for samples
+                * enc_mask (torch.Tensor, long): boolean mask for padded sections
 
         Returns:
-            string: sampled SMILE values
+            response (dict): A python dictionary with the following fields:
+                * sampled_smiles (list[str]): a list of sampled SMILES strings
         """
 
-        # Decode encoder hidden state to tokens
-        predicted_tokens_dec, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
-        tokens = self.tokenizer.convert_ids_to_tokens(predicted_tokens_dec.tolist())
+        self.freeze()
 
-        # Convert to SMILES string
-        sampled_smiles = self.tokenizer.detokenize(tokens)
-        return sampled_smiles
+        tokens_enc = request['tokens_enc']
+        enc_mask = request['enc_mask']
+
+        # Decode encoder hidden state to tokens
+        predicted_tokens_ids, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
+        predicted_tokens_ids = predicted_tokens_ids.cpu().numpy().tolist()
+
+        # Prune tokens by eos / padding and convert to SMILES
+        for item, predicted_tokens_ in enumerate(predicted_tokens_ids):
+            if self.tokenizer.eos_id in predicted_tokens_:
+                idx = predicted_tokens_.index(self.tokenizer.eos_id)
+                predicted_tokens_ids[item] = predicted_tokens_[:idx]
+            else:
+                predicted_tokens_ids[item] = [id for id in predicted_tokens_ if id != self.tokenizer.pad_id]
+            
+        predicted_tokens_ids = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
+        sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_ids)
+        response = {'sampled_smiles': sampled_smiles}
+
+        self.unfreeze()
+        return response
 
     def _calculate_molecular_accuracy(self, tokens_enc, enc_mask, target_smiles):
         """Calculate molecular accuracy (with canonicalization)
@@ -219,7 +239,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             float, float: molecular accuracy and percent invalid
         """
 
-        sampled_smiles = self._sample_molecules(tokens_enc, enc_mask)
+        request = {'tokens_enc': tokens_enc, 'enc_mask': enc_mask}
+        response = self.complete(request)
+        sampled_smiles = response['sampled_smiles']
+
         sampled_mols = [Chem.MolFromSmiles(smi) for smi in sampled_smiles]
         invalid = [mol is None for mol in sampled_mols]
 
