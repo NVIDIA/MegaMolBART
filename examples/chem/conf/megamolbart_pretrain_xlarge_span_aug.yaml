@@ -6,7 +6,7 @@ restore_from_path: null # used when starting from a .nemo file
 
 trainer:
   devices: 8
-  num_nodes: 4
+  num_nodes: 8
   accelerator: gpu
   precision: 16
   logger: False # logger provided by exp_manager
@@ -54,7 +54,7 @@ exp_manager:
 model:
   name: xlarge_span_aug
   # model parallelism 
-  micro_batch_size: 256
+  micro_batch_size: 32
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet. Use 1 for now.
 
