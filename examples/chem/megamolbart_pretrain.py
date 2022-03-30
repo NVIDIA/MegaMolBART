@@ -1,127 +1,115 @@
-from typing import Optional, Union, Any, List
-from pathlib import Path
-from copy import deepcopy
-from dataclasses import dataclass
-from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.trainer.trainer import Trainer
-import pytorch_lightning as pl
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+from dataclasses import asdict
+from omegaconf.omegaconf import OmegaConf, open_dict
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelSummary
+from pytorch_lightning.callbacks.timer import Timer
 from pytorch_lightning.plugins.environments.torchelastic_environment import TorchElasticEnvironment
 from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from pytorch_lightning.trainer.connectors.checkpoint_connector import CheckpointConnector
-from pytorch_lightning.callbacks.timer import Timer
+
+from nemo.collections.nlp.parts.nlp_overrides import GradScaler, MegatronHalfPrecisionPlugin, NLPDDPPlugin
+from nemo.core.config import hydra_runner
+from nemo.utils import logging
+from nemo.utils.exp_manager import StatelessTimer, exp_manager
+
+from nemo_chem.models.megamolbart import MegaMolBARTModel
+from nemo_chem.data import MoleculeCsvDatasetConfig
+from nemo_chem.utils import recursive_make_dirs
 from preprocess import Preprocess
 
-from nemo.utils import logging
-from nemo.utils.config_utils import update_model_config
-from nemo.core.config import hydra_runner
-from nemo.core.config.modelPT import NemoConfig
-from nemo.core.config.pytorch_lightning import TrainerConfig
-from nemo.utils.exp_manager import exp_manager, ExpManagerConfig, StatelessTimer
-from nemo.collections.nlp.modules.common.megatron.megatron_utils import compute_model_parallel_rank
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, NLPDDPPlugin
 
-from nemo_chem.models import MegaMolBARTModel, MegatronBARTConfig
-from nemo_chem.tokenizer import MolEncTokenizerFromVocabFileConfig
-from nemo_chem.decoder import DecodeSamplerConfig
-from nemo_chem.nlp_overrides import MegaMolBARTNLPDDPPlugin
+def update_dataset_config(cfg):
+    """Update a configuration with existing defaults"""
+    with open_dict(cfg):
+        dataset_cfg = asdict(MoleculeCsvDatasetConfig())
+        dataset_cfg.update(cfg.model['data'])
+        cfg.model['data'] = dataset_cfg
+    return cfg
 
 
-
-def recursive_make_dirs(directory):
-    logging.info(f'Creating directory {str(directory)}...')
-    if isinstance(directory, str):
-        directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-
-
-def configure_trainer_plugins(cfg: DictConfig) -> DictConfig:
-    trainer_cfg = dict(deepcopy(cfg.trainer))
-    
-    if trainer_cfg['precision'] != 'bf16':
-        trainer_cfg['precision'] = int(trainer_cfg['precision'])
-
-    # Configure plugins
-    trainer_cfg.pop('strategy', None) # Must be null for DDDPlugin override
-    # plugins = [NLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])]
-    plugins = [MegaMolBARTNLPDDPPlugin(num_nodes=trainer_cfg['num_nodes'])] # TODO revert to NLPDDPPlugin when find_unused_parameters bug is solved
-    if cfg.trainer.precision == 16:
-        scaler = GradScaler(
-            init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
-            growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
+def setup_trainer(cfg):
+    """Trainer setup functions"""
+    megatron_amp_o2 = cfg.model.get('megatron_amp_O2', False)
+    plugins = [
+        NLPDDPPlugin(
+            no_ddp_communication_hook=(
+                megatron_amp_o2 and cfg.trainer.precision == 'bf16'
+            ),  # Only bf16 uses fp32_grad_accum.
+            gradient_as_bucket_view=cfg.model.gradient_as_bucket_view,
+            find_unused_parameters=False,
         )
-        plugins.append(NativeMixedPrecisionPlugin(precision=16, device='cuda', scaler=scaler))
+    ]
+    if cfg.trainer.precision in [16, 'bf16']:
+        scaler = None
+        if cfg.trainer.precision == 16:
+            scaler = GradScaler(
+                init_scale=cfg.model.get('native_amp_init_scale', 2 ** 32),
+                growth_interval=cfg.model.get('native_amp_growth_interval', 1000),
+                hysteresis=cfg.model.get('hysteresis', 2),
+            )
+        if megatron_amp_o2:
+            plugins.append(MegatronHalfPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
+        else:
+            plugins.append(NativeMixedPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
 
     if cfg.get('cluster_type', None) == 'BCP':
         plugins.append(TorchElasticEnvironment())
 
-    if not trainer_cfg.get('plugins', False):
-        trainer_cfg['plugins'] = []
-    trainer_cfg['plugins'].extend(plugins)
-    return trainer_cfg
+    trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
 
+    resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
+    trainer.checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
+    
+    # Override timer callback and convert to a stateless one
+    for idx, callback in enumerate(trainer.callbacks):
+        if isinstance(callback, Timer):
+            trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time,)
 
-def update_checkpoint_name(cfg: DictConfig, trainer: Trainer):
-    "Update config checkpoint name for model parallel if needed"
-    resume_from_checkpoint = trainer.resume_from_checkpoint
-    if resume_from_checkpoint is not None:
-        mp_rank = compute_model_parallel_rank(trainer.local_rank, cfg.model.tensor_model_parallel_size)
-        resume_from_checkpoint = Path(resume_from_checkpoint)
-        resume_from_checkpoint = resume_from_checkpoint.parent.parent.joinpath(f'mp_rank_{mp_rank:02d}').joinpath(
-            resume_from_checkpoint.name
-        )
-        resume_from_checkpoint = str(resume_from_checkpoint)
-
-        logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
-        trainer.checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
     return trainer
 
 
-def use_stateless_timer(cfg: DictConfig, trainer: Trainer):
-    for idx, callback in enumerate(trainer.callbacks):
-        if isinstance(callback, Timer):
-            trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time)
+@hydra_runner(config_path="conf", config_name="megamolbart_pretrain_xsmall_span_aug")
+def main(cfg) -> None:
+    cfg = update_dataset_config(cfg)
 
-@dataclass
-class MegaMolBARTPretrain(NemoConfig):
-    name: Optional[str] = 'MegaMolBART'
-    do_training: Optional[bool] = None
-    do_testing: Optional[bool] = None
-    model: MegatronBARTConfig = MegatronBARTConfig()
-    tokenizer: MolEncTokenizerFromVocabFileConfig = MolEncTokenizerFromVocabFileConfig()
-    trainer: Optional[TrainerConfig] = TrainerConfig()
-    exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MegaMolBART', files_to_copy=[])
-    seed: Optional[int] = None
-    dataset_path: Optional[str] = None
+    logging.info("\n\n************** Experiment configuration ***********")
+    logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
-@hydra_runner()
-def main(cfg: MegaMolBARTPretrain) -> None:
-
-    # Load configuration
-    default_cfg = OmegaConf.structured(MegaMolBARTPretrain())
-    OmegaConf.set_struct(cfg, False)
-    cfg = update_model_config(default_cfg, cfg)
-    OmegaConf.set_struct(cfg, True)
-
-    logging.info("************** Experiment configuration ***********")
-    logging.info(f"Config:\n {OmegaConf.to_yaml(cfg)}")
-
-    trainer_config = configure_trainer_plugins(cfg)
-    if cfg.seed:
-        pl.seed_everything(cfg.seed, workers=True)
-
-    trainer = pl.Trainer(**trainer_config)
-    trainer = update_checkpoint_name(cfg, trainer)
-    use_stateless_timer(cfg, trainer)
+    trainer = setup_trainer(cfg)
 
     log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
     recursive_make_dirs(log_dir)
     recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
-    model = MegaMolBARTModel(cfg, trainer)
+    # update resume from checkpoint found by exp_manager
+    resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
+    logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
+
+    # hydra interpolation does not work here as the interpolation key is lost when PTL saves hparams
+    with open_dict(cfg):
+        cfg.model.precision = cfg.trainer.precision
+
+    model = MegaMolBARTModel(cfg.model, trainer)
+
     logging.info("************** Model parameters and their sizes ***********")
     for name, param in model.named_parameters():
         logging.info(f'{name}: {param.size()}')
-    logging.info("***********************************************************")
+        logging.info("***********************************************************")
 
     if cfg.do_training:
         logging.info("************** Starting Training ***********")

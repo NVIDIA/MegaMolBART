@@ -273,6 +273,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         """
         character_accuracy = self._calculate_character_accuracy(token_logits, loss_mask, labels)
         molecular_accuracy, percent_invalid = self._calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles)
+        logging.info(f'Metrics: character_accuracy: {character_accuracy}, molecular_accuracy {molecular_accuracy}, percent_invalid {percent_invalid}')
         metrics = {'character_accuracy': character_accuracy,
                    'molecular_accuracy': molecular_accuracy,
                    'percent_invalid': percent_invalid}
