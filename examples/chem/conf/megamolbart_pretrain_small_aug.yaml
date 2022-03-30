@@ -80,7 +80,7 @@ model:
   # memory efficiency
   persist_layer_norm: True # use persistent fused layer norm kernel.
   gradient_as_bucket_view: True # allocate gradients in a contiguous bucket to save memory (less fragmentation and buffer memory)
-  make_vocab_size_divisible_by: 1 # TODO FIX ME pad the vocab size to be divisible by this value for computation efficiency. Default: 128
+  make_vocab_size_divisible_by: 128 # pad the vocab size to be divisible by this value for computation efficiency. Default: 128
   masked_softmax_fusion: False # must be False when padding done in collate function
 
   # precision

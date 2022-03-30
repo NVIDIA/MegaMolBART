@@ -16,6 +16,7 @@ trainer:
   max_steps: 1000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
   log_every_n_steps: 200
   val_check_interval: 100
+  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
   limit_val_batches: 10
   limit_test_batches: 0
   accumulate_grad_batches: 1
@@ -78,7 +79,7 @@ model:
   # memory efficiency
   persist_layer_norm: True # use persistent fused layer norm kernel.
   gradient_as_bucket_view: True # allocate gradients in a contiguous bucket to save memory (less fragmentation and buffer memory)
-  make_vocab_size_divisible_by: 1 # TODO FIX BUG pad the vocab size to be divisible by this value for computation efficiency. Default: 128
+  make_vocab_size_divisible_by: 128 # TODO FIX BUG pad the vocab size to be divisible by this value for computation efficiency. Default: 128
   masked_softmax_fusion: False # must be False when padding done in collate function
 
   # precision
