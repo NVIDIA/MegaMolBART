@@ -1,4 +1,5 @@
 from typing import List
+from enum import Enum
 import re
 import braceexpand
 import os
@@ -11,7 +12,10 @@ from nemo.utils import logging
 from .csv_data import MoleculeDataset, MoleculeIterableDataset
 from .concat import ConcatIterableDataset
 
-__all__ = ['expand_dataset_paths', 'build_train_valid_test_datasets']
+__all__ = ['DatasetTypes', 'expand_dataset_paths', 'build_train_valid_test_datasets']
+
+class DatasetTypes(Enum):
+    zinc_csv  = 0
 
 
 def expand_dataset_paths(filepath: str) -> List[str]:

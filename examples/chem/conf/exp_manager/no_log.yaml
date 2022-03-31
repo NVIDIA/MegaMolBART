@@ -1,6 +1,0 @@
-defaults:
-  - exp_manager_defaults
-  
-create_tensorboard_logger: False
-create_checkpoint_callback: False
-create_wandb_logger: False

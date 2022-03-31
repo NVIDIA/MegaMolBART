@@ -4,7 +4,7 @@ defaults:
 # model architecture
 seq_length: 512
 max_position_embeddings: ${.seq_length}
-num_layers: 6
-hidden_size: 512
-num_attention_heads: 8
+num_layers: 8
+hidden_size: 1024
+num_attention_heads: 16
 ffn_hidden_size: ${multiply:4, ${.hidden_size}} # Transformer FFN hidden size. Usually 4 * hidden_size.

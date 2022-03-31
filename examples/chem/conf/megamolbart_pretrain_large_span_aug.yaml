@@ -1,5 +1,5 @@
 defaults:
-  - model: small
+  - model: large
 
 name: MegaMolBART
 do_training: True # set to false if data preprocessing steps must be completed
@@ -8,8 +8,8 @@ seed: 42
 restore_from_path: null # used when starting from a .nemo file
 
 trainer:
-  devices: 1 #8
-  num_nodes: 1 #4
+  devices: 8
+  num_nodes: 8
   accelerator: gpu
   precision: 16
   logger: False # logger provided by exp_manager
@@ -55,10 +55,9 @@ exp_manager:
     model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
 
 model:
-  name: small_span
-  
+  name: xlarge_span_aug
   # model parallelism 
-  micro_batch_size: 64
+  micro_batch_size: 32
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet. Use 1 for now.
 
@@ -68,10 +67,10 @@ model:
 
   data:  
     dataset_path: /data/zinc_csv_split
-    dataset_files: x[000..001].csv # x[000..146].csv
+    dataset_files: x[000..146].csv
     encoder_augment: True # consistent with DEFAULT_AUGMENT in AZ script
-    encoder_mask: True # task = mask(span)
-    decoder_augment: False # task = mask(span)
+    encoder_mask: True # task = mask(span)_aug
+    decoder_augment: True # task = mask(span)_aug
     decoder_mask: False
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
