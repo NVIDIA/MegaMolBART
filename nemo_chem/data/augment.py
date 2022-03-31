@@ -11,7 +11,7 @@ from nemo_chem.tokenizer import MolEncTokenizer
 __all__ = ['MoleculeEnumeration']
 
 
-class MoleculeEnumeration:
+class MoleculeEnumeration(object):
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
