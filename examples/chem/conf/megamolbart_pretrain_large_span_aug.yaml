@@ -1,3 +1,6 @@
+defaults:
+  - model: large
+
 name: MegaMolBART
 do_training: True # set to false if data preprocessing steps must be completed
 do_testing: False # set to true to run evaluation on test data after training, requires test_dataset section
@@ -10,7 +13,7 @@ trainer:
   accelerator: gpu
   precision: 16
   logger: False # logger provided by exp_manager
-  enable_checkpointing: False
+  enable_checkpointing: False # checkpointing done by exp_manager
   replace_sampler_ddp: False
   max_epochs: null
   max_steps: 100000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
@@ -57,47 +60,6 @@ model:
   micro_batch_size: 32
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet. Use 1 for now.
-
-  # model architecture
-  encoder_arch: 'transformer'
-  decoder_arch: 'transformer'
-  seq_length: 512
-  max_position_embeddings: ${.seq_length}
-  num_layers: 8
-  hidden_size: 1024
-  num_attention_heads: 16
-  ffn_hidden_size: ${multiply:4, ${.hidden_size}} # Transformer FFN hidden size. Usually 4 * hidden_size.
-  activation: 'gelu'
-  init_method_std: 0.02 # standard deviation of the zero mean normal distribution used for weight initialization.')
-  hidden_dropout: 0.1 # dropout probability for hidden state transformer.
-  attention_dropout: 0.1 # dropout probability in the attention layer.
-  kv_channels: null # projection weights dimension in multi-head attention. Set to hidden_size // num_attention_heads if null
-  apply_query_key_layer_scaling: True # scale Q * K^T by 1 / layer-number.
-  layernorm_epsilon: 1e-5
-  pre_process: True # add embedding
-  post_process: True # add pooler  
-
-  # memory efficiency
-  persist_layer_norm: True # use persistent fused layer norm kernel.
-  gradient_as_bucket_view: True # allocate gradients in a contiguous bucket to save memory (less fragmentation and buffer memory)
-  make_vocab_size_divisible_by: 128 # pad the vocab size to be divisible by this value for computation efficiency. Default: 128
-  masked_softmax_fusion: False # must be False when padding done in collate function
-
-  # precision
-  native_amp_init_scale: 4294967296 # 2 ** 32
-  native_amp_growth_interval: 1000
-  megatron_amp_O2: False # use AMP with O2 style mixed precision instead of native amp on-the-fly weight autocasting.
-  fp32_residual_connection: False # move residual connections to fp32
-  fp16_lm_cross_entropy: False # move the cross entropy unreduced loss calculation for lm head to fp16
-
-  # miscellaneous
-  seed: ${seed}
-  use_cpu_initialization: False # init weights on the CPU (slow for large models)
-  onnx_safe: False # use work-arounds for known problems with Torch ONNX exporter
-
-  # not implemented in NeMo yet
-  activations_checkpoint_method: null # 'uniform', 'block'
-  activations_checkpoint_num_layers: 1 
 
   tokenizer:
     mask_scheme: span
