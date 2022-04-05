@@ -16,6 +16,7 @@
 import torch
 from nemo.utils import logging
 from rdkit import Chem
+import math
 from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
@@ -31,7 +32,8 @@ class MoleculeEnumeration(object):
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
-                canonicalize_input: bool, **kwargs):
+                canonicalize_input: bool, pad_size_divisible_by_8: bool, 
+                **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.encoder_augment = encoder_augment
@@ -39,7 +41,7 @@ class MoleculeEnumeration(object):
         self.decoder_augment = decoder_augment
         self.decoder_mask = decoder_mask
         self.canonicalize_input = canonicalize_input
-        self.pad_size_divisible_by_8 = False
+        self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
     def _smiles_augmeter_func(self, smiles: str, augment_data: bool):

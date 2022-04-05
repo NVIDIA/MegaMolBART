@@ -489,8 +489,8 @@ class MolEncTokenizer:
             return token
 
     @staticmethod
-    def pad_seqs(seqs, pad_token):
-        logging.info('Warning: The padding function within the tokenizer is deprecated.')
+    def _pad_seqs(seqs, pad_token):
+        logging.warning('This sequence padding function is deprecated and may not produce correct results')
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
         masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]

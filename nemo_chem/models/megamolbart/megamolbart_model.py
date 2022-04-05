@@ -102,7 +102,11 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
         # TODO remove when data loader complete
         dataloader.pin_memory = False
-        dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, seq_length=self._cfg.seq_length, **self._cfg.data).collate_fn
+        pad_size_divisible_by_8 = True if self._cfg.masked_softmax_fusion else False
+        dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
+                                                    seq_length=self._cfg.seq_length, 
+                                                    pad_size_divisible_by_8=pad_size_divisible_by_8,
+                                                    **self._cfg.data).collate_fn
         
         return dataloader
 
