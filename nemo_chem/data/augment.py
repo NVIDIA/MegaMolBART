@@ -1,6 +1,7 @@
 import torch
 from nemo.utils import logging
 from rdkit import Chem
+import math
 from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
@@ -15,7 +16,8 @@ class MoleculeEnumeration(object):
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
-                canonicalize_input, **kwargs):
+                canonicalize_input: bool, pad_size_divisible_by_8: bool, 
+                **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.encoder_augment = encoder_augment
@@ -23,6 +25,7 @@ class MoleculeEnumeration(object):
         self.decoder_augment = decoder_augment
         self.decoder_mask = decoder_mask
         self.canonicalize_input = canonicalize_input
+        self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
     def _smiles_augmeter_func(self, smiles: str, augment_data: bool):
@@ -113,6 +116,15 @@ class MoleculeEnumeration(object):
 
         return token_output
 
+    def _pad_seqs(self, seqs, pad_token):
+        pad_length = max([len(seq) for seq in seqs])
+        if self.pad_size_divisible_by_8:
+            pad_length = int(math.ceil(pad_length/8) * 8)
+
+        padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
+        masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]
+        return padded, masks
+
     def collate_fn(self, batch: List[str], label_pad: int = -1):
         """Collate function for NeMo MegaMolBART. Format of data has been altered for NeMo per 'NB' comments. 
         This code should be cleaned up and validated once new tokenizer from NeMo is incorporated."""
@@ -123,7 +135,7 @@ class MoleculeEnumeration(object):
         encoder_tokens = encoder_dict['tokens']
 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
-        enc_token_ids, encoder_mask = self.tokenizer._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
+        enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
@@ -137,13 +149,14 @@ class MoleculeEnumeration(object):
 
         label_ids = [example + [self.tokenizer.eos_id] for example in dec_token_ids] # assign label_ids before adding bos_id to decoder
         dec_token_ids = [[self.tokenizer.bos_id] + example for example in dec_token_ids]
-        dec_token_ids, decoder_mask = self.tokenizer._pad_seqs(dec_token_ids, self.tokenizer.pad_id)
+        dec_token_ids, decoder_mask = self._pad_seqs(dec_token_ids, self.tokenizer.pad_id)
 
         dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64)
         decoder_mask = torch.tensor(decoder_mask, dtype=torch.int64)
         decoder_mask = (decoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
         
-        label_token_ids, loss_mask = self.tokenizer._pad_seqs(label_ids, self.tokenizer.pad_id)
+        label_token_ids, loss_mask = self._pad_seqs(label_ids, self.tokenizer.pad_id)
+
         label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
         loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
         label_token_ids[loss_mask] = label_pad # Assumes mask is inverted relative to NeMo expectation

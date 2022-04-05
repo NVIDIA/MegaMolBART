@@ -74,7 +74,6 @@ model:
     decoder_mask: False
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
-    # make_pad_size_divisible_by: 8 # TODO ADD THIS
 
   optim:
     name: fused_adam

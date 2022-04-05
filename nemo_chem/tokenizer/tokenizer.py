@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Any
+from nemo.utils import logging
 import nemo_chem
 
 __all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH']
@@ -472,6 +473,7 @@ class MolEncTokenizer:
 
     @staticmethod
     def _pad_seqs(seqs, pad_token):
+        logging.warning('This sequence padding function is deprecated and may not produce correct results')
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
         masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]
