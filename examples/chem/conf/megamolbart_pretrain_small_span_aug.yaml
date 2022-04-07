@@ -1,94 +1,13 @@
 defaults:
-  - model: small
-
-name: MegaMolBART
-do_training: True # set to false if data preprocessing steps must be completed
-do_testing: False # set to true to run evaluation on test data after training, requires test_dataset section
-seed: 42
-restore_from_path: null # used when starting from a .nemo file
+  - megamolbart_pretrain_base
 
 trainer:
   devices: 8
-  num_nodes: 4
-  accelerator: gpu
-  precision: 16
-  logger: False # logger provided by exp_manager
-  enable_checkpointing: False # checkpointing done by exp_manager
-  replace_sampler_ddp: False
-  max_epochs: null
-  max_steps: 100000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
-  log_every_n_steps: 200
-  val_check_interval: 2000
-  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
-  limit_val_batches: 0.25
-  limit_test_batches: 0
-  accumulate_grad_batches: 1
-  gradient_clip_val: 1.0
-
-exp_manager:
-  name: ${name}
-  exp_dir: /result/nemo_experiments/${.name}/${.wandb_logger_kwargs.name}
-  explicit_log_dir: ${.exp_dir}
-  create_wandb_logger: True
-  create_tensorboard_logger: True
-  wandb_logger_kwargs:
-    project: ${model.name}_pretraining
-    name: ${model.name}_pretraining
-    group: ${model.name}
-    job_type: Localhost_nodes_${trainer.num_nodes}_gpus_${trainer.devices}
-    entity: clara-discovery
-    notes: "date: ${now:%y%m%d-%H%M%S}"
-    tags:
-      - ${name}
-      - ${model.name}
-    offline: False
-  resume_if_exists: True
-  resume_ignore_no_checkpoint: True
-  create_checkpoint_callback: True
-  checkpoint_callback_params:
-    monitor: val_loss # TODO switch to molecular_accuracy when correctly calculated
-    save_top_k: 3
-    save_last: True
-    mode: min
-    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
-    filename: '${name}-${model.name}--{molecular_accuracy:.2f}-{val_loss:.2f}-{step}-{consumed_samples}'
-    model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
+  num_nodes: 8
 
 model:
-  name: small_span_aug
-
-  # model parallelism 
-  micro_batch_size: 64
-  tensor_model_parallel_size: 1
-  pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet. Use 1 for now.
-
-  tokenizer:
-    mask_scheme: span
-    mask_prob: 0.1
-
-  data:  
-    dataset_path: /data/zinc_csv_split
-    dataset_files: x[000..146].csv
-    encoder_augment: True # consistent with DEFAULT_AUGMENT in AZ script
-    encoder_mask: True # task = mask(span)_aug
-    decoder_augment: True # task = mask(span)_aug
-    decoder_mask: False
-    micro_batch_size: ${model.micro_batch_size}
-    num_workers: 10
-    # make_pad_size_divisible_by: 8 # TODO ADD THIS
-
-  optim:
-    name: fused_adam
-    lr: 0.0001
-    betas:
-      - 0.9
-      - 0.999
-    eps: 1e-8
-    weight_decay: 0.01
-    sched:
-      name: NoamAnnealing
-      d_model: ${model.hidden_size}
-      warmup_steps: null
-      warmup_ratio: 0.008
-      max_steps: 100000
-      min_lr: 1e-5
+  name: xlarge_span_aug
+  # model architecture
+  num_layers: 6
+  hidden_size: 512
+  num_attention_heads: 8
