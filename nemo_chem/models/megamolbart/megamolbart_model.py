@@ -67,7 +67,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         # TODO: use tokenizer config to define toenizer
         model_path = os.path.splitext(vocab_path)[0]+".model"
         self.tokenizer = get_nmt_tokenizer(
-            library='byte-level',
+            library='regex',
             # include model files inside .nemo file
             tokenizer_model=self.register_artifact("tokenizer_model", model_path),
             vocab_file=self.register_artifact("vocab_file", vocab_path),
