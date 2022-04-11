@@ -45,12 +45,12 @@ exp_manager:
   resume_ignore_no_checkpoint: True
   create_checkpoint_callback: True
   checkpoint_callback_params:
-    monitor: val_loss # TODO switch to molecular_accuracy when correctly calculated
+    monitor: val_molecular_accuracy # TODO switch to molecular_accuracy when correctly calculated
+    mode: max
     save_top_k: 3
-    mode: min
-    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
-    filename: '${name}-${model.name}--{molecular_accuracy:.2f}-{val_loss:.2f}-{step}-{consumed_samples}'
+    filename: '${name}-${model.name}--{val_molecular_accuracy:.2f}-{val_loss:.2f}-{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
+    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
 
 model:
   name: xsmall_span_aug
