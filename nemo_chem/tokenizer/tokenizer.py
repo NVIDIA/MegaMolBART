@@ -317,8 +317,8 @@ class MolEncTokenizer:
         # Now handled in collate function
         # tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens] 
         # m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
-        # token_masks = [[False] + ts + [False] for ts in token_masks]
-        # sent_masks = [[0] + mask + [1] for mask in sent_masks] if sent_masks is not None else None
+        # token_masks = [[True] + ts + [True] for ts in token_masks]
+        # sent_masks = [[1] + mask + [0] for mask in sent_masks] if sent_masks is not None else None
 
         output = {}
 
@@ -365,7 +365,7 @@ class MolEncTokenizer:
     @staticmethod
     def _concat_sentences(tokens1, tokens2, sep):
         tokens = [ts1 + [sep] + ts2 for ts1, ts2 in zip(tokens1, tokens2)]
-        sent_masks = [([0] * len(ts1)) + [0] + ([1] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]
+        sent_masks = [([1] * len(ts1)) + [1] + ([0] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]  # 1/True = Active, 0/False = Inactive
         return tokens, sent_masks
 
     def detokenize(self, tokens_list):
@@ -425,7 +425,7 @@ class MolEncTokenizer:
 
     def mask_tokens(self, tokens, empty_mask=False):
         if empty_mask:
-            mask = [[False] * len(ts) for ts in tokens]
+            mask = [[True] * len(ts) for ts in tokens]
             return tokens, mask
 
         masked_tokens = []
@@ -493,7 +493,7 @@ class MolEncTokenizer:
         logging.warning('This sequence padding function is deprecated and may not produce correct results')
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
-        masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]
+        masks = [([1] * len(seq)) + ([0] * (pad_length - len(seq))) for seq in seqs]
         return padded, masks
 
     # NeMo compatbility

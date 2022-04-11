@@ -119,7 +119,7 @@ class MoleculeEnumeration(object):
             mask = token_output['token_masks']
         else:
             tokens = token_output['original_tokens']
-            mask = [[False] * len(ts) for ts in tokens]
+            mask = [[True] * len(ts) for ts in tokens]  # 1/True = Active, 0/False = Inactive
 
         # Verify sequence length
         tokens, mask = self._check_seq_len(tokens, mask)
@@ -155,7 +155,7 @@ class MoleculeEnumeration(object):
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
-        encoder_mask = (encoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
+        # encoder_mask = (encoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
 
         # Decoder
         decoder_dict = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=self.decoder_mask)
@@ -172,9 +172,8 @@ class MoleculeEnumeration(object):
         
         label_token_ids, loss_mask = self._pad_seqs(label_ids, self.tokenizer.pad_id)
         label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
-        loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
-        label_token_ids[loss_mask] = label_pad # Assumes mask is inverted relative to NeMo expectation
-        loss_mask = (loss_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
+        loss_mask = torch.tensor(loss_mask, dtype=torch.int64)
+        label_token_ids[~loss_mask.to(torch.bool)] = label_pad
         
         collate_output = {'text_enc': enc_token_ids,
                           'enc_mask': encoder_mask,
