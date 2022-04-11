@@ -14,11 +14,11 @@ from nemo.utils import logging
 from nemo.collections.nlp.data.language_modeling.megatron.indexed_dataset import make_dataset
 
 import time
-__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeDataset']
+__all__ = ['MoleculeBinaryDatasetConfig', 'MoleculeBinaryDataset']
 
 
 @dataclass
-class MoleculeCsvDatasetConfig(DatasetConfig):
+class MoleculeBinaryDatasetConfig(DatasetConfig):
     filepath: str = 'data.csv'
     micro_batch_size: int = 1
     use_iterable: bool = False
@@ -35,7 +35,7 @@ class MoleculeCsvDatasetConfig(DatasetConfig):
     pin_memory: bool = True # TODO: remove this if value is fixed
 
 
-class MoleculeABCDataset():
+class MoleculeBinaryABCDataset(): # TODO should inheret from MegatronDataset
     """Molecule base dataset that reads tokenized data from binarized input files."""
     
     def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False): 
@@ -65,8 +65,8 @@ class MoleculeABCDataset():
             self.fh.close()
 
 
-class MoleculeDataset(Dataset, MoleculeABCDataset):
-    """Dataset that reads GPU-specific portion of data into memory from CSV file"""
+class MoleculeBinaryDataset(Dataset, MoleculeBinaryABCDataset):
+    """Dataset that reads GPU-specific portion of data into memory from Binary file"""
     def __init__(self, filepath: str, metadata_path: str = None, num_samples: int = None, map_data: bool = False, **kwargs):
         super().__init__(filepath=filepath, metadata_path=metadata_path, num_samples=num_samples, map_data=map_data)
         self._initialize_file()
