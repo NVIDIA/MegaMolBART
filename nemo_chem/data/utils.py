@@ -24,7 +24,7 @@ import torch.utils.data as pt_data
 from pytorch_lightning.trainer.trainer import Trainer
 
 from nemo.utils import logging
-from .csv_data import MoleculeDataset, MoleculeIterableDataset
+from .csv_dataset import MoleculeCsvDataset, MoleculeCsvIterableDataset
 from .concat import ConcatIterableDataset
 
 __all__ = ['DatasetTypes', 'expand_dataset_paths', 'build_train_valid_test_datasets']
@@ -61,9 +61,9 @@ def _build_train_valid_test_datasets(
     dataset_list = []
     for path in dataset_paths:
         if use_iterable:
-            data = MoleculeIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
+            data = MoleculeCsvIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
         else:
-            data = MoleculeDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
+            data = MoleculeCsvDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
         dataset_list.append(data)
 
         num_samples -= len(data)
