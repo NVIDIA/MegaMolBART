@@ -1,4 +1,17 @@
-# coding=utf-8
+# Copyright (c) 2022, NVIDIA CORPORATION.
+# SPDX-License-Identifier: Apache-2.0
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import os
 import re
@@ -12,7 +25,7 @@ from nemo.core import Dataset, IterableDataset
 from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
 from nemo.utils import logging
 
-__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeDataset', 'MoleculeIterableDataset']
+__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset', 'MoleculeCsvIterableDataset']
 
 
 @dataclass
@@ -35,7 +48,7 @@ class MoleculeCsvDatasetConfig():
     dataloader_type: str = 'single'
 
 
-class MoleculeABCDataset(MegatronDataset):
+class MoleculeCsvABCDataset(MegatronDataset):
     """Molecule base dataset that reads SMILES from the second column from CSV files."""
     def __init__(self, filepath, cfg, trainer, num_samples=None):
         """
@@ -107,7 +120,7 @@ class MoleculeABCDataset(MegatronDataset):
             self.fh.close()
 
 
-class MoleculeDataset(Dataset, MoleculeABCDataset):
+class MoleculeCsvDataset(Dataset, MoleculeCsvABCDataset):
     """Dataset that reads GPU-specific portion of data into memory from CSV file"""
     def __init__(self, filepath, cfg, trainer, num_samples=None):
         super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
@@ -126,7 +139,7 @@ class MoleculeDataset(Dataset, MoleculeABCDataset):
         return self._cache[idx]
 
 
-class MoleculeIterableDataset(IterableDataset, MoleculeABCDataset):
+class MoleculeCsvIterableDataset(IterableDataset, MoleculeCsvABCDataset):
     def __init__(self, filepath, cfg, trainer, num_samples=None):
         super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
         
