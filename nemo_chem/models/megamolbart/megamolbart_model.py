@@ -52,8 +52,23 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer):
+        self._check_scheduler(cfg)
         self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg, trainer=trainer)
+
+    def _check_scheduler(self, cfg):
+        """Warn if maximum learning rate with Noam is less than minimum learning rate"""
+        # TODO add to Noam Scheduler in NeMo
+        if cfg.optim.sched.name == 'NoamAnnealing':
+            if cfg.optim.sched.warmup_steps:
+                warmup_steps = cfg.optim.sched.warmup_steps
+            else:
+                warmup_steps = int(cfg.optim.sched.warmup_ratio * cfg.optim.sched.max_steps)
+            max_lr = cfg.optim.lr * cfg.optim.sched.d_model**(-0.5) * warmup_steps**(-0.5)
+            min_lr = cfg.optim.sched.min_lr
+            if max_lr <= min_lr:
+                logging.warning(f'Warning: maximum learning rate for Noam Scheduler ({max_lr}) is less than minimum ({min_lr}).')
+        return
 
     def _build_tokenizer(self):
         """
@@ -237,7 +252,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_ids)
 
         self.unfreeze()
-
         return sampled_smiles
 
     @staticmethod
@@ -305,7 +319,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         """
         character_accuracy = self.calculate_character_accuracy(token_logits, loss_mask, labels)
         molecular_accuracy, percent_invalid = self.calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles)
-        logging.info(f'Metrics: character_accuracy: {character_accuracy}, molecular_accuracy {molecular_accuracy}, percent_invalid {percent_invalid}')
         metrics = {'character_accuracy': character_accuracy,
                    'molecular_accuracy': molecular_accuracy,
                    'percent_invalid': percent_invalid}
