@@ -131,24 +131,17 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self._reduced_loss_buffer.append(reduced_loss[0])
 
         if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-            self.log('global_step', self.trainer.global_step, prog_bar=True)
-
             # Reduced loss for logging.
             average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-            self.log('reduced_loss', average_reduced_loss, prog_bar=True)
-            
             lr = self._optimizer.param_groups[0]['lr']
-            self.log('lr', lr)
+            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
 
-            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)            
-            self.log('consumed_samples', consumed_samples, prog_bar=True)
+            logs = {'global_step': self.trainer.global_step,
+                    'reduced_loss': average_reduced_loss,
+                    'lr': lr,
+                    'consumed_samples': consumed_samples}
 
-            tensorboard_logs = {'global_step': self.trainer.global_step,
-                                'reduced_loss': average_reduced_loss,
-                                'lr': lr,
-                                'consumed_samples': consumed_samples}
-            self.log('train', tensorboard_logs)
-
+            self.log_dict(logs)
             self._reduced_loss_buffer = []
 
         return loss
@@ -158,27 +151,23 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
 
-        self.log('global_step', self.trainer.global_step, prog_bar=True)
-
         reduced_loss = average_losses_across_data_parallel_group([loss])
-        self.log('reduced_loss', reduced_loss, prog_bar=True)
-
         target_smiles = batch['target_smiles']
         token_logits = ret_dict['token_logits']
         token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-        metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
+        metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
+                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles)
 
-        tensorboard_logs = {
+        mode = 'val'
+        logs = {
             'global_step': self.trainer.global_step,
             'reduced_loss': reduced_loss,
         }
 
-        for metric_name in metrics:
-            self.log(f'{metric_name}', metrics[metric_name], prog_bar=True)
-            tensorboard_logs[f'{metric_name}'] = metrics[metric_name]
-            
-        self.log('val', tensorboard_logs)
+        for metric_name, metric_value in metrics.items():
+            logs[f'{mode}_{metric_name}'] = metric_value
 
+        self.log_dict(logs)
         return reduced_loss
 
     def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):
