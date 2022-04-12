@@ -148,7 +148,7 @@ class MoleculeEnumeration(object):
         # Dimensions required by NeMo: [batch, sequence + padding] 
         # Encoder
         encoder_dict = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
-        encoder_tokens = encoder_dict['tokens']
+        encoder_tokens = encoder_dict['tokens'] # TODO boolean masks are never used from this function -- remove during refactor
 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
@@ -178,8 +178,8 @@ class MoleculeEnumeration(object):
                           'enc_mask': encoder_mask,
                           'text_dec': dec_token_ids,
                           'dec_mask': decoder_mask,
-                          'labels': label_token_ids, # token labels
+                          'labels': label_token_ids, 
                           'loss_mask': loss_mask,
-                          'target_smiles': batch} # smiles strings
+                          'target_smiles': encoder_dict['target_smiles']} # smiles strings
 
         return collate_output

@@ -40,7 +40,7 @@ class MoleculeCsvDatasetConfig():
     encoder_augment: bool = True
     encoder_mask: bool = False
     decoder_augment: bool = False
-    canonicalize_input: bool = False
+    canonicalize_input: bool = True
     drop_last: bool = False
     shuffle: bool = False
     num_workers: Optional[int] = None

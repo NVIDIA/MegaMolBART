@@ -266,10 +266,11 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                 idx = predicted_tokens_.index(self.tokenizer.eos_id)
                 predicted_tokens_ids[item] = predicted_tokens_[:idx]
             else:
+                # NB: this is slightly different from previous version in that pad tokens can be in the middle of sequence
                 predicted_tokens_ids[item] = [id for id in predicted_tokens_ if id != self.tokenizer.pad_id]
             
-        predicted_tokens_ids = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
-        sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_ids)
+        predicted_tokens_text = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
+        sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_text)
 
         self.unfreeze()
         return sampled_smiles
@@ -287,9 +288,9 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             float: character accuracy value
         """
 
-        # Get most likely token
+        # Get most probable token
         _, predicted_tokens = torch.max(token_logits, dim=2)
-        correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask
+        correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask # NB: mask includes EOS in calculation
 
         # Calculate percent of correct tokens
         num_correct = correct_tokens.sum().cpu().detach().item()
