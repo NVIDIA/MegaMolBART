@@ -15,20 +15,21 @@
 
 import os
 from operator import itemgetter
-from typing import Dict
-from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
 from omegaconf import open_dict
 from rdkit import Chem
+from packaging import version
 
 import torch
 import torch.nn as nn
 from pytorch_lightning.trainer.trainer import Trainer
 
+import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
+from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 
-from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH
+from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
 from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
@@ -53,7 +54,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def __init__(self, cfg: DictConfig, trainer: Trainer):
         self._check_scheduler(cfg)
-        self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
         super().__init__(cfg, trainer=trainer)
 
     def _check_scheduler(self, cfg):
@@ -74,11 +74,31 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         """
         Tokenizer from MegaMolBART.
         """
-        vocab_path = self._tokenizer_config.get('vocab_path', DEFAULT_VOCAB_PATH) # TODO replace this with get_cheminformatics_tokenizer
+        # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
+        vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
         if not os.path.exists(vocab_path):
             raise ValueError(f'Vocab file not found at {vocab_path}')
 
-        self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
+        model_path = self._cfg.tokenizer.get('model_path', DEFAULT_MODEL_PATH)
+        if not os.path.exists(model_path):
+            raise ValueError(f'Model file not found at {model_path}')
+
+        with open_dict(self._cfg):
+            self._cfg.tokenizer.vocab_path = vocab_path
+            self._cfg.tokenizer.model_path = model_path
+
+        # TODO cleanup once NeMo 1.8 conversion is complete
+        USE_NEMO_REGEX_TOKENIZER = version.parse(nemo.__shortversion__) >= version.parse('1.8')
+        if USE_NEMO_REGEX_TOKENIZER:
+            # TODO: use tokenizer config to define tokenizer
+            self.tokenizer = get_nmt_tokenizer(
+                library='regex',
+                # include model files inside .nemo file
+                tokenizer_model = self.register_artifact("tokenizer_model", model_path),
+                vocab_file = self.register_artifact("vocab_file", vocab_path),
+            )
+        else:
+            self.tokenizer = MolEncTokenizer.from_vocab_file(**self._cfg.tokenizer)
 
     def build_train_valid_test_datasets(self):
         logging.info('Building MegaMolBART datasets.')

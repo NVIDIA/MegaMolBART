@@ -23,10 +23,11 @@ from typing import Optional, List, Tuple, Any
 from nemo.utils import logging
 import nemo_chem
 
-__all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH']
+__all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH', 'DEFAULT_MODEL_PATH']
 
 DEFAULT_VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
-DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart_vocab.txt')
+DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.vocab')
+DEFAULT_MODEL_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.model')
 
 # Defaults
 DEFAULT_SEQ_LEN = 512
@@ -160,7 +161,8 @@ class MolEncTokenizer:
         mask_prob=DEFAULT_MASK_PROB,
         show_mask_token_prob=DEFAULT_SHOW_MASK_TOKEN_PROB,
         mask_scheme=DEFAULT_MASK_SCHEME,
-        span_lambda=DEFAULT_SPAN_LAMBDA
+        span_lambda=DEFAULT_SPAN_LAMBDA,
+        **kwargs
     ):
         """ Load the tokenizer object from a vocab file and regex
 
