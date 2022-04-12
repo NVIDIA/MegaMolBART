@@ -69,10 +69,10 @@ model:
   data:  
     dataset_path: /data/zinc_csv_split
     dataset_files: x[000..146].csv
-    encoder_augment: True # consistent with DEFAULT_AUGMENT in AZ script
-    encoder_mask: True # task = mask(span)_aug
-    decoder_augment: True # task = mask(span)_aug
-    decoder_mask: False
+    encoder_augment: True # task = mask(span)_aug
+    encoder_mask: False # always False
+    decoder_augment: False # False when decoder_mask enabled, otherwise True
+    decoder_mask: True # task = mask(span)_aug
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
 
