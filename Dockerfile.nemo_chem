@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM nvcr.io/nvidia/nemo:22.01
+# TODO: replace with nemo 1.8 released container
+# FROM nvcr.io/nvidia/nemo:22.01
+FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH
 ARG NEMO_CHEM_HOME=/workspace/nemo_chem
@@ -33,8 +35,9 @@ RUN apt-get update && \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
+# TODO: check if required
 ## Upgrade NeMo
-RUN pip install nemo_toolkit[all]==1.7.2
+# RUN pip install nemo_toolkit[all]==1.7.2
 
 ## Environment setup --  multithreaded dataloading very sensitive to libboost version. Do not change w/o testing.
 COPY conda/env.yml /tmp/env.yml
