@@ -16,6 +16,7 @@
 import torch
 from nemo.utils import logging
 from rdkit import Chem
+import math
 from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
@@ -31,7 +32,8 @@ class MoleculeEnumeration(object):
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
-                canonicalize_input: bool, **kwargs):
+                canonicalize_input: bool, pad_size_divisible_by_8: bool, 
+                **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.encoder_augment = encoder_augment
@@ -39,7 +41,7 @@ class MoleculeEnumeration(object):
         self.decoder_augment = decoder_augment
         self.decoder_mask = decoder_mask
         self.canonicalize_input = canonicalize_input
-        self.pad_size_divisible_by_8 = False
+        self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
     def _smiles_augmeter_func(self, smiles: str, augment_data: bool):
@@ -117,7 +119,7 @@ class MoleculeEnumeration(object):
             mask = token_output['token_masks']
         else:
             tokens = token_output['original_tokens']
-            mask = [[False] * len(ts) for ts in tokens]
+            mask = [[True] * len(ts) for ts in tokens]  # 1/True = Active, 0/False = Inactive
 
         # Verify sequence length
         tokens, mask = self._check_seq_len(tokens, mask)
@@ -146,14 +148,13 @@ class MoleculeEnumeration(object):
         # Dimensions required by NeMo: [batch, sequence + padding] 
         # Encoder
         encoder_dict = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
-        encoder_tokens = encoder_dict['tokens']
+        encoder_tokens = encoder_dict['tokens'] # TODO boolean masks are never used from this function -- remove during refactor
 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
-        encoder_mask = (encoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
 
         # Decoder
         decoder_dict = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=self.decoder_mask)
@@ -170,16 +171,15 @@ class MoleculeEnumeration(object):
         
         label_token_ids, loss_mask = self._pad_seqs(label_ids, self.tokenizer.pad_id)
         label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
-        loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
-        label_token_ids[loss_mask] = label_pad # Assumes mask is inverted relative to NeMo expectation
-        loss_mask = (loss_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
+        loss_mask = torch.tensor(loss_mask, dtype=torch.int64)
+        label_token_ids[~loss_mask.to(torch.bool)] = label_pad
         
         collate_output = {'text_enc': enc_token_ids,
                           'enc_mask': encoder_mask,
                           'text_dec': dec_token_ids,
                           'dec_mask': decoder_mask,
-                          'labels': label_token_ids, # token labels
+                          'labels': label_token_ids, 
                           'loss_mask': loss_mask,
-                          'target_smiles': batch} # smiles strings
+                          'target_smiles': encoder_dict['target_smiles']} # smiles strings
 
         return collate_output

@@ -16,7 +16,7 @@ trainer:
   enable_checkpointing: False # checkpointing done by exp_manager
   replace_sampler_ddp: False
   max_epochs: null
-  max_steps: 1000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
+  max_steps: 100000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
   log_every_n_steps: 200
   val_check_interval: 100
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
@@ -29,8 +29,8 @@ exp_manager:
   name: ${name}
   exp_dir: /result/nemo_experiments/${.name}/${.wandb_logger_kwargs.name}
   explicit_log_dir: ${.exp_dir}
-  create_wandb_logger: False # FIX ME
-  create_tensorboard_logger: False # FIX ME
+  create_wandb_logger: True
+  create_tensorboard_logger: True
   wandb_logger_kwargs:
     project: ${model.name}_pretraining
     name: ${model.name}_pretraining
@@ -46,18 +46,19 @@ exp_manager:
   resume_ignore_no_checkpoint: True
   create_checkpoint_callback: True
   checkpoint_callback_params:
-    monitor: val_loss # TODO switch to molecular_accuracy when correctly calculated
+    monitor: val_molecular_accuracy # TODO switch to molecular_accuracy when correctly calculated
+    mode: max
     save_top_k: 3
-    mode: min
-    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
-    filename: '${name}-${model.name}--{molecular_accuracy:.2f}-{val_loss:.2f}-{step}-{consumed_samples}'
+    filename: '${name}-${model.name}--{val_molecular_accuracy:.2f}-{val_loss:.2f}-{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
+    save_last: True
+    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
 
 model:
   name: xsmall_span_aug
 
   # model parallelism 
-  micro_batch_size: 16
+  micro_batch_size: 32
   tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1 # T5 PP is not supported yet. Use 1 for now.
 
@@ -67,18 +68,17 @@ model:
 
   data:  
     dataset_path: /data/zinc_csv_split
-    dataset_files: x[000..001].csv
-    encoder_augment: True # consistent with DEFAULT_AUGMENT in AZ script
-    encoder_mask: True # task = mask(span)_aug
-    decoder_augment: True # task = mask(span)_aug
-    decoder_mask: False
+    dataset_files: x[000..001].csv # NB: reduced data
+    encoder_augment: True # task = mask(span)_aug
+    encoder_mask: False # always False
+    decoder_augment: False # False when decoder_mask enabled, otherwise True
+    decoder_mask: True # task = mask(span)_aug
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
-    # make_pad_size_divisible_by: 8 # TODO ADD THIS
 
   optim:
     name: fused_adam
-    lr: 0.0001
+    lr: 1.0 # max is scaled by Noam scheduler to d_model**(-0.5) * warmup**(-0.5)
     betas:
       - 0.9
       - 0.999
@@ -89,13 +89,6 @@ model:
       d_model: ${model.hidden_size}
       warmup_steps: null
       warmup_ratio: 0.008
-      max_steps: 100000
+      max_steps: ${trainer.max_steps}
       min_lr: 1e-5
-      # name: InverseSquareRootAnnealing # TODO switch to noam ?
-      # min_lr: 0.0
-      # last_epoch: -1
-      # warmup_ratio: 0.03 
-      # # name: WarmupAnnealing
-      # # min_lr: 0.00001
-      # # last_epoch: -1
-      # # warmup_ratio: 0.01
+

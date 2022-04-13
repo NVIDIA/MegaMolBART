@@ -23,10 +23,11 @@ from typing import Optional, List, Tuple, Any
 from nemo.utils import logging
 import nemo_chem
 
-__all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH']
+__all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH', 'DEFAULT_MODEL_PATH']
 
 DEFAULT_VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
-DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart_vocab.txt')
+DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.vocab')
+DEFAULT_MODEL_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.model')
 
 # Defaults
 DEFAULT_SEQ_LEN = 512
@@ -41,7 +42,11 @@ DEFAULT_MASK_PROB = 0.15
 DEFAULT_SHOW_MASK_TOKEN_PROB = 1.0
 DEFAULT_MASK_SCHEME = "span"
 DEFAULT_SPAN_LAMBDA = 3.0
-DEFAULT_REGEX = r"""\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9]"""
+
+# DEFAULT_REGEX = r"""\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9]"""
+with open(DEFAULT_MODEL_PATH, 'r') as fh:
+    DEFAULT_REGEX = fh.read().strip()
+DEFAULT_REGEX = r"""{}""".format(DEFAULT_REGEX) # force literal string
 
 @dataclass
 class MolEncTokenizerBaseConfig():
@@ -160,7 +165,8 @@ class MolEncTokenizer:
         mask_prob=DEFAULT_MASK_PROB,
         show_mask_token_prob=DEFAULT_SHOW_MASK_TOKEN_PROB,
         mask_scheme=DEFAULT_MASK_SCHEME,
-        span_lambda=DEFAULT_SPAN_LAMBDA
+        span_lambda=DEFAULT_SPAN_LAMBDA,
+        **kwargs
     ):
         """ Load the tokenizer object from a vocab file and regex
 
@@ -317,8 +323,8 @@ class MolEncTokenizer:
         # Now handled in collate function
         # tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens] 
         # m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
-        # token_masks = [[False] + ts + [False] for ts in token_masks]
-        # sent_masks = [[0] + mask + [1] for mask in sent_masks] if sent_masks is not None else None
+        # token_masks = [[True] + ts + [True] for ts in token_masks]
+        # sent_masks = [[1] + mask + [0] for mask in sent_masks] if sent_masks is not None else None
 
         output = {}
 
@@ -365,7 +371,7 @@ class MolEncTokenizer:
     @staticmethod
     def _concat_sentences(tokens1, tokens2, sep):
         tokens = [ts1 + [sep] + ts2 for ts1, ts2 in zip(tokens1, tokens2)]
-        sent_masks = [([0] * len(ts1)) + [0] + ([1] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]
+        sent_masks = [([1] * len(ts1)) + [1] + ([0] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]  # 1/True = Active, 0/False = Inactive
         return tokens, sent_masks
 
     def detokenize(self, tokens_list):
@@ -425,7 +431,7 @@ class MolEncTokenizer:
 
     def mask_tokens(self, tokens, empty_mask=False):
         if empty_mask:
-            mask = [[False] * len(ts) for ts in tokens]
+            mask = [[True] * len(ts) for ts in tokens]
             return tokens, mask
 
         masked_tokens = []
@@ -489,11 +495,11 @@ class MolEncTokenizer:
             return token
 
     @staticmethod
-    def pad_seqs(seqs, pad_token):
-        logging.info('Warning: The padding function within the tokenizer is deprecated.')
+    def _pad_seqs(seqs, pad_token):
+        logging.warning('This sequence padding function is deprecated and may not produce correct results')
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
-        masks = [([0] * len(seq)) + ([1] * (pad_length - len(seq))) for seq in seqs]
+        masks = [([1] * len(seq)) + ([0] * (pad_length - len(seq))) for seq in seqs]
         return padded, masks
 
     # NeMo compatbility
