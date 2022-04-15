@@ -191,7 +191,7 @@ class Preprocess(object):
                      split_files)
 
     def prepare_dataset(self,
-                        links_file='conf/model/dataset/ZINC-downloader-AZ.txt',
+                        links_file='conf/model/dataset/ZINC-downloader.txt',
                         download_dir='/tmp/zinc15/raw',
                         output_dir='/tmp/zinc15/processed'):
         """
