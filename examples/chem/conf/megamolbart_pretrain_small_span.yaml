@@ -69,10 +69,10 @@ model:
   data:  
     dataset_path: /data/zinc_csv_split
     dataset_files: x[000..146].csv
-    encoder_augment: False # task = mask(span)
-    encoder_mask: False # always False
-    decoder_augment: False # False when decoder_mask enabled, otherwise True
-    decoder_mask: True # task = mask(span)
+    encoder_augment: True # always True
+    encoder_mask: True # task = mask(span)
+    decoder_augment: False # task = mask(span)
+    decoder_mask: False # always False 
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
 
