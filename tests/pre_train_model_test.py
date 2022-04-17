@@ -19,7 +19,7 @@ import torch
 
 from nemo_chem.decoder import DecodeSampler
 from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromSmilesConfig
-from nemo_chem.models import MegatronBART, MegatronBARTConfig
+from nemo_chem.models import MegaMolBARTModel, MegatronBARTConfig
 
 from nemo.collections.nlp.modules.common.megatron.megatron_init import initialize_model_parallel_for_nemo
 
