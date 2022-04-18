@@ -8,7 +8,7 @@ seed: 42
 restore_from_path: null # used when starting from a .nemo file
 
 trainer:
-  devices: 3
+  devices: 1
   num_nodes: 1
   accelerator: gpu
   precision: 16
