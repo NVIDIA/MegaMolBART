@@ -183,18 +183,9 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     def _inference_epoch_end(self, outputs, mode):
         results_dict = self._flatten_dict(outputs)
 
-        # # Calculate loss
-        # losses = results_dict.pop('loss')
-        # reduced_loss = average_losses_across_data_parallel_group(losses)
-        # averaged_results = {f'{mode}_loss': reduced_loss.cpu().detach().numpy().mean()}
-
-        # # Calculate other metrics
-        # for metric_name, metric_list in results_dict.items():
-        #     averaged_results[f'{mode}_{metric_name}'] = np.array(metric_list).mean()
-
         # Calculate metric averages
-        # TODO this averages all metrics across all data parallel groups
-        # if too slow, may need to only average loss in this way
+        # TODO this reduces all metrics across all data parallel groups
+        # if too slow, can only reduce loss instead
         averaged_results = {} 
         for metric_name, metric_list in results_dict.items():
             reduced_metric = average_losses_across_data_parallel_group(metric_list)
