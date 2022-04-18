@@ -22,9 +22,7 @@ from nemo.core import Dataset
 from nemo.utils import logging
 import itertools
 
-__all__ = ['ConcatIterableDataset']
 
-# TODO add NeMo-style type checking
 class ConcatIterableDataset(IterableDataset):
     r"""Dataset as a concatenation of multiple datasets.
 
@@ -41,8 +39,10 @@ class ConcatIterableDataset(IterableDataset):
     cumulative_sizes: List[int]
 
     def __init__(self, datasets: Iterable[Dataset]) -> None:
+        # TODO remove before v0.2 release
+        logging.warning("ConcatIterableDataset is not compatible with NeMo's Megatron dataloaders and is deprecated")
         super(ConcatIterableDataset, self).__init__()
-        assert len(datasets) > 0, 'datasets should not be an empty iterable'  # type: ignore[arg-type]
+        assert len(datasets) > 0, AssertionError('Datasets should not be an empty iterable.')
         self.datasets = list(datasets)
         self.cumulative_sizes = self.cumsum(self.datasets)
         

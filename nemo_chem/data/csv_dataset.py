@@ -25,7 +25,7 @@ from nemo.core import Dataset, IterableDataset
 from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
 from nemo.utils import logging
 
-__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset', 'MoleculeCsvIterableDataset']
+__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset']
 
 
 @dataclass
@@ -40,7 +40,7 @@ class MoleculeCsvDatasetConfig():
     encoder_augment: bool = True
     encoder_mask: bool = False
     decoder_augment: bool = False
-    canonicalize_input: bool = True
+    canonicalize_input: bool = True # TODO remove when CSV data processing updated
     drop_last: bool = False
     shuffle: bool = False
     num_workers: Optional[int] = None
@@ -141,6 +141,8 @@ class MoleculeCsvDataset(Dataset, MoleculeCsvABCDataset):
 
 class MoleculeCsvIterableDataset(IterableDataset, MoleculeCsvABCDataset):
     def __init__(self, filepath, cfg, trainer, num_samples=None):
+        # TODO remove before v0.2 release
+        logging.warning("MoleculeCsvIterableDataset is not compatible with NeMo's Megatron dataloaders and is deprecated")
         super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
         
     def __iter__(self):  

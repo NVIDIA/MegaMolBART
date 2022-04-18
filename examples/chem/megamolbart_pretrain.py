@@ -119,7 +119,7 @@ def main(cfg) -> None:
     else:
         logging.info("************** Starting Data PreProcessing ***********")
         preprocess = Preprocess()
-        preprocess.split_dataset(links_file='conf/model/dataset/ZINC-downloader.txt',
+        preprocess.prepare_dataset(links_file='conf/model/dataset/ZINC-downloader.txt',
                                  output_dir=cfg.model.data.dataset_path)
         logging.info("************** Finished Data PreProcessing ***********")
 

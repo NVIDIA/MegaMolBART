@@ -18,7 +18,9 @@ from operator import itemgetter
 from omegaconf.dictconfig import DictConfig
 from omegaconf import open_dict
 from rdkit import Chem
+from collections import defaultdict
 from packaging import version
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -151,6 +153,59 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
 
+    def _inference_step(self, batch, batch_idx):
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
+        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
+                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+
+        target_smiles = batch['target_smiles']
+        token_logits = ret_dict['token_logits']
+        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
+        metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
+                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles)
+
+        logs = {'loss': loss}
+        for metric_name, metric_value in metrics.items():
+            logs[metric_name] = metric_value
+        
+        return logs
+
+    @staticmethod
+    def _flatten_dict(outputs):
+        """Flatten a list of dictionaries to list without assuming all keys are identical"""
+        flattened_dict = defaultdict(list)
+        for metric_dict in outputs:
+            for metric_name, metric_value in metric_dict.items():
+                flattened_dict[metric_name].append(metric_value)
+
+        return flattened_dict
+
+    def _inference_epoch_end(self, outputs, mode):
+        results_dict = self._flatten_dict(outputs)
+
+        # Calculate metric averages
+        # TODO this reduces all metrics across all data parallel groups
+        # if too slow, can only reduce loss instead
+        averaged_results = {} 
+        for metric_name, metric_list in results_dict.items():
+            reduced_metric = average_losses_across_data_parallel_group(metric_list)
+            logged_name = 'reduced_loss' if metric_name == 'loss' else metric_name
+            averaged_results[logged_name] = reduced_metric.cpu().detach().numpy().mean()
+
+        # Log results
+        log_list = []
+        for metric_name, metric_val in averaged_results.items():
+            metric_name = metric_name.replace('_', ' ').title()
+            log_list.append(f'{metric_name}: {metric_val:.2f}')
+        logging.info(f'{mode.title()} Results: ' + ', '.join(log_list))
+
+        # Prepend val/test tag to metric for Tensorboard / WandB
+        logged_results = {}
+        for metric_name, metric_val in averaged_results.items():
+            logged_results[f'{mode}_{metric_name}'] = metric_val
+
+        self.log_dict(logged_results, prog_bar=True)
+
     def training_step(self, batch, batch_idx):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
@@ -182,28 +237,16 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
-        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
-                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+        return self._inference_step(batch, batch_idx)
 
-        reduced_loss = average_losses_across_data_parallel_group([loss])
-        target_smiles = batch['target_smiles']
-        token_logits = ret_dict['token_logits']
-        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-        metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
-                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles)
+    def test_step(self, batch, batch_idx):
+        return self._inference_step(batch, batch_idx)
 
-        mode = 'val'
-        logs = {
-            'global_step': self.trainer.global_step,
-            'reduced_loss': reduced_loss,
-        }
+    def validation_epoch_end(self, outputs):
+        self._inference_epoch_end(outputs, mode='val')
 
-        for metric_name, metric_value in metrics.items():
-            logs[f'{mode}_{metric_name}'] = metric_value
-
-        self.log_dict(logs)
-        return reduced_loss
+    def test_epoch_end(self, outputs):
+        self._inference_epoch_end(outputs, mode='test')
 
     def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):
         # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited 
@@ -258,7 +301,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         # Decode encoder hidden state to tokens
         predicted_tokens_ids, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
-        predicted_tokens_ids = predicted_tokens_ids.cpu().numpy().tolist()
+        predicted_tokens_ids = predicted_tokens_ids.cpu().detach().numpy().tolist()
 
         # Prune tokens by eos / padding and convert to SMILES
         for item, predicted_tokens_ in enumerate(predicted_tokens_ids):
@@ -293,8 +336,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask # NB: mask includes EOS in calculation
 
         # Calculate percent of correct tokens
-        num_correct = correct_tokens.sum().cpu().detach().item()
-        total = loss_mask.sum().cpu().detach().item()
+        num_correct = correct_tokens.detach().sum()
+        total = loss_mask.detach().sum()
         character_accuracy = num_correct / total
         return character_accuracy
 
@@ -319,8 +362,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         num_correct = sum(correct_smiles)
         total = len(correct_smiles)
         num_invalid = sum(invalid)
-        percent_invalid = num_invalid / total
-        molecular_accuracy = num_correct / total
+        percent_invalid = torch.tensor([num_invalid / total]).to(tokens_enc.device)
+        molecular_accuracy = torch.tensor([num_correct / total]).to(tokens_enc.device)
 
         return molecular_accuracy, percent_invalid
 
