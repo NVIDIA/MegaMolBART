@@ -336,8 +336,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask # NB: mask includes EOS in calculation
 
         # Calculate percent of correct tokens
-        # num_correct = correct_tokens.sum().cpu().detach().item()
-        # total = loss_mask.sum().cpu().detach().item()
         num_correct = correct_tokens.detach().sum()
         total = loss_mask.detach().sum()
         character_accuracy = num_correct / total
