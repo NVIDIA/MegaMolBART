@@ -77,7 +77,7 @@ def setup_trainer(cfg):
     trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
     log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
     recursive_make_dirs(log_dir)
-    recursive_make_dirs(trainer.checkpoint_callback.dirpath)
+    # recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
     # update resume from checkpoint found by exp_manager
     if cfg.model.resume_from_checkpoint is not None:
