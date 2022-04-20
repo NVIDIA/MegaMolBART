@@ -14,16 +14,18 @@
 # limitations under the License.
 
 import os
-import re
-import math
-import mmap
+import time
+import pickle
+
 from typing import Optional
 from dataclasses import dataclass
 
 import torch
-from nemo.core import Dataset, IterableDataset
+import numpy as np
+
 from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
 from nemo.utils import logging
+from ..utils.data_index import build_index_files
 
 __all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset']
 
@@ -32,8 +34,12 @@ __all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset']
 class MoleculeCsvDatasetConfig():
     dataset_path: str = ''
     dataset_files: str = 'data.csv'
-    metadata_file: str = 'metadata.txt'
     dataset_type: str = 'zinc_csv'
+    newline_int: int = 10
+    header_lines: int = 1
+    skip_lines: int = 0
+    data_col: int = 1
+    data_sep: str = ','
     micro_batch_size: int = 1
     use_iterable: bool = False
     map_data: bool = False
@@ -48,119 +54,113 @@ class MoleculeCsvDatasetConfig():
     dataloader_type: str = 'single'
 
 
-class MoleculeCsvABCDataset(MegatronDataset):
-    """Molecule base dataset that reads SMILES from the second column from CSV files."""
-    def __init__(self, filepath, cfg, trainer, num_samples=None):
-        """
-        Args:
-            dataset_cfg: dataset config
-            trainer: Pytorch Lightning trainer
-        """
-        self.cfg = cfg
-        assert os.path.exists(filepath), FileNotFoundError(f"Could not find CSV file {filepath}")
-        super().__init__(cfg=self.cfg, trainer=trainer)
+class MoleculeCsvDataset(MegatronDataset):
+    """
+    Allow per-line lazy access to multiple text files using numpy memmap.
+    """
+    def __init__(self,
+                 dataset_paths,
+                 cfg=None,
+                 trainer=None,
+                 newline_int=10,
+                 header_lines=1,
+                 skip_lines=0,
+                 workers=None,
+                 data_col=1,
+                 data_sep=','):
+        if len(dataset_paths) < 1:
+            raise ValueError("files_list must contain at leat one file name")
 
-        self.filepath = filepath
-        self.map_data = self.cfg.map_data
-        self.len = self._get_data_length(self.cfg.metadata_path)
-        if num_samples:
-            if num_samples > 0:
-                self.len = min(num_samples, self.len)
-        self.start = 0
-        self.end = self.start + self.len
-        self._cache = None
-        self.regex = re.compile(r"""\,(?P<smiles>.+)""") # TODO make column selectable in regex
+        super().__init__(cfg, trainer)
+
+        # load values from cfg
+        if cfg is not None:
+            newline_int = cfg.get('newline_int', 10)
+            header_lines = cfg.get('header_lines', 1)
+            skip_lines = cfg.get('skip_lines', 0)
+            data_col = cfg.get('data_col', 1)
+            data_sep = cfg.get('data_sep', ',')
+
+        self.newline_int = newline_int
+        # skip first N lines
+        self._header_lines = header_lines
+        self._skip_lines = skip_lines
+        self.files_list = dataset_paths
+        self._data_col = data_col
+        self._data_sep = data_sep
+        self.mdata_midx_size_list = None
+        self.worker = workers
+
+        logging.info(f"Building data files")
+        # load all files into memmap
+        start_time = time.time()
+        is_ditributed = torch.distributed.is_available() and \
+            torch.distributed.is_initialized()
+
+        if  not is_ditributed or \
+            (is_ditributed and torch.distributed.get_rank() == 0):
+            build_index_files(dataset_paths, newline_int, workers=self.worker)
+
+        if is_ditributed:
+            torch.distributed.barrier()
+        logging.info(f'Time building mem-mapped file: {time.time() - start_time}')
+
+        logging.info(f"Loading data files")
+        mdata_midx_size_list = [self.load_file(fn) for fn in self.files_list]
+
+        logging.info("Computing global indices")
+        joint_midx = [0]
+        for i in range(len(mdata_midx_size_list)):
+            midx = mdata_midx_size_list[i][1]
+            joint_midx.append(joint_midx[-1] + (len(midx) - header_lines))
+
+        self.joint_midx = joint_midx
+        self.mdata_midx_size_list = mdata_midx_size_list
+
+    def __del__(self):
+        if self.mdata_midx_size_list:
+            for mdata, midx, size in self.mdata_midx_size_list:
+                mdata._mmap.close()
 
     def __len__(self):
-        return self.len
-    
-    def _get_data_length(self, metadata_path: Optional[str] = None):
-        """Try to read metadata file for length, otherwise fall back on scanning rows"""
-        length = 0
-        if metadata_path:
-            assert os.path.exists(metadata_path), FileNotFoundError(f"Could not find metadata file {metadata_path}")
-            base_filepath = os.path.splitext(os.path.basename(self.filepath))[0]
-            with open(metadata_path, 'r') as fh:
-                for line in fh:
-                    data = line.strip().split(',')
-                    if data[0] == base_filepath:
-                        length = int(data[1])
-                        break
-        
-        if length == 0:
-            logging.info('Unable to determine dataset size from metadata. Falling back to countining lines.')
-            with open(self.filepath, 'rb') as fh:
-                for row, line in enumerate(fh):
-                    pass
-            length = row
+        return self.joint_midx[-1]
 
-        logging.info(f'Dataset {self.filepath} contains {length} molecules.')
-        return length
-    
-    def _initialize_file(self, start):
-
-        if self.map_data:
-            self.fh = open(self.filepath, 'rb')
-            self.fh.seek(0)
-            fh_map = mmap.mmap(self.fh.fileno(), 0, prot=mmap.PROT_READ)
-            fh_iter = iter(fh_map.readline, b'')
-        else:
-            fh_iter = iter(open(self.filepath, 'rb').readline, b'')
-        _ = [next(fh_iter) for x in range(start + 1)] # scan to start row 
-        self.fh_iter = fh_iter
-        
-    def parse_data(self, lines):
-        if isinstance(lines, list):
-            lines = b''.join(lines)
-        lines = re.findall(self.regex, lines.decode('utf-8'))
-        return lines
-        
-    def __exit__(self):
-        if self.map_data:
-            self.fh.close()
-
-
-class MoleculeCsvDataset(Dataset, MoleculeCsvABCDataset):
-    """Dataset that reads GPU-specific portion of data into memory from CSV file"""
-    def __init__(self, filepath, cfg, trainer, num_samples=None):
-        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
-        self._initialize_file(self.start)
-        self._make_data_cache()
-        
-    def _make_data_cache(self):
-        lines = [next(self.fh_iter) for x in range(self.len)]
-        lines = self.parse_data(lines)
-        assert len(lines) == self.len
-        self._cache = lines
-        
     def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.item()
-        return self._cache[idx]
+        """
+        Return a string
+        """
+        # Identify the file containing the record
+        file_id = 0
+        for end_idx in self.joint_midx[1:]:
+            if idx < end_idx:
+                break
+            file_id += 1
+        file_row = idx - self.joint_midx[file_id]
 
+        rec_start = self.mdata_midx_size_list[file_id][1][file_row]
+        rec_end = self.mdata_midx_size_list[file_id][1][file_row + 1 + self._skip_lines]
+        data = self.mdata_midx_size_list[file_id][0][rec_start:rec_end].tobytes().decode("ascii")
+        return data.split(self._data_sep)[self._data_col]
 
-class MoleculeCsvIterableDataset(IterableDataset, MoleculeCsvABCDataset):
-    def __init__(self, filepath, cfg, trainer, num_samples=None):
-        # TODO remove before v0.2 release
-        logging.warning("MoleculeCsvIterableDataset is not compatible with NeMo's Megatron dataloaders and is deprecated")
-        super().__init__(filepath=filepath, cfg=cfg, trainer=trainer, num_samples=num_samples)
-        
-    def __iter__(self):  
-        # Divide up for workers
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info:
-            per_worker = int(math.ceil((self.end - self.start) / float(worker_info.num_workers)))
-            iter_start = self.start + (worker_info.id * per_worker)
-            iter_end = min(iter_start + per_worker, self.end)
+    def load_file(self, fn):
+        """
+        Loads a text file as np.int8.
+
+        Returns:
+            mdata - memorymap of np.int8
+            midx - indices pointing to the end-of-line (or end of file) position
+        """
+        logging.info(f"Loading {fn}")
+        idx_fn = fn + ".idx"
+
+        # create data map
+        mdata = np.memmap(fn, dtype=np.uint8, mode='r')
+
+        if os.path.exists(idx_fn):
+            idx_dict = pickle.load(open(idx_fn, 'rb'))
+            midx = idx_dict['midx']
+            size = idx_dict['size']
         else:
-            per_worker = self.len
-            iter_start = self.start
-            iter_end = self.end
+            raise ValueError(f'Memory Map for {fn} is not found')
 
-        iter_len = iter_end - iter_start # handle smaller last batch
-        self._initialize_file(iter_start)
-
-        for _ in range(iter_len):
-            mol = next(self.fh_iter)
-            mol = self.parse_data(mol)[0]
-            yield mol
+        return (mdata, midx, size)

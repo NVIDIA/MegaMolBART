@@ -36,7 +36,7 @@ from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 try:
-    from apex.transformer import tensor_parallel
+    from apex.transformer import tensor_parallel, parallel_state
 
     HAVE_APEX = True
 except (ImportError, ModuleNotFoundError):
@@ -207,6 +207,13 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.log_dict(logged_results, prog_bar=True)
 
     def training_step(self, batch, batch_idx):
+
+        if batch_idx < 2: # TODO CLEANUP
+            target_smiles = batch['target_smiles']
+            data_parallel_world_size = parallel_state.get_data_parallel_world_size()
+            data_parallel_rank = parallel_state.get_data_parallel_rank()
+            logging.info(f'Data samples from {data_parallel_rank}/{data_parallel_world_size} with {len(self._train_ds)} for batch {batch_idx}: {target_smiles[:2]}')
+
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
         assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')

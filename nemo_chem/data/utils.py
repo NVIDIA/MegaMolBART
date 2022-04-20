@@ -24,7 +24,7 @@ import torch.utils.data as pt_data
 from pytorch_lightning.trainer.trainer import Trainer
 
 from nemo.utils import logging
-from .csv_dataset import MoleculeCsvDataset, MoleculeCsvIterableDataset
+from .csv_dataset import MoleculeCsvDataset
 from .concat import ConcatIterableDataset
 
 __all__ = ['DatasetTypes', 'expand_dataset_paths', 'build_train_valid_test_datasets']
@@ -43,7 +43,7 @@ def expand_dataset_paths(filepath: str) -> List[str]:
 
 
 def _build_train_valid_test_datasets(
-    cfg: DictConfig, 
+    cfg: DictConfig,
     trainer: Trainer,
     num_samples: int,
     filepath: str,
@@ -56,24 +56,31 @@ def _build_train_valid_test_datasets(
         cfg['metadata_path'] = metadata_path
 
     # Get datasets and load data
+    logging.info(f'Loading data from {filepath}')
     dataset_paths = expand_dataset_paths(filepath)
-    logging.info(f'Loading data from {dataset_paths}')
-    dataset_list = []
-    for path in dataset_paths:
-        if use_iterable:
-            data = MoleculeCsvIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
-        else:
-            data = MoleculeCsvDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
-        dataset_list.append(data)
+    # dataset_list = []
+    # for path in dataset_paths:
+    #     if use_iterable:
+    #         data = MoleculeCsvIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
+    #     else:
+    #         data = MoleculeCsvDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
 
-        num_samples -= len(data)
-        if num_samples < 1:
-            break
+    #     dataset_list.append(data)
+    #     num_samples -= len(data)
+    #     logging.info(f'Loaded data from {path} with {len(data)} samples')
 
-    if len(dataset_list) == 1:
-        dataset = dataset_list[0]
-    else:
-        dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
+    #     if num_samples < 1:
+    #         logging.info(f'Stopping data set loading at file {path} because samples have exceeded the required number for training.')
+    #         break
+
+    # if len(dataset_list) == 1:
+    #     dataset = dataset_list[0]
+    # else:
+    #     dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
+
+    dataset = MoleculeCsvDataset(dataset_paths,
+                                 cfg=cfg,
+                                 )
     return dataset
 
 
@@ -86,22 +93,22 @@ def build_train_valid_test_datasets(
     with open_dict(cfg):
         dataset_path = cfg.pop('dataset_path', '')
         dataset_files = cfg.pop('dataset_files')
-        metadata_file = cfg.pop('metadata_file')
+        metadata_file = cfg.pop('metadata_file', None)
         use_iterable = cfg.pop('use_iterable', False)
 
     # Build individual datasets.
     filepath = os.path.join(dataset_path, 'train', dataset_files)
-    metadata_path = os.path.join(dataset_path, 'train', metadata_file)
+    metadata_path = os.path.join(dataset_path, 'train', metadata_file) if metadata_file else None
     train_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[0],
                                                      filepath, metadata_path, use_iterable)
 
     filepath = os.path.join(dataset_path, 'val', dataset_files)
-    metadata_path = os.path.join(dataset_path, 'val', metadata_file)
+    metadata_path = os.path.join(dataset_path, 'val', metadata_file) if metadata_file else None
     validation_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[1],
                                                           filepath, metadata_path, use_iterable)
 
     filepath = os.path.join(dataset_path, 'test', dataset_files)
-    metadata_path = os.path.join(dataset_path, 'test', metadata_file)
+    metadata_path = os.path.join(dataset_path, 'test', metadata_file) if metadata_file else None
     test_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[2],
                                                     filepath, metadata_path, use_iterable)
 
