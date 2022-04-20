@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from .augment import *
-from .molecule_dataset import *
+from .molecule_binary_dataset import *
 from .csv_dataset import *
 from .prepare_dataset import *
 from .utils import *

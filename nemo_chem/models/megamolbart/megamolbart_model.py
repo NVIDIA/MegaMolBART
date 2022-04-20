@@ -33,8 +33,9 @@ from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenize
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
-from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
 from nemo_chem.utils import flatten_dict
+from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets, PrepareDataset
+from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 try:
     from apex.transformer import tensor_parallel, parallel_state
@@ -145,10 +146,18 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
         dataloader.pin_memory = False # must be False with CSV dataset TODO check with binary
         pad_size_divisible_by_8 = True if self._cfg.masked_softmax_fusion else False
-        dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
-                                                    seq_length=self._cfg.seq_length, 
-                                                    pad_size_divisible_by_8=pad_size_divisible_by_8,
-                                                    **self._cfg.data).collate_fn
+
+        ## TODO: We can use the Enum DatasetType() defined in the utils.py here. 
+        if self._cfg.data.dataset_format == "bin":
+            dataloader.collate_fn = PrepareDataset(tokenizer=self.tokenizer, 
+                                                        seq_length=self._cfg.seq_length, 
+                                                        pad_size_divisible_by_8=pad_size_divisible_by_8,
+                                                        **self._cfg.data).collate_fn
+        elif self._cfg.data.dataset_format == "csv":
+            dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
+                                                        seq_length=self._cfg.seq_length, 
+                                                        pad_size_divisible_by_8=pad_size_divisible_by_8,
+                                                        **self._cfg.data).collate_fn
         
         return dataloader
 

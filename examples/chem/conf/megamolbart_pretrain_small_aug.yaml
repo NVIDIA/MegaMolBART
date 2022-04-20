@@ -43,6 +43,7 @@ model:
     decoder_mask: False # always False 
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
+    dataset_format: csv #csv or bin
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models

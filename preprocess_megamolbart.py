@@ -161,6 +161,8 @@ def main():
         ifile = open(inputfile, "r")
         out_iterator = pool.imap(partial_process_func, ifile, 25)
         for enc_token_ids in out_iterator:
+            if len(enc_token_ids) == 0:
+                continue
             enc_token_ids = torch.tensor(enc_token_ids)
             dataset_builder.add_item(enc_token_ids)
         dataset_builder.end_document()
