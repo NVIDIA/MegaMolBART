@@ -75,8 +75,8 @@ def setup_trainer(cfg):
         plugins.append(TorchElasticEnvironment())
 
     trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
-    log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
-    recursive_make_dirs(log_dir)
+    exp_manager(trainer, cfg.get("exp_manager", None))
+    # recursive_make_dirs(log_dir)
     # recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
     # update resume from checkpoint found by exp_manager
@@ -92,6 +92,10 @@ def setup_trainer(cfg):
         if isinstance(callback, Timer):
             trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time,)
 
+    # hydra interpolation does not work here as the interpolation key is lost when PTL saves hparams
+    with open_dict(cfg):
+        cfg.model.precision = cfg.trainer.precision
+
     return trainer
 
 
@@ -103,15 +107,6 @@ def main(cfg) -> None:
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
     trainer = setup_trainer(cfg)
-
-    # update resume from checkpoint found by exp_manager
-    resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
-    logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
-
-    # hydra interpolation does not work here as the interpolation key is lost when PTL saves hparams
-    with open_dict(cfg):
-        cfg.model.precision = cfg.trainer.precision
-
     model = MegaMolBARTModel(cfg.model, trainer)
 
     logging.info("************** Model parameters and their sizes ***********")
