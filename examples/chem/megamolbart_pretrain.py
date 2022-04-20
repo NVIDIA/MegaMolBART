@@ -75,7 +75,9 @@ def setup_trainer(cfg):
         plugins.append(TorchElasticEnvironment())
 
     trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
-    exp_manager(trainer, cfg.exp_manager)
+    log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
+    recursive_make_dirs(log_dir)
+    recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
     # update resume from checkpoint found by exp_manager
     if cfg.model.resume_from_checkpoint is not None:
@@ -101,9 +103,6 @@ def main(cfg) -> None:
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
     trainer = setup_trainer(cfg)
-
-    recursive_make_dirs(log_dir)
-    recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
     # update resume from checkpoint found by exp_manager
     resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
