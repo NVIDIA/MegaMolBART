@@ -1,18 +1,14 @@
 defaults:
-  - megamolbart_pretrain_base
+  - model: small
+
+name: MegaMolBART
+do_training: True # set to false if data preprocessing steps must be completed
+do_testing: False # set to true to run evaluation on test data after training, requires test_dataset section
+seed: 42
+restore_from_path: null # used when starting from a .nemo file
 
 trainer:
   devices: 8
-<<<<<<< HEAD
-  num_nodes: 8
-
-model:
-  name: xlarge_span_aug
-  # model architecture
-  num_layers: 6
-  hidden_size: 512
-  num_attention_heads: 8
-=======
   num_nodes: 4
   accelerator: gpu
   precision: 16
@@ -59,8 +55,8 @@ exp_manager:
     always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
 
 model:
-  name: small_span_aug
-
+  name: small_span
+  
   # model parallelism 
   micro_batch_size: 64
   tensor_model_parallel_size: 1
@@ -73,10 +69,10 @@ model:
   data:  
     dataset_path: /data/zinc_csv_split
     dataset_files: x[000..146].csv
-    encoder_augment: True # task = mask(span)_aug
-    encoder_mask: False # always False
-    decoder_augment: False # False when decoder_mask enabled, otherwise True
-    decoder_mask: True # task = mask(span)_aug
+    encoder_augment: True # always True
+    encoder_mask: True # task = mask(span)
+    decoder_augment: False # task = mask(span)
+    decoder_mask: False # always False 
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
 
@@ -95,4 +91,3 @@ model:
       warmup_ratio: 0.008
       max_steps: 100000
       min_lr: 1e-5
->>>>>>> 020832361021376972bdd2e6ab963671dc356a13

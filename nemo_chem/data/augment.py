@@ -44,7 +44,7 @@ class MoleculeEnumeration(object):
         self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
-    def _smiles_augmeter_func(self, smiles: str, augment_data: bool):
+    def _smiles_augmeter_func(self, smiles: str, augment_data: bool, canonicalize_input: bool):
         """Regularize SMILES by coverting to RDKit mol objects and back
 
         Args:
@@ -53,11 +53,11 @@ class MoleculeEnumeration(object):
             smiles_augmenter: Function to augment/randomize SMILES. Defaults to None
         """
         mol = Chem.MolFromSmiles(smiles)
-        canon_smiles = Chem.MolToSmiles(mol, canonical=True) if self.canonicalize_input else smiles
+        canon_smiles = Chem.MolToSmiles(mol, canonical=True) if canonicalize_input else smiles
 
         if augment_data:
             # aug_mol = self.aug(mol)
-            atom_order: List[int] = list(range(mol.GetNumAtoms()))
+            atom_order = list(range(mol.GetNumAtoms()))
             np.random.shuffle(atom_order)
             aug_mol = Chem.RenumberAtoms(mol, atom_order) # TODO how to use PySMILESutils for this
 
@@ -68,7 +68,7 @@ class MoleculeEnumeration(object):
                 aug_smiles = Chem.MolToSmiles(aug_mol, canonical=False)
             except RuntimeError:
                 logging.info(f'Could not generate smiles for {smiles} after augmenting. Forcing canonicalization')
-                aug_smiles = canon_smiles if self.canonicalize_input else Chem.MolToSmiles(mol, canonical=True)
+                aug_smiles = canon_smiles if canonicalize_input else Chem.MolToSmiles(mol, canonical=True)
         else:
             aug_smiles = Chem.MolToSmiles(mol, canonical=False)
 
@@ -95,7 +95,7 @@ class MoleculeEnumeration(object):
             return (tokens_short, mask_short)
         return (tokens, mask)
 
-    def _prepare_tokens(self, batch: List[str], augment_data: bool, mask_data: bool = False):
+    def _prepare_tokens(self, batch: List[str], mask_data: bool = False):
         """Prepare tokens for encoder or decoder from batch of input SMILES strings
 
         Args:
@@ -106,13 +106,8 @@ class MoleculeEnumeration(object):
         Returns:
             dict: token output
         """
-        # Perform augmentation
-        smiles_list = [self._smiles_augmeter_func(smiles, augment_data=augment_data) for smiles in batch]
-        smiles = [x[0] for x in smiles_list]
-        canon_targets = [x[1] for x in smiles_list]
-
         # Tokenize with optional masking, padding is done later due to differences in encoder/decoder bos/eos tokens
-        token_output = self.tokenizer.tokenize(smiles, pad=False, mask=mask_data)
+        token_output = self.tokenizer.tokenize(batch, pad=False, mask=mask_data)
 
         if mask_data:
             tokens = token_output['masked_tokens']
@@ -126,8 +121,7 @@ class MoleculeEnumeration(object):
 
         token_output = {
             "tokens": tokens,
-            "mask": mask,
-            "target_smiles": canon_targets
+            "mask": mask
         }
 
         return token_output
@@ -147,24 +141,35 @@ class MoleculeEnumeration(object):
 
         # Dimensions required by NeMo: [batch, sequence + padding] 
         # Encoder
-        encoder_dict = self._prepare_tokens(batch, augment_data=self.encoder_augment, mask_data=self.encoder_mask)
-        encoder_tokens = encoder_dict['tokens']
+        encoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.encoder_augment, canonicalize_input=self.canonicalize_input) 
+                               for smiles in batch]
+        encoder_smiles = [x[0] for x in encoder_smiles_list]
+        canon_targets = [x[1] for x in encoder_smiles_list]
+
+        encoder_dict = self._prepare_tokens(encoder_smiles, mask_data=self.encoder_mask)
+        encoder_tokens = encoder_dict['tokens'] # TODO boolean masks are never used from this function -- remove
 
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
-        # encoder_mask = (encoder_mask < 0.5).to(torch.int64) # Ensure active = True/1, padded = False/0 for NeMo
 
         # Decoder
-        decoder_dict = self._prepare_tokens(batch, augment_data=self.decoder_augment, mask_data=self.decoder_mask)
+        if self.decoder_augment:
+            decoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.decoder_augment, canonicalize_input=False) 
+                                   for smiles in encoder_smiles]
+            decoder_smiles = [x[0] for x in decoder_smiles_list]
+        else:
+            decoder_smiles = encoder_smiles
+
+        decoder_dict = self._prepare_tokens(decoder_smiles, mask_data=self.decoder_mask)
         decoder_tokens = decoder_dict['tokens']
 
         dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens)
 
-        label_ids = [example + [self.tokenizer.eos_id] for example in dec_token_ids] # assign label_ids before adding bos_id to decoder
-        dec_token_ids = [[self.tokenizer.bos_id] + example for example in dec_token_ids]
+        label_ids = [sample + [self.tokenizer.eos_id] for sample in dec_token_ids] # assign label_ids before adding bos_id to decoder
+        dec_token_ids = [[self.tokenizer.bos_id] + sample for sample in dec_token_ids]
         dec_token_ids, decoder_mask = self._pad_seqs(dec_token_ids, self.tokenizer.pad_id)
 
         dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64)
@@ -179,8 +184,8 @@ class MoleculeEnumeration(object):
                           'enc_mask': encoder_mask,
                           'text_dec': dec_token_ids,
                           'dec_mask': decoder_mask,
-                          'labels': label_token_ids, # token labels
+                          'labels': label_token_ids, 
                           'loss_mask': loss_mask,
-                          'target_smiles': batch} # smiles strings
+                          'target_smiles': canon_targets} # smiles strings
 
         return collate_output

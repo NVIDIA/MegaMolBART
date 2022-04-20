@@ -15,26 +15,29 @@
 
 import os
 from operator import itemgetter
-from typing import Dict
-from copy import deepcopy
 from omegaconf.dictconfig import DictConfig
 from omegaconf import open_dict
 from rdkit import Chem
+from collections import defaultdict
+from packaging import version
+import numpy as np
 
 import torch
 import torch.nn as nn
 from pytorch_lightning.trainer.trainer import Trainer
 
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
+import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
+from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 
-from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH
+from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
 from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 try:
-    from apex.transformer import tensor_parallel
+    from apex.transformer import tensor_parallel, parallel_state
 
     HAVE_APEX = True
 except (ImportError, ModuleNotFoundError):
@@ -53,14 +56,29 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer):
-        self._tokenizer_config = cfg.tokenizer  # TODO replace this with get_cheminformatics_tokenizer
+        self._check_scheduler(cfg)
         super().__init__(cfg, trainer=trainer)
+
+    def _check_scheduler(self, cfg):
+        """Warn if maximum learning rate with Noam is less than minimum learning rate"""
+        # TODO add to Noam Scheduler in NeMo
+        if cfg.optim.sched.name == 'NoamAnnealing':
+            if cfg.optim.sched.warmup_steps:
+                warmup_steps = cfg.optim.sched.warmup_steps
+            else:
+                warmup_steps = int(cfg.optim.sched.warmup_ratio * cfg.optim.sched.max_steps)
+            max_lr = cfg.optim.lr * cfg.optim.sched.d_model**(-0.5) * warmup_steps**(-0.5)
+            min_lr = cfg.optim.sched.min_lr
+            if max_lr <= min_lr:
+                logging.warning(f'Warning: maximum learning rate for Noam Scheduler ({max_lr}) is less than minimum ({min_lr}).')
+        return
 
     def _build_tokenizer(self):
         """
         Tokenizer from MegaMolBART.
         """
-        vocab_path = self._tokenizer_config.get('vocab_path', DEFAULT_VOCAB_PATH) # TODO replace this with get_cheminformatics_tokenizer
+        # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
+        vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
         if not os.path.exists(vocab_path):
             raise ValueError(f'Vocab file not found at {vocab_path}')
 
@@ -125,7 +143,67 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
 
+    def _inference_step(self, batch, batch_idx):
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
+        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
+                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+
+        target_smiles = batch['target_smiles']
+        token_logits = ret_dict['token_logits']
+        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
+        metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
+                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles)
+
+        logs = {'loss': loss}
+        for metric_name, metric_value in metrics.items():
+            logs[metric_name] = metric_value
+        
+        return logs
+
+    @staticmethod
+    def _flatten_dict(outputs):
+        """Flatten a list of dictionaries to list without assuming all keys are identical"""
+        flattened_dict = defaultdict(list)
+        for metric_dict in outputs:
+            for metric_name, metric_value in metric_dict.items():
+                flattened_dict[metric_name].append(metric_value)
+
+        return flattened_dict
+
+    def _inference_epoch_end(self, outputs, mode):
+        results_dict = self._flatten_dict(outputs)
+
+        # Calculate metric averages
+        # TODO this reduces all metrics across all data parallel groups
+        # if too slow, can only reduce loss instead
+        averaged_results = {} 
+        for metric_name, metric_list in results_dict.items():
+            reduced_metric = average_losses_across_data_parallel_group(metric_list)
+            logged_name = 'reduced_loss' if metric_name == 'loss' else metric_name
+            averaged_results[logged_name] = reduced_metric.cpu().detach().numpy().mean()
+
+        # Log results
+        log_list = []
+        for metric_name, metric_val in averaged_results.items():
+            metric_name = metric_name.replace('_', ' ').title()
+            log_list.append(f'{metric_name}: {metric_val:.2f}')
+        logging.info(f'{mode.title()} Results: ' + ', '.join(log_list))
+
+        # Prepend val/test tag to metric for Tensorboard / WandB
+        logged_results = {}
+        for metric_name, metric_val in averaged_results.items():
+            logged_results[f'{mode}_{metric_name}'] = metric_val
+
+        self.log_dict(logged_results, prog_bar=True)
+
     def training_step(self, batch, batch_idx):
+
+        if batch_idx < 2: # TODO CLEANUP
+            target_smiles = batch['target_smiles']
+            data_parallel_world_size = parallel_state.get_data_parallel_world_size()
+            data_parallel_rank = parallel_state.get_data_parallel_rank()
+            logging.info(f'Data samples from {data_parallel_rank}/{data_parallel_world_size} with {len(self._train_ds)} for batch {batch_idx}: {target_smiles[:2]}')
+
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
         assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
@@ -140,55 +218,32 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self._reduced_loss_buffer.append(reduced_loss[0])
 
         if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-            self.log('global_step', self.trainer.global_step, prog_bar=True)
-
             # Reduced loss for logging.
             average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-            self.log('reduced_loss', average_reduced_loss, prog_bar=True)
-            
             lr = self._optimizer.param_groups[0]['lr']
-            self.log('lr', lr)
+            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
 
-            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)            
-            self.log('consumed_samples', consumed_samples, prog_bar=True)
+            logs = {'global_step': self.trainer.global_step,
+                    'reduced_loss': average_reduced_loss,
+                    'lr': lr,
+                    'consumed_samples': consumed_samples}
 
-            tensorboard_logs = {'global_step': self.trainer.global_step,
-                                'reduced_loss': average_reduced_loss,
-                                'lr': lr,
-                                'consumed_samples': consumed_samples}
-            self.log('train', tensorboard_logs)
-
+            self.log_dict(logs)
             self._reduced_loss_buffer = []
 
         return loss
 
     def validation_step(self, batch, batch_idx):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
-        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
-                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+        return self._inference_step(batch, batch_idx)
 
-        self.log('global_step', self.trainer.global_step, prog_bar=True)
+    def test_step(self, batch, batch_idx):
+        return self._inference_step(batch, batch_idx)
 
-        reduced_loss = average_losses_across_data_parallel_group([loss])
-        self.log('reduced_loss', reduced_loss, prog_bar=True)
+    def validation_epoch_end(self, outputs):
+        self._inference_epoch_end(outputs, mode='val')
 
-        target_smiles = batch['target_smiles']
-        token_logits = ret_dict['token_logits']
-        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-        metrics = self.calculate_metrics(token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles)
-
-        tensorboard_logs = {
-            'global_step': self.trainer.global_step,
-            'reduced_loss': reduced_loss,
-        }
-
-        for metric_name in metrics:
-            self.log(f'{metric_name}', metrics[metric_name], prog_bar=True)
-            tensorboard_logs[f'{metric_name}'] = metrics[metric_name]
-            
-        self.log('val', tensorboard_logs)
-
-        return reduced_loss
+    def test_epoch_end(self, outputs):
+        self._inference_epoch_end(outputs, mode='test')
 
     def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):
         # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited 
@@ -243,7 +298,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         # Decode encoder hidden state to tokens
         predicted_tokens_ids, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
-        predicted_tokens_ids = predicted_tokens_ids.cpu().numpy().tolist()
+        predicted_tokens_ids = predicted_tokens_ids.cpu().detach().numpy().tolist()
 
         # Prune tokens by eos / padding and convert to SMILES
         for item, predicted_tokens_ in enumerate(predicted_tokens_ids):
@@ -251,13 +306,13 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                 idx = predicted_tokens_.index(self.tokenizer.eos_id)
                 predicted_tokens_ids[item] = predicted_tokens_[:idx]
             else:
+                # NB: this is slightly different from previous version in that pad tokens can be in the middle of sequence
                 predicted_tokens_ids[item] = [id for id in predicted_tokens_ if id != self.tokenizer.pad_id]
             
-        predicted_tokens_ids = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
-        sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_ids)
+        predicted_tokens_text = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
+        sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_text)
 
         self.unfreeze()
-
         return sampled_smiles
 
     @staticmethod
@@ -273,13 +328,13 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             float: character accuracy value
         """
 
-        # Get most likely token
+        # Get most probable token
         _, predicted_tokens = torch.max(token_logits, dim=2)
-        correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask
+        correct_tokens = torch.eq(labels, predicted_tokens) * loss_mask # NB: mask includes EOS in calculation
 
         # Calculate percent of correct tokens
-        num_correct = correct_tokens.sum().cpu().detach().item()
-        total = loss_mask.sum().cpu().detach().item()
+        num_correct = correct_tokens.detach().sum()
+        total = loss_mask.detach().sum()
         character_accuracy = num_correct / total
         return character_accuracy
 
@@ -304,8 +359,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         num_correct = sum(correct_smiles)
         total = len(correct_smiles)
         num_invalid = sum(invalid)
-        percent_invalid = num_invalid / total
-        molecular_accuracy = num_correct / total
+        percent_invalid = torch.tensor([num_invalid / total]).to(tokens_enc.device)
+        molecular_accuracy = torch.tensor([num_correct / total]).to(tokens_enc.device)
 
         return molecular_accuracy, percent_invalid
 
@@ -325,7 +380,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         """
         character_accuracy = self.calculate_character_accuracy(token_logits, loss_mask, labels)
         molecular_accuracy, percent_invalid = self.calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles)
-        logging.info(f'Metrics: character_accuracy: {character_accuracy}, molecular_accuracy {molecular_accuracy}, percent_invalid {percent_invalid}')
         metrics = {'character_accuracy': character_accuracy,
                    'molecular_accuracy': molecular_accuracy,
                    'percent_invalid': percent_invalid}
