@@ -93,12 +93,12 @@ class MoleculeCsvDataset(MegatronDataset):
             logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}')
             start_time = time.time()
             build_index_files(dataset_paths, self._newline_int, workers=self._workers)
-
-            if is_distributed:
-                torch.distributed.barrier()
             logging.info(f'Time to build memory mapped indexes: {time.time() - start_time}')
         else:
-            logging.info(f'Building of memory mapped indexes skipped because this process is not global rank 0')
+            logging.info(f'Building memory mapped indexes was skipped on this process because it is not global rank 0')
+
+        if is_distributed:
+            torch.distributed.barrier()
 
         logging.info(f"Loading data files")
         mdata_midx_size_list = [self.load_file(fn) for fn in dataset_paths]
