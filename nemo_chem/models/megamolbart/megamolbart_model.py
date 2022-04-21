@@ -30,10 +30,11 @@ import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
+from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
 from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
-from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
+from nemo_chem.utils import flatten_dict
 
 try:
     from apex.transformer import tensor_parallel, parallel_state
@@ -134,11 +135,15 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def build_pretraining_data_loader(self, dataset, consumed_samples):
         """Buld dataloader given an input dataset."""
+        
+        assert self._cfg.data.dataloader_type == 'single', AssertionError(
+            f'Only the Megatron sequential ("single") sampler is currently supported. {self._cfg.data.dataloader_type} was chosen.'
+            )
+        
         dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
         
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
-        # TODO remove when data loader complete
-        dataloader.pin_memory = False
+        dataloader.pin_memory = False # must be False with CSV dataset TODO check with binary
         pad_size_divisible_by_8 = True if self._cfg.masked_softmax_fusion else False
         dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
                                                     seq_length=self._cfg.seq_length, 
@@ -170,18 +175,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         
         return logs
 
-    @staticmethod
-    def _flatten_dict(outputs):
-        """Flatten a list of dictionaries to list without assuming all keys are identical"""
-        flattened_dict = defaultdict(list)
-        for metric_dict in outputs:
-            for metric_name, metric_value in metric_dict.items():
-                flattened_dict[metric_name].append(metric_value)
-
-        return flattened_dict
-
     def _inference_epoch_end(self, outputs, mode):
-        results_dict = self._flatten_dict(outputs)
+        results_dict = flatten_dict(outputs)
 
         # Calculate metric averages
         # TODO this reduces all metrics across all data parallel groups
@@ -207,12 +202,15 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.log_dict(logged_results, prog_bar=True)
 
     def training_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            logging.info('Starting training loop')
 
-        if batch_idx < 2: # TODO CLEANUP
+        # Log a few samples to check data parallel distribution
+        if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
             target_smiles = batch['target_smiles']
             data_parallel_world_size = parallel_state.get_data_parallel_world_size()
             data_parallel_rank = parallel_state.get_data_parallel_rank()
-            logging.info(f'Data samples from {data_parallel_rank}/{data_parallel_world_size} with {len(self._train_ds)} for batch {batch_idx}: {target_smiles[:2]}')
+            logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
 
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
@@ -244,15 +242,21 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            logging.info('Starting validation epoch')
         return self._inference_step(batch, batch_idx)
 
     def test_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            logging.info('Starting test epoch')
         return self._inference_step(batch, batch_idx)
 
     def validation_epoch_end(self, outputs):
+        logging.info('Finishing validation epoch')
         self._inference_epoch_end(outputs, mode='val')
 
     def test_epoch_end(self, outputs):
+        logging.info('Finishing test epoch')
         self._inference_epoch_end(outputs, mode='test')
 
     def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):

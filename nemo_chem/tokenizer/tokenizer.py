@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Tuple, Any
 from nemo.utils import logging
 import nemo_chem
+import warnings
 
 __all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH', 'DEFAULT_MODEL_PATH']
 
@@ -305,6 +306,13 @@ class MolEncTokenizer:
 
     def tokenize(self, sents1, sents2=None, mask=False, pad=False):
         # TODO this function needs cleanup
+        if sents2:
+            warnings.simplefilter('error', DeprecationWarning) # This functionality does not work, fail loudly
+            warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
+        if pad is True:
+            warnings.simplefilter('always', DeprecationWarning)
+            warnings.warn('Padding by the tokenizer is not supported in this version of MegaMolBART and may not produce correct results', category=DeprecationWarning)
+
         if sents2 is not None and len(sents1) != len(sents2):
             raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
 
@@ -329,10 +337,10 @@ class MolEncTokenizer:
         output = {}
 
         if pad:
-            tokens, orig_pad_masks = self.pad_seqs(tokens, self.pad_token)
-            m_tokens, masked_pad_masks = self.pad_seqs(m_tokens, self.pad_token)
-            token_masks, _ = self.pad_seqs(token_masks, False)
-            sent_masks, _ = self.pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
+            tokens, orig_pad_masks = self._pad_seqs(tokens, self.pad_token)
+            m_tokens, masked_pad_masks = self._pad_seqs(m_tokens, self.pad_token)
+            token_masks, _ = self._pad_seqs(token_masks, False)
+            sent_masks, _ = self._pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
             output["original_pad_masks"] = orig_pad_masks
             output["masked_pad_masks"] = masked_pad_masks
 
@@ -370,6 +378,9 @@ class MolEncTokenizer:
 
     @staticmethod
     def _concat_sentences(tokens1, tokens2, sep):
+        warnings.simplefilter('error', DeprecationWarning) # This function does not work, fail loudly
+        warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
+
         tokens = [ts1 + [sep] + ts2 for ts1, ts2 in zip(tokens1, tokens2)]
         sent_masks = [([1] * len(ts1)) + [1] + ([0] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]  # 1/True = Active, 0/False = Inactive
         return tokens, sent_masks
@@ -496,7 +507,9 @@ class MolEncTokenizer:
 
     @staticmethod
     def _pad_seqs(seqs, pad_token):
-        logging.warning('This sequence padding function is deprecated and may not produce correct results')
+        warnings.simplefilter('always', DeprecationWarning)
+        warnings.warn('Padding by the tokenizer is not supported in this version of MegaMolBART and may not produce correct results', category=DeprecationWarning)
+        
         pad_length = max([len(seq) for seq in seqs])
         padded = [seq + ([pad_token] * (pad_length - len(seq))) for seq in seqs]
         masks = [([1] * len(seq)) + ([0] * (pad_length - len(seq))) for seq in seqs]

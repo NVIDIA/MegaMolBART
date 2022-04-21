@@ -1,3 +1,4 @@
+# model architecture 
 encoder_arch: 'transformer'
 decoder_arch: 'transformer'
 activation: 'gelu'
@@ -29,5 +30,6 @@ use_cpu_initialization: False # init weights on the CPU (slow for large models)
 onnx_safe: False # use work-arounds for known problems with Torch ONNX exporter
 
 # not implemented in NeMo yet
+pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet -- leave at 1 for now
 activations_checkpoint_method: null # 'uniform', 'block'
 activations_checkpoint_num_layers: 1

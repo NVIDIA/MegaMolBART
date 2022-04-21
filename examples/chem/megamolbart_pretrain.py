@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-from dataclasses import asdict
 from omegaconf.omegaconf import OmegaConf, open_dict
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelSummary
@@ -30,17 +29,8 @@ from nemo.utils.exp_manager import StatelessTimer, exp_manager
 
 from nemo_chem.models.megamolbart import MegaMolBARTModel
 from nemo_chem.data import MoleculeCsvDatasetConfig
-from nemo_chem.utils import recursive_make_dirs
+from nemo_chem.utils import recursive_make_dirs, update_dataclass_config
 from preprocess import Preprocess
-
-
-def update_dataset_config(cfg):
-    """Update a configuration with existing defaults"""
-    with open_dict(cfg):
-        dataset_cfg = asdict(MoleculeCsvDatasetConfig())
-        dataset_cfg.update(cfg.model['data'])
-        cfg.model['data'] = dataset_cfg
-    return cfg
 
 
 def setup_trainer(cfg):
@@ -86,7 +76,8 @@ def setup_trainer(cfg):
 
 @hydra_runner(config_path="conf", config_name="megamolbart_pretrain_xsmall_span_aug")
 def main(cfg) -> None:
-    cfg = update_dataset_config(cfg)
+    with open_dict(cfg):
+        cfg.model.data = update_dataclass_config(cfg.model.data, MoleculeCsvDatasetConfig)
 
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
@@ -119,7 +110,7 @@ def main(cfg) -> None:
     else:
         logging.info("************** Starting Data PreProcessing ***********")
         preprocess = Preprocess()
-        preprocess.prepare_dataset(links_file='conf/model/dataset/ZINC-downloader.txt',
+        preprocess.prepare_dataset(links_file='conf/data/ZINC-downloader.txt',
                                  output_dir=cfg.model.data.dataset_path)
         logging.info("************** Finished Data PreProcessing ***********")
 

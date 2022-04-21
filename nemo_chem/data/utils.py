@@ -25,7 +25,6 @@ from pytorch_lightning.trainer.trainer import Trainer
 
 from nemo.utils import logging
 from .csv_dataset import MoleculeCsvDataset
-from .concat import ConcatIterableDataset
 
 __all__ = ['DatasetTypes', 'expand_dataset_paths', 'build_train_valid_test_datasets']
 
@@ -47,9 +46,9 @@ def _build_train_valid_test_datasets(
     trainer: Trainer,
     num_samples: int,
     filepath: str,
-    metadata_path: str,
-    use_iterable: bool
+    metadata_path: str
 ):
+    # TODO num_samples is currently not used
 
     cfg = deepcopy(cfg)
     with open_dict(cfg):
@@ -58,29 +57,8 @@ def _build_train_valid_test_datasets(
     # Get datasets and load data
     logging.info(f'Loading data from {filepath}')
     dataset_paths = expand_dataset_paths(filepath)
-    # dataset_list = []
-    # for path in dataset_paths:
-    #     if use_iterable:
-    #         data = MoleculeCsvIterableDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
-    #     else:
-    #         data = MoleculeCsvDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
 
-    #     dataset_list.append(data)
-    #     num_samples -= len(data)
-    #     logging.info(f'Loaded data from {path} with {len(data)} samples')
-
-    #     if num_samples < 1:
-    #         logging.info(f'Stopping data set loading at file {path} because samples have exceeded the required number for training.')
-    #         break
-
-    # if len(dataset_list) == 1:
-    #     dataset = dataset_list[0]
-    # else:
-    #     dataset = ConcatIterableDataset(dataset_list) if use_iterable else pt_data.ConcatDataset(dataset_list)
-
-    dataset = MoleculeCsvDataset(dataset_paths,
-                                 cfg=cfg,
-                                 )
+    dataset = MoleculeCsvDataset(dataset_paths=dataset_paths, trainer=trainer, cfg=cfg)
     return dataset
 
 
@@ -89,27 +67,28 @@ def build_train_valid_test_datasets(
     trainer: Trainer,
     train_valid_test_num_samples: List[int]
 ):
+     # TODO metadata_file is currently not used
+     
     cfg = deepcopy(cfg)
     with open_dict(cfg):
         dataset_path = cfg.pop('dataset_path', '')
         dataset_files = cfg.pop('dataset_files')
         metadata_file = cfg.pop('metadata_file', None)
-        use_iterable = cfg.pop('use_iterable', False)
 
     # Build individual datasets.
     filepath = os.path.join(dataset_path, 'train', dataset_files)
     metadata_path = os.path.join(dataset_path, 'train', metadata_file) if metadata_file else None
     train_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[0],
-                                                     filepath, metadata_path, use_iterable)
+                                                     filepath, metadata_path)
 
     filepath = os.path.join(dataset_path, 'val', dataset_files)
     metadata_path = os.path.join(dataset_path, 'val', metadata_file) if metadata_file else None
     validation_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[1],
-                                                          filepath, metadata_path, use_iterable)
+                                                          filepath, metadata_path)
 
     filepath = os.path.join(dataset_path, 'test', dataset_files)
     metadata_path = os.path.join(dataset_path, 'test', metadata_file) if metadata_file else None
     test_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[2],
-                                                    filepath, metadata_path, use_iterable)
+                                                    filepath, metadata_path)
 
     return (train_dataset, validation_dataset, test_dataset)

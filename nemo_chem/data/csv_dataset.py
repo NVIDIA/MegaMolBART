@@ -25,10 +25,15 @@ import numpy as np
 
 from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
 from nemo.utils import logging
-from ..utils.data_index import build_index_files
+from .data_index import build_index_files
+
+try:
+    from apex.transformer.parallel_state import get_rank_info
+    HAVE_APEX = True
+except (ImportError, ModuleNotFoundError):
+    HAVE_APEX = False
 
 __all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset']
-
 
 @dataclass
 class MoleculeCsvDatasetConfig():
@@ -41,17 +46,15 @@ class MoleculeCsvDatasetConfig():
     data_col: int = 1
     data_sep: str = ','
     micro_batch_size: int = 1
-    use_iterable: bool = False
-    map_data: bool = False
-    encoder_augment: bool = True
+    encoder_augment: bool = False
     encoder_mask: bool = False
     decoder_augment: bool = False
-    canonicalize_input: bool = True # TODO remove when CSV data processing updated
-    drop_last: bool = False
-    shuffle: bool = False
-    num_workers: Optional[int] = None
-    pin_memory: bool = True # TODO: remove this if value is fixed
+    decoder_mask: bool = False
+    canonicalize_input: bool = True
     dataloader_type: str = 'single'
+    drop_last: bool = False
+    pin_memory: bool = False # must be False with CSV dataset
+    num_workers: Optional[int] = None
 
 
 class MoleculeCsvDataset(MegatronDataset):
@@ -60,59 +63,51 @@ class MoleculeCsvDataset(MegatronDataset):
     """
     def __init__(self,
                  dataset_paths,
-                 cfg=None,
-                 trainer=None,
-                 newline_int=10,
-                 header_lines=1,
-                 skip_lines=0,
-                 workers=None,
-                 data_col=1,
-                 data_sep=','):
+                 cfg,
+                 trainer,
+                 workers=None):
+
         if len(dataset_paths) < 1:
-            raise ValueError("files_list must contain at leat one file name")
+            raise ValueError("Dataset file list must contain at least one file name")
 
         super().__init__(cfg, trainer)
 
-        # load values from cfg
-        if cfg is not None:
-            newline_int = cfg.get('newline_int', 10)
-            header_lines = cfg.get('header_lines', 1)
-            skip_lines = cfg.get('skip_lines', 0)
-            data_col = cfg.get('data_col', 1)
-            data_sep = cfg.get('data_sep', ',')
+        # TODO not all of these need their state set
+        self._header_lines = cfg.get('header_lines') # skip first N lines
+        self._skip_lines = cfg.get('skip_lines')
+        self._data_col = cfg.get('data_col')
+        self._data_sep = cfg.get('data_sep')
+        self._newline_int = cfg.get('newline_int')
+        self._workers = workers
 
-        self.newline_int = newline_int
-        # skip first N lines
-        self._header_lines = header_lines
-        self._skip_lines = skip_lines
-        self.files_list = dataset_paths
-        self._data_col = data_col
-        self._data_sep = data_sep
         self.mdata_midx_size_list = None
-        self.worker = workers
-
-        logging.info(f"Building data files")
+        
         # load all files into memmap
-        start_time = time.time()
-        is_ditributed = torch.distributed.is_available() and \
-            torch.distributed.is_initialized()
+        is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+        # is_global_rank_0 = (not is_distributed) or (is_distributed and torch.distributed.get_rank() == 0)
+        rank_indexes = get_rank_info() # will return 0,0,0 if no dp/mp
+        is_global_rank_0 = sum(rank_indexes) == 0
 
-        if  not is_ditributed or \
-            (is_ditributed and torch.distributed.get_rank() == 0):
-            build_index_files(dataset_paths, newline_int, workers=self.worker)
+        if is_global_rank_0:
+            tensor_parallel_rank, pipeline_parallel_rank, data_parallel_rank = rank_indexes
+            logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}')
+            start_time = time.time()
+            build_index_files(dataset_paths, self._newline_int, workers=self._workers)
 
-        if is_ditributed:
-            torch.distributed.barrier()
-        logging.info(f'Time building mem-mapped file: {time.time() - start_time}')
+            if is_distributed:
+                torch.distributed.barrier()
+            logging.info(f'Time to build memory mapped indexes: {time.time() - start_time}')
+        else:
+            logging.info(f'Building of memory mapped indexes skipped because this process is not global rank 0')
 
         logging.info(f"Loading data files")
-        mdata_midx_size_list = [self.load_file(fn) for fn in self.files_list]
+        mdata_midx_size_list = [self.load_file(fn) for fn in dataset_paths]
 
         logging.info("Computing global indices")
         joint_midx = [0]
         for i in range(len(mdata_midx_size_list)):
             midx = mdata_midx_size_list[i][1]
-            joint_midx.append(joint_midx[-1] + (len(midx) - header_lines))
+            joint_midx.append(joint_midx[-1] + (len(midx) - self._header_lines))
 
         self.joint_midx = joint_midx
         self.mdata_midx_size_list = mdata_midx_size_list
@@ -142,10 +137,10 @@ class MoleculeCsvDataset(MegatronDataset):
         data = self.mdata_midx_size_list[file_id][0][rec_start:rec_end].tobytes().decode("ascii")
         return data.split(self._data_sep)[self._data_col]
 
-    def load_file(self, fn):
+    @staticmethod
+    def load_file(fn):
         """
         Loads a text file as np.int8.
-
         Returns:
             mdata - memorymap of np.int8
             midx - indices pointing to the end-of-line (or end of file) position
@@ -161,6 +156,6 @@ class MoleculeCsvDataset(MegatronDataset):
             midx = idx_dict['midx']
             size = idx_dict['size']
         else:
-            raise ValueError(f'Memory Map for {fn} is not found')
+            raise ValueError(f'Memory map for {fn} is not found')
 
         return (mdata, midx, size)

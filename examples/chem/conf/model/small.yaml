@@ -1,6 +1,7 @@
 defaults:
   - model_defaults
-
+  - data: csv_data_defaults
+  
 # model architecture
 seq_length: 512
 max_position_embeddings: ${.seq_length}

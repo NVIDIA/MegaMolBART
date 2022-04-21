@@ -14,7 +14,17 @@
 # limitations under the License.
 
 from pathlib import Path
+from collections import defaultdict
+from dataclasses import asdict
+
 from nemo.utils import logging
+
+
+def update_dataclass_config(cfg, dataset_config_class):
+    """Update a dataset configuration with existing defaults"""
+    default_cfg = asdict(dataset_config_class())
+    default_cfg.update(cfg)
+    return default_cfg
 
 
 def recursive_make_dirs(directory):
@@ -23,3 +33,13 @@ def recursive_make_dirs(directory):
     if isinstance(directory, str):
         directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+
+
+def flatten_dict(list_of_dicts):
+    """Flatten a list of dictionaries to list without assuming all keys are identical"""
+    flattened_dict = defaultdict(list)
+    for metric_dict in list_of_dicts:
+        for metric_name, metric_value in metric_dict.items():
+            flattened_dict[metric_name].append(metric_value)
+
+    return flattened_dict
