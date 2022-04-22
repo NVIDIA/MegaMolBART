@@ -32,6 +32,8 @@ from nemo.utils import logging
 MAX_LENGTH = 150
 
 
+__all__ = ['Preprocess']
+
 class Preprocess(object):
 
     def __init__(self) -> None:

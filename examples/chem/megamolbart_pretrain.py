@@ -30,8 +30,8 @@ from nemo.utils.exp_manager import StatelessTimer, exp_manager
 from nemo_chem.models.megamolbart import MegaMolBARTModel
 from nemo_chem.data import MoleculeCsvDatasetConfig
 from nemo_chem.utils import recursive_make_dirs, update_dataclass_config
-from preprocess import Preprocess
-
+from nemo_chem.data import Preprocess, CsvToBinary
+import os
 
 def setup_trainer(cfg):
     """Trainer setup functions"""
@@ -110,8 +110,16 @@ def main(cfg) -> None:
     else:
         logging.info("************** Starting Data PreProcessing ***********")
         preprocess = Preprocess()
-        preprocess.prepare_dataset(links_file='conf/data/ZINC-downloader.txt',
+        preprocess.prepare_dataset(links_file='conf/dataset/ZINC-downloader-test.txt',
                                  output_dir=cfg.model.data.dataset_path)
+        if cfg.model.data.dataset_format == "bin":
+            out_dir = os.path.join(cfg.model.data.dataset_path, "bin")
+            csvtobin = CsvToBinary(input_dir=cfg.model.data.dataset_path,
+                                   out_dir=out_dir,
+                                   config=cfg,
+                                   num_enumerations=cfg.model.data.num_enumerations,
+                                   num_workers=cfg.model.data.num_workers)
+            csvtobin.prepare_dataset()
         logging.info("************** Finished Data PreProcessing ***********")
 
     if cfg.do_testing:
