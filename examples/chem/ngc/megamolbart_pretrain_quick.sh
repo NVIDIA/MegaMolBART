@@ -8,7 +8,7 @@ set -x
 DO_TRAINING="True"
 
 
-DATA_MOUNT=/data/zinc_csv/bin
+DATA_MOUNT=/data/zinc_csv
 CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 
@@ -16,7 +16,7 @@ JOB_NUM_NODES=1
 GPUS_PER_NODE=1
 
 MEGAMOLBART_CONFIG_FILE=small_aug
-DATA_FILES_SELECTED=x000
+DATA_FILES_SELECTED=x000.csv
 
 HOSTNAME=NGC
 PROJECT=MegaMolBART
@@ -62,6 +62,6 @@ python megamolbart_pretrain.py \
     trainer.val_check_interval=0.5 \
     ++trainer.limit_train_batches=10 \
     ++trainer.max_epochs=10 \
-    model.data.dataset_format='bin' 
+    model.data.dataset_format='csv' 
 
 set +x
