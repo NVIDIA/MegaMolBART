@@ -54,16 +54,24 @@ For SLURM, once a working bash script has been created, consecutive training run
 ### Data Preprocessing
 We support conversion of csv data to NeMo format binary data. The megamolbart_pretrain.py script can be used to preprocess the data into binary. 
 Copy paste below fields into the *data* field of your config.
-dataset_format: bin 
-num_enumerations: 5 #You can change this number of how many every enumerations you eant on every SMILE string.
-
+"""
+model:
+  data:
+    dataset_format: bin 
+    num_enumerations: 5 #You can change this number of how many every enumerations you want on every SMILE string.
+"""
 ### Training
 For training, make the following changes in teh *data* field of your config
-dataset_format: bin
-dataset_files: x[000..146]  ##All files from 000 to 146 will be read for training. Do NOT add any extension to the data files here. The code looks for x[000...146].bin and x[000...146].idx on it's own. Giving an extension would mean that the code looks for x000.bin.bin and x000.bin.idx files, it will lead to File Not Found Errors. 
+"""
+model:
+  data:
+    dataset_format: bin
+    dataset_files: x[000..146]  
+"""
+All files from 000 to 146 will be read for training. Do NOT add any extension to the data files here. The code looks for x[000...146].bin and x[000...146].idx on it's own. Giving an extension would mean that the code looks for x000.bin.bin and x000.bin.idx files, it will lead to File Not Found Errors. 
 
-## Process and train with FULL AZ dataset
-Currently, the pretrain script uses a "test" AZ data downloader text file to process and train. This is to prevent about 100GB of data being downloaded accidentally. If you wish to run with ALL of AZ's data, make the following changes.
-Change the [line 113](https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/dev/examples/chem/megamolbart_pretrain.py#L113) links_file path to this: 'conf/dataset/ZINC-downloader.txt'. 
+## Process and train with FULL default ZINC15 tranches dataset
+Currently, the pretrain script uses a "test" default ZINC15 tranches data downloader text file to process and train. This is to prevent about 100GB of data being downloaded accidentally. If you wish to run with ALL of default ZINC15 tranches data, make the following changes.
+Change the [line 113](https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/dev/examples/chem/megamolbart_pretrain.py#L113) links_file path to this: 'conf/dataset/ZINC-downloader.txt. TODO: change the link when publishing.
 
 Follow steps in Data Preprocessing and Training above if you want to preprocess the csv to binary and train with the binary files.
