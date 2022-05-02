@@ -91,6 +91,7 @@ docker run -t \
 ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
 ```
+NOTE: To make it more convenient, a basic shell script can be found [here](TODO: ADD THE LINK TO SHELL SCRIPT). This script is strictly available for experimental purposes. The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across several platforms.
 
 ## SLURM Jobs
 
