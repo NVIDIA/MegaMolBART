@@ -268,22 +268,26 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         logging.info('Finishing test epoch')
         self._inference_epoch_end(outputs, mode='test')
 
-    def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):
-        # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited 
-        encoder_hidden_states = itemgetter("enc_output")(
-            self(
-                encoder_input_ids=tokens_enc,
-                decoder_input_ids=None,
-                encoder_attn_mask=enc_mask,
-                decoder_attn_mask=None,
-                tokentype_ids=None,
-                lm_labels=None,
-                enc_hidden_states=None,
-                output_enc_hidden_only=True,
+    def decode(self, tokens_enc, enc_mask, num_tokens_to_generate=None, encoder_hidden_states=None):
+        # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited
+        if num_tokens_to_generate is None:
+            num_tokens_to_generate=self._cfg.max_position_embeddings
+
+        if encoder_hidden_states is None:
+            encoder_hidden_states = itemgetter("enc_output")(
+                self(
+                    encoder_input_ids=tokens_enc,
+                    decoder_input_ids=None,
+                    encoder_attn_mask=enc_mask,
+                    decoder_attn_mask=None,
+                    tokentype_ids=None,
+                    lm_labels=None,
+                    enc_hidden_states=None,
+                    output_enc_hidden_only=True,
+                )
             )
-        )
         predicted_tokens_dec = (
-            torch.LongTensor([self.tokenizer.bos_id] * tokens_enc.size(0)).unsqueeze(1).to(tokens_enc.device)
+            torch.LongTensor([self.tokenizer.bos_id] * enc_mask.size(0)).unsqueeze(1).to(enc_mask.device)
         )
         for _ in range(num_tokens_to_generate):
             dec_mask = predicted_tokens_dec != self.tokenizer.pad_id
