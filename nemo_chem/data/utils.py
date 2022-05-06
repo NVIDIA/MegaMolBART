@@ -33,8 +33,9 @@ class DatasetTypes(Enum):
     zinc_csv  = 0
 
 
-def expand_dataset_paths(filepath: str) -> List[str]:
+def expand_dataset_paths(filepath: str, ext: str) -> List[str]:
     """Expand dataset paths from braces"""
+    filepath = filepath + ext if ext else filepath
     # TODO this should eventually be moved to a Nemo fileutils module or similar
     filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
     filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
@@ -58,7 +59,7 @@ def _build_train_valid_test_datasets(
 
     # Get datasets and load data
     logging.info(f'Loading data from {filepath}')
-    dataset_paths = expand_dataset_paths(filepath)
+    dataset_paths = expand_dataset_paths(filepath, ".csv") if dataset_format == "csv" else expand_dataset_paths(filepath)
     logging.info(f'Loading data from {dataset_paths}')
     dataset_list = []
     if dataset_format == "csv":

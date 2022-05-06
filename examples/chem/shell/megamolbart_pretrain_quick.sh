@@ -6,7 +6,6 @@ set -x
 ####
 
 ### CONFIG ###
-
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
 DO_TRAINING="False" # Set to False to process data, then True to train model
 DATA_FORMAT='bin' # "csv" or "bin"

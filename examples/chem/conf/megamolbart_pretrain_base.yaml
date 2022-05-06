@@ -33,13 +33,15 @@ model:
 
   data:  
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
-    dataset_files: x[000..001].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
+    dataset_files: x[000..146] # inclusive range of data files to load or can load a single file, e.g. x000.csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: True # task = mask(span)_aug
     decoder_mask: False # always False 
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
+    dataset_format: csv #csv or bin
+    num_enumerations: 5 # number of enumerations to perform on each smile. Only used during preprocessing for binary format
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models

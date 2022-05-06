@@ -69,23 +69,29 @@ class CsvToBinary:
         else:
             print(f'Found {len(self.inputfiles)} .csv files.') 
 
-        ## Make sure there are no bin, idx files inside the output directory
-        # Initialize a dataset writer
-        os.makedirs(self.out_dir, exist_ok = True)
-        os.access(self.out_dir, os.W_OK)
-        # Create an identical folder structure in the output directory as the input dir.
-        for path, subdir, files in os.walk(self.input_dir):
-            subdir = path[len(self.input_dir)+1:]
-            os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
+        # If the destination path is not the same as where the CSVs exist, make an identical
+        # folder structure as the input directory at the destination
+        if self.out_dir != self.input_dir:
+	    os.makedirs(self.out_dir, exist_ok = True)
+	    os.access(self.out_dir, os.W_OK)
+	    # Create an identical folder structure in the output directory as the input dir.
+	    for path, subdir, files in os.walk(self.input_dir):
+                subdir = path[len(self.input_dir)+1:]
+		folder_path = os.path.join(self.out_dir, subdir)
+		os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
 
         self.outbinfiles = []
         for path, subdir, files in os.walk(self.out_dir):
             outbinfiles = [ifile for path, subdir, files in os.walk(self.out_dir)
                           for dformat in DATAFORMAT_EXT
                           for ifile in glob(os.path.join(path, "*.bin"))]
-
-        assert len(self.outbinfiles) == 0, "Found existing .bin files at the output location %s."
-        "Cannot overwrite the existing data. Please delete or provide a new output location." % outbinfiles
+            assert len(self.outbinfiles) == 0, "Found existing .bin files at the output location %s."
+            "Cannot overwrite the existing data. Please delete and retry." % outbinfiles
+            outidxfiles = [ifile for path, subdir, files in os.walk(self.out_dir)
+                          for dformat in DATAFORMAT_EXT
+                          for ifile in glob(os.path.join(path, "*.bin"))]
+            assert len(self.outidxfiles) == 0, "Found existing .idx files at the output location %s."
+            "Cannot overwrite the existing data. Please delete and retry." % outidxfiles
 
 
     def _initialize_tokenizer(self):
