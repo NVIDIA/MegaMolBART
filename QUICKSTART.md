@@ -91,6 +91,7 @@ docker run -t \
 ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
 ```
+
 NOTE: To make it more convenient, a basic shell script can be found [here](TODO: ADD THE LINK TO SHELL SCRIPT). This script is strictly available for experimental purposes. The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across several platforms.
 
 ## SLURM Jobs
@@ -125,7 +126,9 @@ srun \
 --export WANDB_API_KEY="${WANDB_API_KEY}" \
 python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=megamolbart_pretrain_xsmall_span_aug
+    --config-name=megamolbart_pretrain_xsmall_span_aug \
+    ++trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
+    ++trainer.gpus=${SLURM_NTASKS_PER_NODE}
 
 set +x
 ```
@@ -186,6 +189,3 @@ Checkpoints are stored in the `checkpoints` directory and are managed by NeMo. F
 ### Tensorboard and Weights and Biases
 
 NeMo will also create a Tensorboard file in the results directory, if logging to Tensorboard has been enabled. The Weights and Biases loggs will be created in a directory called `wandb` and can optionally be uploaded after training if cluster restrictions do not allow it to be done during training.
-
-TODO ADD SCREENSHOT FROM WANDB
-

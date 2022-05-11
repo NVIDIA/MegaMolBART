@@ -40,6 +40,8 @@ srun \
 --export WANDB_API_KEY="${WANDB_API_KEY}" \
 python megamolbart_pretrain.py \
     --config-path=conf \
-    --config-name=megamolbart_pretrain_xsmall_span_aug
+    --config-name=megamolbart_pretrain_xsmall_span_aug \
+    ++trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
+    ++trainer.gpus=${SLURM_NTASKS_PER_NODE}
 
 set +x
