@@ -9,6 +9,7 @@ import numpy as np
 
 from nemo.utils import logging
 
+__all__ = ['build_index_files']
 
 def _build_memmap_index_files(newline_int, fn):
     idx_fn = fn + ".idx"
@@ -18,7 +19,7 @@ def _build_memmap_index_files(newline_int, fn):
     if os.path.exists(idx_fn):
         return None
     else:
-        logging.info(f"Building idx file = {idx_fn}")
+        logging.info(f"Building index {idx_fn} for memory mapped data")
         midx = np.where(mdata == newline_int)[0]
         # add last item in case there is no new-line
         if (len(midx) == 0) or (midx[-1]+1 != len(mdata)):
@@ -36,17 +37,17 @@ def build_index_files(dataset_paths,
                       newline_int,
                       workers=None):
     if len(dataset_paths) < 1:
-        raise ValueError("files_list must contain at leat one file name")
+        raise ValueError("Dataset paths must contain at leat one file name")
 
     if workers is None:
         workers = min(1, os.cpu_count() // 2)
 
-    logging.info(f"Building data files")
+    logging.info(f"Building memory mapped index files")
     # load all files into memmap
     start_time = time.time()
     with mp.Pool(workers) as p:
         mdata_midx_size_list = p.map(partial(_build_memmap_index_files, newline_int),
                                      dataset_paths)
-    logging.info(f'Time building mem-mapped file: {time.time() - start_time}')
+    logging.info(f'Time to build memory mapped index files: {time.time() - start_time}')
 
     return mdata_midx_size_list

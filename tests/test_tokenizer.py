@@ -61,7 +61,7 @@ def test_create_vocab():
 
 def test_pad_seqs_padding():
     seqs = [[1,2], [2,3,4,5], []]
-    padded, _ = MolEncTokenizer.pad_seqs(seqs, " ")
+    padded, _ = MolEncTokenizer._pad_seqs(seqs, " ")
     expected = [[1,2, " ", " "], [2,3,4,5], [" ", " ", " ", " "]]
 
     assert padded == expected
@@ -69,16 +69,16 @@ def test_pad_seqs_padding():
 
 def test_pad_seqs_mask():
     seqs = [[1,2], [2,3,4,5], []]
-    _, mask = MolEncTokenizer.pad_seqs(seqs, " ")
-    expected_mask = [[0, 0, 1, 1], [0, 0, 0, 0], [1, 1, 1, 1]]
+    _, mask = MolEncTokenizer._pad_seqs(seqs, " ")
+    expected_mask = [[1, 1, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0]] # masking is inverted with NeMo
 
     assert expected_mask == mask
 
 
 def test_mask_tokens_empty_mask():
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
-    masked, token_mask = tokenizer._mask_tokens(example_tokens, empty_mask=True)
-    expected_sum = 0
+    masked, token_mask = tokenizer.mask_tokens(example_tokens, empty_mask=True)
+    expected_sum = 15 # masking is inverted with NeMo
     mask_sum = sum([sum(m) for m in token_mask])
 
     assert masked == example_tokens
@@ -92,7 +92,7 @@ def test_mask_tokens_replace():
     random.seed(a=1)
     torch.manual_seed(SEED) 
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4, mask_scheme='replace')
-    masked, token_mask = tokenizer._mask_tokens(example_tokens)
+    masked, token_mask = tokenizer.mask_tokens(example_tokens)
 
     expected_masks = [
         [True, False, False, True, False, False, False, False],
@@ -108,7 +108,7 @@ def test_mask_tokens_span():
     torch.manual_seed(SEED) 
 
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4)
-    masked, token_mask = tokenizer._mask_tokens(example_tokens)
+    masked, token_mask = tokenizer.mask_tokens(example_tokens)
 
     expected_masks = [
         [True, False, False], [True, False, False, True]
@@ -143,15 +143,17 @@ def test_convert_ids_to_tokens():
 def test_tokenize_one_sentence():
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     tokens = tokenizer.tokenize(smiles_data)
+    
+    # BOS/EOS no longer added in tokenizer
     expected = [
-        ["^", "C", "C", "O", ".", "C", "c", "c", "&"],
-        ["^", "C", "C", "Cl", "C", "Cl", "&"],
-        ["^", "C", "(", "=", "O", ")", "C", "Br", "&"]
+        ["C", "C", "O", ".", "C", "c", "c"],
+        ["C", "C", "Cl", "C", "Cl"],
+        ["C", "(", "=", "O", ")", "C", "Br"]
     ]
-
     assert expected == tokens["original_tokens"]
 
 
+@pytest.mark.skip(reason="Sentences are not currently supported")
 def test_tokenize_two_sentences():
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     tokens = tokenizer.tokenize(smiles_data, sents2=smiles_data)
@@ -170,6 +172,7 @@ def test_tokenize_two_sentences():
     assert expected_sent_masks == tokens["sentence_masks"]
 
 
+@pytest.mark.skip(reason="Sentences are not currently supported")
 @pytest.mark.order(2)
 def test_tokenize_mask_replace():
     random.seed(a=1)
@@ -193,6 +196,7 @@ def test_tokenize_mask_replace():
     assert expected_tokens == tokens["original_tokens"]
 
 
+@pytest.mark.skip(reason="Sentences are not currently supported")
 @pytest.mark.order(4)
 def test_tokenize_mask_span():
     random.seed(a=1)
@@ -228,15 +232,16 @@ def test_tokenize_mask_span_pad():
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex, mask_prob=0.4)
     tokens = tokenizer.tokenize(smiles_data, mask=True, pad=True)
 
+    # BOS / EOS no longer added in tokenizer
     expected_m_tokens = [
-        ['^', '<MASK>', 'c', '&', '<PAD>', '<PAD>'],
-        ['^', 'C', '<MASK>', 'Cl', '&', '<PAD>'],
-        ['^', 'C', '<MASK>', 'O', '<MASK>', '&']
+        ['<MASK>', 'c', '<PAD>', '<PAD>'],
+        ['C', '<MASK>', 'Cl', '<PAD>'],
+        ['C', '<MASK>', 'O', '<MASK>']
     ]
     expected_tokens = [
-        ['^', 'C', 'C', 'O', '.', 'C', 'c', 'c', '&'],
-        ['^', 'C', 'C', 'Cl', 'C', 'Cl', '&', '<PAD>', '<PAD>'],
-        ['^', 'C', '(', '=', 'O', ')', 'C', 'Br', '&']
+        ['C', 'C', 'O', '.', 'C', 'c', 'c'],
+        ['C', 'C', 'Cl', 'C', 'Cl', '<PAD>', '<PAD>'],
+        ['C', '(', '=', 'O', ')', 'C', 'Br']
     ]
 
     assert expected_m_tokens == tokens["masked_tokens"]
@@ -251,6 +256,7 @@ def test_tokenize_mask_span_pad():
         assert len(ts) == len(pms)
 
 
+@pytest.mark.skip(reason="Sentences are not currently supported")
 def test_tokenize_padding():
     tokenizer = MolEncTokenizer.from_smiles(cfg.smiles, cfg.regex)
     output = tokenizer.tokenize(smiles_data, sents2=smiles_data, pad=True)

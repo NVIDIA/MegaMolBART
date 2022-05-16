@@ -3,7 +3,6 @@
 output
 result
 *.pt
-tests/data/asr
 .DS_Store
 bert.pt.json
 work

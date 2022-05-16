@@ -2,73 +2,41 @@ defaults:
   - model: small
 
 name: MegaMolBART
-do_training: True # set to false if data preprocessing steps must be completed
-do_testing: False # set to true to run evaluation on test data after training, requires test_dataset section
+do_training: True # set to false if data preprocessing will be done
+do_testing: False # set to true to run evaluation on test data after training
 seed: 42
-restore_from_path: null # used when starting from a .nemo file
+restore_from_path: null # used when starting from a .nemo checkpoint file
 
 trainer:
-  devices: 8
+  devices: 8 # number of GPUs or CPUs
   num_nodes: 4
-  accelerator: gpu
-  precision: 16
-  logger: False # logger provided by exp_manager
-  enable_checkpointing: False # checkpointing done by exp_manager
-  replace_sampler_ddp: False
-  max_epochs: null
+  precision: 16 # 16, 32
+  accelerator: gpu # gpu, cpu
+  max_epochs: null # use max_steps instead with NeMo Megatron models
   max_steps: 2000000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
-  log_every_n_steps: 200
-  val_check_interval: 2000
-  num_sanity_val_steps: 2 # set to 0 or small number to test validation before completing a full epoch
-  limit_val_batches: 0.25
-  limit_test_batches: 0
+  log_every_n_steps: 100 # number of interations between logging
+  val_check_interval: 2000 # set to integer when using steps to determine frequency of validation, use fraction with epochs
+  num_sanity_val_steps: 2 # set to 0 or small number to test validation before training
+  limit_val_batches: 200 # number of batches in validation step, use fraction for fraction of data
+  limit_test_batches: 0 # number of batches in test step, use fraction for fraction of data
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
-
-exp_manager:
-  name: ${name}
-  exp_dir: /result/nemo_experiments/${.name}/${.wandb_logger_kwargs.name}
-  explicit_log_dir: ${.exp_dir}
-  create_wandb_logger: True
-  create_tensorboard_logger: True
-  wandb_logger_kwargs:
-    project: ${model.name}_pretraining
-    name: ${model.name}_pretraining
-    group: ${model.name}
-    job_type: Localhost_nodes_${trainer.num_nodes}_gpus_${trainer.devices}
-    entity: clara-discovery
-    notes: "date: ${now:%y%m%d-%H%M%S}"
-    tags:
-      - ${name}
-      - ${model.name}
-    offline: False
-  resume_if_exists: True
-  resume_ignore_no_checkpoint: True
-  create_checkpoint_callback: True
-  checkpoint_callback_params:
-    monitor: val_molecular_accuracy # TODO switch to molecular_accuracy when correctly calculated
-    mode: max
-    save_top_k: 3
-    filename: '${name}-${model.name}--{val_molecular_accuracy:.2f}-{val_reduced_loss:.2f}-{step}-{consumed_samples}'
-    model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
-    save_last: True
-    always_save_nemo: False # saves nemo file during validation, not implemented for model parallel
+  logger: False # logger is provided by NeMo exp_manager
+  enable_checkpointing: False # checkpointing is done by NeMo exp_manager
+  replace_sampler_ddp: False # use NeMo Megatron samplers
 
 model:
   name: small_span
-  
-  # model parallelism 
-  micro_batch_size: 64
-  tensor_model_parallel_size: 1
-  pipeline_model_parallel_size: 1 # pipeline parallel is not supported yet. Use 1 for now.
+  micro_batch_size: 32
+  tensor_model_parallel_size: 1 # model parallelism 
 
   tokenizer:
     mask_scheme: span
     mask_prob: 0.1
 
   data:  
-    dataset_path: /data/zinc_csv_split
-    dataset_files: x[000..146].csv
+    dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
+    dataset_files: x[000..146].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)
     decoder_augment: False # task = mask(span)
@@ -77,7 +45,7 @@ model:
     num_workers: 10
 
   optim:
-    name: fused_adam
+    name: fused_adam # fused optimizers used by Megatron models
     lr: 1.0 # max is scaled by Noam scheduler to d_model**(-0.5) * warmup**(-0.5)
     betas:
       - 0.9
@@ -87,7 +55,39 @@ model:
     sched:
       name: NoamAnnealing
       d_model: ${model.hidden_size}
-      warmup_steps: null
-      warmup_ratio: 0.008
-      max_steps: 100000
+      warmup_steps: 8000 # use to set warmup_steps explicitly or leave as null to calculate
+      warmup_ratio: null # calculate warmup_steps from warmup_ratio * max_steps, but will throw error if max_steps * warmup_ratio < 1
+      max_steps: 1000000 # can also use ${trainer.max_steps} to scale
       min_lr: 1e-5
+
+exp_manager:
+  name: ${name}
+
+  # checkpoint reloading and saving
+  resume_if_exists: True # autmatically resume if checkpoint exists
+  resume_ignore_no_checkpoint: True # leave as True, will start new training if resume_if_exists is True but no checkpoint exists
+  create_checkpoint_callback: True # leave as True, use exp_manger for for checkpoints
+  checkpoint_callback_params:
+    save_top_k: 3 # number of checkpoints to save
+    monitor: val_molecular_accuracy # use molecular accuracy to select best checkpoints
+    mode: max # use min or max of monitored metric to select best checkpoints
+    save_last: True # always save last checkpoint
+    always_save_nemo: True # not implemented for model parallel, additionally save NeMo-style checkpoint during validation, set to False if checkpoint saving is time consuming
+    filename: '${name}-${model.name}--{val_molecular_accuracy:.2f}-{val_reduced_loss:.2f}-{step}-{consumed_samples}'
+    model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
+  
+  # logging
+  exp_dir: /result/nemo_experiments/${.name}/${.wandb_logger_kwargs.name}
+  explicit_log_dir: ${.exp_dir}
+  create_wandb_logger: True
+  create_tensorboard_logger: True
+  wandb_logger_kwargs:
+    project: ${model.name}_pretraining
+    name: ${model.name}_pretraining
+    group: ${model.name}
+    job_type: Localhost_nodes_${trainer.num_nodes}_gpus_${trainer.devices}
+    notes: "date: ${now:%y%m%d-%H%M%S}"
+    tags:
+      - ${name}
+      - ${model.name}
+    offline: False # set to True if there are issues uploading to WandB during training

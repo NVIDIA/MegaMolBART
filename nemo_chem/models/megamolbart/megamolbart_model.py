@@ -31,9 +31,11 @@ import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
+from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
-from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets
+from nemo_chem.utils import flatten_dict
+from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets, PrepareDataset
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 try:
@@ -124,16 +126,28 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def build_pretraining_data_loader(self, dataset, consumed_samples):
         """Buld dataloader given an input dataset."""
+        
+        assert self._cfg.data.dataloader_type == 'single', AssertionError(
+            f'Only the Megatron sequential ("single") sampler is currently supported. {self._cfg.data.dataloader_type} was chosen.'
+            )
+        
         dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
         
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
-        # TODO remove when data loader complete
-        dataloader.pin_memory = False
+        dataloader.pin_memory = False # must be False with CSV dataset TODO check with binary
         pad_size_divisible_by_8 = True if self._cfg.masked_softmax_fusion else False
-        dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
-                                                    seq_length=self._cfg.seq_length, 
-                                                    pad_size_divisible_by_8=pad_size_divisible_by_8,
-                                                    **self._cfg.data).collate_fn
+
+        ## TODO: We can use the Enum DatasetType() defined in the utils.py here. 
+        if self._cfg.data.dataset_format == "bin":
+            dataloader.collate_fn = PrepareDataset(tokenizer=self.tokenizer, 
+                                                        seq_length=self._cfg.seq_length, 
+                                                        pad_size_divisible_by_8=pad_size_divisible_by_8,
+                                                        **self._cfg.data).collate_fn
+        elif self._cfg.data.dataset_format == "csv":
+            dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
+                                                        seq_length=self._cfg.seq_length, 
+                                                        pad_size_divisible_by_8=pad_size_divisible_by_8,
+                                                        **self._cfg.data).collate_fn
         
         return dataloader
 
@@ -143,7 +157,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
 
-    def _inference_step(self, batch, batch_idx):
+    def _inference_step(self, batch, batch_idx, log_n_batches=10):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
@@ -151,8 +165,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         target_smiles = batch['target_smiles']
         token_logits = ret_dict['token_logits']
         token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
+
+        log_mol = True if batch_idx < log_n_batches else False # TODO enable logging in yaml config
         metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
-                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles)
+                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles, batch_idx=batch_idx, log_char=False, log_mol=log_mol)
 
         logs = {'loss': loss}
         for metric_name, metric_value in metrics.items():
@@ -160,18 +176,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         
         return logs
 
-    @staticmethod
-    def _flatten_dict(outputs):
-        """Flatten a list of dictionaries to list without assuming all keys are identical"""
-        flattened_dict = defaultdict(list)
-        for metric_dict in outputs:
-            for metric_name, metric_value in metric_dict.items():
-                flattened_dict[metric_name].append(metric_value)
-
-        return flattened_dict
-
     def _inference_epoch_end(self, outputs, mode):
-        results_dict = self._flatten_dict(outputs)
+        results_dict = flatten_dict(outputs)
 
         # Calculate metric averages
         # TODO this reduces all metrics across all data parallel groups
@@ -197,12 +203,15 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.log_dict(logged_results, prog_bar=True)
 
     def training_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            logging.info('Starting training loop')
 
-        if batch_idx < 2: # TODO CLEANUP
+        # Log a few samples to check data parallel distribution
+        if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
             target_smiles = batch['target_smiles']
             data_parallel_world_size = parallel_state.get_data_parallel_world_size()
             data_parallel_rank = parallel_state.get_data_parallel_rank()
-            logging.info(f'Data samples from {data_parallel_rank}/{data_parallel_world_size} with {len(self._train_ds)} for batch {batch_idx}: {target_smiles[:2]}')
+            logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
 
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
 
@@ -234,33 +243,43 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        return self._inference_step(batch, batch_idx)
+        if batch_idx == 0:
+            logging.info('Starting validation epoch')
+        return self._inference_step(batch, batch_idx, log_n_batches=10)
 
     def test_step(self, batch, batch_idx):
-        return self._inference_step(batch, batch_idx)
+        if batch_idx == 0:
+            logging.info('Starting test epoch')
+        return self._inference_step(batch, batch_idx, log_n_batches=10)
 
     def validation_epoch_end(self, outputs):
+        logging.info('Finishing validation epoch')
         self._inference_epoch_end(outputs, mode='val')
 
     def test_epoch_end(self, outputs):
+        logging.info('Finishing test epoch')
         self._inference_epoch_end(outputs, mode='test')
 
-    def decode(self, tokens_enc, enc_mask, num_tokens_to_generate):
-        # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited 
-        encoder_hidden_states = itemgetter("enc_output")(
-            self(
-                encoder_input_ids=tokens_enc,
-                decoder_input_ids=None,
-                encoder_attn_mask=enc_mask,
-                decoder_attn_mask=None,
-                tokentype_ids=None,
-                lm_labels=None,
-                enc_hidden_states=None,
-                output_enc_hidden_only=True,
+    def decode(self, tokens_enc, enc_mask, num_tokens_to_generate=None, encoder_hidden_states=None):
+        # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited
+        if num_tokens_to_generate is None:
+            num_tokens_to_generate=self._cfg.max_position_embeddings
+
+        if encoder_hidden_states is None:
+            encoder_hidden_states = itemgetter("enc_output")(
+                self(
+                    encoder_input_ids=tokens_enc,
+                    decoder_input_ids=None,
+                    encoder_attn_mask=enc_mask,
+                    decoder_attn_mask=None,
+                    tokentype_ids=None,
+                    lm_labels=None,
+                    enc_hidden_states=None,
+                    output_enc_hidden_only=True,
+                )
             )
-        )
         predicted_tokens_dec = (
-            torch.LongTensor([self.tokenizer.bos_id] * tokens_enc.size(0)).unsqueeze(1).to(tokens_enc.device)
+            torch.LongTensor([self.tokenizer.bos_id] * enc_mask.size(0)).unsqueeze(1).to(enc_mask.device)
         )
         for _ in range(num_tokens_to_generate):
             dec_mask = predicted_tokens_dec != self.tokenizer.pad_id
@@ -315,8 +334,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.unfreeze()
         return sampled_smiles
 
-    @staticmethod
-    def calculate_character_accuracy(token_logits, loss_mask, labels):
+    def calculate_character_accuracy(self, token_logits, loss_mask, labels, batch_idx=None, log=False):
         """Character (token) level accuracy
 
         Args:
@@ -336,9 +354,17 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         num_correct = correct_tokens.detach().sum()
         total = loss_mask.detach().sum()
         character_accuracy = num_correct / total
+
+        if log:
+            logging.info(f'Character accuracy for batch {batch_idx}:')
+            for idx in range(predicted_tokens.shape[0]):
+                mask = loss_mask[idx].to(int)
+                correct_ = labels[idx][mask] == predicted_tokens[idx][mask]
+                logging.info(f'     Sample {idx} has {correct_} / {sum(mask)}')
+
         return character_accuracy
 
-    def calculate_molecular_accuracy(self, tokens_enc, enc_mask, target_smiles):
+    def calculate_molecular_accuracy(self, tokens_enc, enc_mask, target_smiles, batch_idx=None, log=False):
         """Calculate molecular accuracy (with canonicalization)
 
         Args:
@@ -351,8 +377,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         """
         sampled_smiles = self.sample_molecules(tokens_enc, enc_mask)
         sampled_mols = [Chem.MolFromSmiles(smi) for smi in sampled_smiles]
-        invalid = [mol is None for mol in sampled_mols]
 
+        invalid = [mol is None for mol in sampled_mols]
         canonical_smiles = ["Unknown" if mol is None else Chem.MolToSmiles(mol, canonical=True) for mol in sampled_mols]
         correct_smiles = [target_smiles[idx] == smi for idx, smi in enumerate(canonical_smiles)]
 
@@ -362,9 +388,20 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         percent_invalid = torch.tensor([num_invalid / total]).to(tokens_enc.device)
         molecular_accuracy = torch.tensor([num_correct / total]).to(tokens_enc.device)
 
+        if log:
+            logging.info(f'Molecular accuracy for batch {batch_idx}:')
+            for idx, (invalid_, correct_) in enumerate(zip(invalid, correct_smiles)):
+                if invalid_:
+                    result = 'invalid'
+                elif correct_:
+                    result = 'correct'
+                else:
+                    result = 'incorrect'
+                logging.info(f'     Sample {idx} is {result}, target: {target_smiles[idx]}, sample: {sampled_smiles[idx]}')
+
         return molecular_accuracy, percent_invalid
 
-    def calculate_metrics(self, token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles):
+    def calculate_metrics(self, token_logits, loss_mask, labels, tokens_enc, enc_mask, target_smiles, batch_idx=None, log_char=False, log_mol=False):
         """Calculate metrics for character accuracy, molecular accuracy, and invalid molecules
 
         Args:
@@ -378,8 +415,8 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         Returns:
             dict: dictionary of metric values
         """
-        character_accuracy = self.calculate_character_accuracy(token_logits, loss_mask, labels)
-        molecular_accuracy, percent_invalid = self.calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles)
+        character_accuracy = self.calculate_character_accuracy(token_logits, loss_mask, labels, batch_idx, log=log_char)
+        molecular_accuracy, percent_invalid = self.calculate_molecular_accuracy(tokens_enc, enc_mask, target_smiles, batch_idx, log=log_mol)
         metrics = {'character_accuracy': character_accuracy,
                    'molecular_accuracy': molecular_accuracy,
                    'percent_invalid': percent_invalid}

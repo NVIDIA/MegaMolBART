@@ -23,6 +23,8 @@ from nemo_chem.models import MegaMolBARTModel, MegatronBARTConfig
 
 from nemo.collections.nlp.modules.common.megatron.megatron_init import initialize_model_parallel_for_nemo
 
+# TODO cleanup model tests
+
 # Use dummy SMILES strings
 react_data = [
     "CCO.C",
@@ -50,11 +52,13 @@ initialize_model_parallel_for_nemo(
 TEST_MODEL_CONFIG = MegatronBARTConfig()
 TEST_PERCEIVER_CONFIG = MegatronBARTConfig(encoder_type='perceiver')
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 @pytest.fixture(params=[TEST_MODEL_CONFIG, TEST_PERCEIVER_CONFIG])
 def args(request):
     _args = request.param
     return _args
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 @pytest.fixture
 def tokenizer():
     cfg = MolEncTokenizerFromSmilesConfig({'smiles': react_data + prod_data})
@@ -62,11 +66,7 @@ def tokenizer():
         cfg.smiles["smiles"], cfg.regex, mask_scheme="replace")
     return _tokenizer
 
-@pytest.fixture
-def sampler(args, tokenizer):
-    _sampler = DecodeSampler(tokenizer, args.seq_len)
-    return _sampler
-
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 @pytest.fixture
 def model(args, tokenizer, sampler):
     pad_token_idx = tokenizer.vocab[tokenizer.pad_token]
@@ -85,12 +85,14 @@ def model(args, tokenizer, sampler):
                           dropout=0.1)
     return _model.cuda()
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_pos_emb_shape(model, sampler, tokenizer, args):
     pos_embs = model._positional_embs()
 
     assert pos_embs.shape[0] == args.seq_len
     assert pos_embs.shape[1] == model.d_model  # hidden size
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_construct_input_shape(model, sampler, tokenizer, args):
     token_output = tokenizer.tokenize(react_data, sents2=prod_data, pad=True)
     tokens = token_output["original_tokens"]
@@ -106,6 +108,7 @@ def test_construct_input_shape(model, sampler, tokenizer, args):
     assert emb.shape[1] == 3
     assert emb.shape[2] == args.d_model
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_bart_forward_shape(model, sampler, tokenizer, args):
     react_token_output = tokenizer.tokenize(react_data, mask=True, pad=True)
     react_tokens = react_token_output["masked_tokens"]
@@ -138,6 +141,7 @@ def test_bart_forward_shape(model, sampler, tokenizer, args):
     assert tuple(model_output.shape) == (exp_seq_len, exp_batch_size, exp_dim)
     assert tuple(token_output.shape) == (exp_seq_len, exp_batch_size, exp_vocab_size)
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_bart_encode_shape(model, sampler, tokenizer, args):
     react_token_output = tokenizer.tokenize(react_data, mask=True, pad=True)
     react_tokens = react_token_output["masked_tokens"]
@@ -160,6 +164,7 @@ def test_bart_encode_shape(model, sampler, tokenizer, args):
 
     assert tuple(output.shape) == (exp_seq_len, exp_batch_size, exp_dim)
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_bart_decode_shape(model, sampler, tokenizer, args):
     react_token_output = tokenizer.tokenize(react_data, mask=True, pad=True)
     react_tokens = react_token_output["masked_tokens"]
@@ -194,6 +199,7 @@ def test_bart_decode_shape(model, sampler, tokenizer, args):
 
     assert tuple(output.shape) == (exp_seq_len, exp_batch_size, exp_vocab_size)
 
+@pytest.mark.skip(reason="Model tests are currently deprecated")
 def test_calc_char_acc(model, sampler, tokenizer, args):
     react_token_output = tokenizer.tokenize(react_data[1:], pad=True)
     react_tokens = react_token_output["original_tokens"]

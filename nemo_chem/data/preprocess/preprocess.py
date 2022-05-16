@@ -32,6 +32,8 @@ from nemo.utils import logging
 MAX_LENGTH = 150
 
 
+__all__ = ['Preprocess']
+
 class Preprocess(object):
 
     def __init__(self) -> None:
@@ -191,7 +193,7 @@ class Preprocess(object):
                      split_files)
 
     def prepare_dataset(self,
-                        links_file='conf/model/dataset/ZINC-downloader.txt',
+                        links_file='conf/model/data/ZINC-downloader.txt',
                         download_dir='/tmp/zinc15/raw',
                         output_dir='/tmp/zinc15/processed'):
         """
