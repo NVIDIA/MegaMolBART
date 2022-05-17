@@ -62,7 +62,7 @@ def _build_train_valid_test_datasets(
     logging.info(f'Loading data from {dataset_paths}')
     dataset_list = []
     if dataset_format == "csv":
-        dataset = MoleculeCsvDataset(dataset_paths=dataset_paths, cfg=cfg, trainer=trainer)
+        dataset = MoleculeCsvDataset(dataset_paths=dataset_paths, cfg=cfg)
     elif dataset_format == "bin":
         for path in dataset_paths:
             data = MoleculeBinaryDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)

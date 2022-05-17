@@ -64,13 +64,12 @@ class MoleculeCsvDataset(Dataset):
     def __init__(self,
                  dataset_paths,
                  cfg,
-                 trainer,
                  workers=None):
 
         if len(dataset_paths) < 1:
             raise ValueError("Dataset file list must contain at least one file name")
 
-        super().__init__(cfg, trainer)
+        super().__init__()
 
         # TODO not all of these need their state set
         self._header_lines = cfg.get('header_lines') # skip first N lines
