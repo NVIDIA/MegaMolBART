@@ -85,7 +85,7 @@ class MoleculeCsvDataset(Dataset):
         is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
         # is_global_rank_0 = (not is_distributed) or (is_distributed and torch.distributed.get_rank() == 0)
         rank_indexes = get_rank_info() # will return 0,0,0 if no dp/mp
-        is_global_rank_0 = sum(rank_indexes) == 0
+        is_global_rank_0 = (rank_indexes is None) or (sum(rank_indexes) == 0)
 
         if is_global_rank_0:
             tensor_parallel_rank, pipeline_parallel_rank, data_parallel_rank = rank_indexes
