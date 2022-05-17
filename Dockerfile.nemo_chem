@@ -47,7 +47,6 @@ RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /
 RUN pip install --upgrade numpy wandb
 
 ## NeMo_MegaMolBART
-# TODO update path to public one and remove access token and branch
 RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
     && cd ${NEMO_CHEM_HOME} \
     && git checkout ${GITHUB_BRANCH}

@@ -90,7 +90,7 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo_chem}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
