@@ -88,8 +88,9 @@ class MoleculeCsvDataset(Dataset):
         is_global_rank_0 = sum([0 if r is None else r for r in rank_indexes]) == 0
 
         if is_global_rank_0:
-            tensor_parallel_rank, pipeline_parallel_rank, data_parallel_rank = rank_indexes
-            logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}')
+            
+            data_parallel_rank, tensor_parallel_rank, pipeline_parallel_rank, virtual_pipeline_parallel_rank = rank_indexes
+            logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}, virtual_pipeline_parallel_rank {virtual_pipeline_parallel_rank} ')
             start_time = time.time()
             build_index_files(dataset_paths, self._newline_int, workers=self._workers)
             logging.info(f'Time to build memory mapped indexes: {time.time() - start_time}')
