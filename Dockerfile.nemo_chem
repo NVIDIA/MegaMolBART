@@ -16,7 +16,7 @@
 # TODO: replace with nemo 1.8 released container
 # FROM nvcr.io/nvidia/nemo:22.01
 # FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.8.0
-FROM nvcr.io/nvidia/nemo:22.04
+FROM nvcr.io/nvidia/nemo:22.03
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH
 ARG NEMO_CHEM_HOME=/workspace/nemo_chem
