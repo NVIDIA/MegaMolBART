@@ -154,7 +154,7 @@ class MoleculeCsvDataset(Dataset):
         if os.path.exists(idx_fn):
             idx_dict = pickle.load(open(idx_fn, 'rb'))
             midx = idx_dict['midx']
-            size = idx_dict['size']
+            size = idx_dict.get('size', None)
         else:
             raise ValueError(f'Memory map for {fn} is not found')
 
