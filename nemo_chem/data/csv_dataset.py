@@ -23,7 +23,7 @@ from dataclasses import dataclass
 import torch
 import numpy as np
 
-from nemo.collections.nlp.data.language_modeling.megatron.megatron_dataset import MegatronDataset
+from nemo.core import Dataset
 from nemo.utils import logging
 from .data_index import build_index_files
 
@@ -57,7 +57,7 @@ class MoleculeCsvDatasetConfig():
     num_workers: Optional[int] = None
 
 
-class MoleculeCsvDataset(MegatronDataset):
+class MoleculeCsvDataset(Dataset):
     """
     Allow per-line lazy access to multiple text files using numpy memmap.
     """
