@@ -59,7 +59,7 @@ def _build_train_valid_test_datasets(
 
     # Get datasets and load data
     logging.info(f'Loading data from {filepath}')
-    dataset_paths = expand_dataset_paths(filepath, ".csv") if dataset_format == "csv" else expand_dataset_paths(filepath)
+    dataset_paths = expand_dataset_paths(filepath, ".csv") if dataset_format == "csv" else expand_dataset_paths(filepath, None)
     logging.info(f'Loading data from {dataset_paths}')
     dataset_list = []
     if dataset_format == "csv":

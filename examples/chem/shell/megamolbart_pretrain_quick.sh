@@ -30,7 +30,7 @@ python megamolbart_pretrain.py \
     exp_manager.exp_dir=${RESULTS_MOUNT} \
     exp_manager.wandb_logger_kwargs.offline="True" \
     model.data.dataset_path=${DATA_MOUNT} \
-    +model.data.dataset_format=${DATA_FORMAT} \
+    model.data.dataset_format=${DATA_FORMAT} \
     model.data.dataset_files=${DATA_FILES_SELECTED}
 
     # tokenizer.vocab_path=${CODE_MOUNT}/nemo_chem/vocab/megamolbart.vocab \

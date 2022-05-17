@@ -72,15 +72,16 @@ class CsvToBinary:
         # If the destination path is not the same as where the CSVs exist, make an identical
         # folder structure as the input directory at the destination
         if self.out_dir != self.input_dir:
-	    os.makedirs(self.out_dir, exist_ok = True)
-	    os.access(self.out_dir, os.W_OK)
-	    # Create an identical folder structure in the output directory as the input dir.
-	    for path, subdir, files in os.walk(self.input_dir):
+            os.makedirs(self.out_dir, exist_ok=True)
+            os.access(self.out_dir, os.W_OK)
+            # Create an identical folder structure in the output directory as the input dir.
+            for path, subdir, files in os.walk(self.input_dir):
                 subdir = path[len(self.input_dir)+1:]
-		folder_path = os.path.join(self.out_dir, subdir)
-		os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
+                folder_path = os.path.join(self.out_dir, subdir)
+                os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
 
         self.outbinfiles = []
+        self.outidxfiles = []
         for path, subdir, files in os.walk(self.out_dir):
             outbinfiles = [ifile for path, subdir, files in os.walk(self.out_dir)
                           for dformat in DATAFORMAT_EXT
