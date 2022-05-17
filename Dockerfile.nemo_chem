@@ -36,10 +36,6 @@ RUN apt-get update && \
     wget git unzip tmux vim && \
     rm -rf /var/lib/apt/lists/*
 
-# TODO: check if required
-## Upgrade NeMo
-# RUN pip install nemo_toolkit[all]==1.7.2
-
 ## Environment setup --  multithreaded dataloading very sensitive to libboost version. Do not change w/o testing.
 COPY conda/env.yml /tmp/env.yml
 RUN conda env update --name base -f /tmp/env.yml && conda clean -afy

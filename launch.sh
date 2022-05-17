@@ -101,7 +101,7 @@ RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
 REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=NotSpecified}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=git}
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 ###############################################################################
