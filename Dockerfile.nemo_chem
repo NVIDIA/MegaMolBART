@@ -13,11 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: replace with nemo 1.8 released container
-# FROM nvcr.io/nvidia/nemo:22.01
-# FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.8.0
 FROM nvcr.io/nvidia/nemo:22.03
-ARG GITHUB_ACCESS_TOKEN
+# ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH
 ARG NEMO_CHEM_HOME=/workspace/nemo_chem
 ARG CONDA_ENV=base
@@ -47,7 +44,7 @@ RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /
 RUN pip install --upgrade numpy wandb
 
 ## NeMo_MegaMolBART
-RUN git clone ${GITHUB_ACCESS_TOKEN}@github.com:clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
+RUN git clone https://github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
     && cd ${NEMO_CHEM_HOME} \
     && git checkout ${GITHUB_BRANCH}
 

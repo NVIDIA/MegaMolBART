@@ -101,7 +101,7 @@ RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
 REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=git}
+# GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=git}
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 ###############################################################################
@@ -188,11 +188,11 @@ build() {
     set -e
     MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
 
+        # --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
     echo "Building MegaMolBART training container..."
     docker build --network host \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_BRANCH} \
         -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
-        --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
         --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
         -f Dockerfile.nemo_chem \
