@@ -5,8 +5,8 @@ trainer:
   devices: 8
   num_nodes: 8
 
-  data:  
-    decoder_augment: False
+data:  
+  decoder_augment: False
 
 model:
   name: small_span
