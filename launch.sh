@@ -64,16 +64,10 @@ variables:
         local path to code. e.g., /home/user/code/NeMo_MegaMolBART
         If code should not be mounted in the container, then the PROJECT_MOUNT_PATH line should
         be removed from the DOCKER_CMD here https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/main/launch.sh#L164
-    PROJECT_MOUNT_PATH
-        Path to code inside container, e.g. /workspace/nemo
-        This can be ignored for non-development runs since code is already inside the container.
-        THIS PATH SHOULD BE CHANGED ONLY IF NECESSARY. Many downstream functions depend on it.
     JUPYTER_PORT
         Port for launching jupyter lab, e.g. 8888
     DATA_PATH
         path to data directory. e.g., /scratch/data/zinc_csv_split
-    DATA_MOUNT_PATH
-        Path to data inside container. e.g., /data
     REGISTRY
         container registry URL. e.g., nvcr.io. Only required to push/pull containers.
     REGISTRY_USER
@@ -92,11 +86,8 @@ EOF
 
 MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH:=/workspace/nemo_chem}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
-DATA_MOUNT_PATH=${DATA_MOUNT_PATH:=/data}
-RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH:=/result/nemo_experiments}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
@@ -129,11 +120,8 @@ fi
 if [ $write_env -eq 1 ]; then
     echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
     echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
-    echo PROJECT_MOUNT_PATH=${PROJECT_MOUNT_PATH} >> $LOCAL_ENV
     echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
-    echo DATA_MOUNT_PATH=${DATA_MOUNT_PATH} >> $LOCAL_ENV
-    echo RESULT_MOUNT_PATH=${RESULT_MOUNT_PATH} >> $LOCAL_ENV
     echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
     echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
     echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
@@ -148,9 +136,13 @@ fi
 #          shouldn't need to make changes beyond this point
 #
 ###############################################################################
+
+PROJECT_MOUNT_PATH="/workspace/nemo_chem"
+DATA_MOUNT_PATH="/data"
+RESULT_MOUNT_PATH='/result/nemo_experiments'
+
 # Compare Docker version to find Nvidia Container Toolkit support.
 # Please refer https://github.com/NVIDIA/nvidia-docker
-
 DOCKER_VERSION_WITH_GPU_SUPPORT="19.03.0"
 if [ -x "$(command -v docker)" ]; then
     DOCKER_VERSION=$(docker version | grep -i version | head -1 | awk '{print $2'})
@@ -173,6 +165,9 @@ fi
 DOCKER_CMD="docker run \
     --rm \
     --network host \
+    -v /etc/passwd:/etc/passwd:ro \
+    -v /etc/group:/etc/group:ro \
+    -v /etc/shadow:/etc/shadow:ro \
     ${PARAM_RUNTIME} \
     -p ${JUPYTER_PORT}:8888 \
     -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
@@ -181,17 +176,35 @@ DOCKER_CMD="docker run \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     -e HOME=${PROJECT_MOUNT_PATH} \
-    -w ${PROJECT_MOUNT_PATH}"
+    -w ${PROJECT_MOUNT_PATH} \
+    -u $(id -u):$(id -u)"
 
 
 build() {
+    VERSION=${GITHUB_SHA}
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --version)
+                VERSION="$2"
+                shift
+                shift
+                ;;
+            *)
+                echo "Unknown option $1. Please --version to specify a version."
+                exit 1
+                ;;
+        esac
+    done
+
     set -e
-    MEGAMOLBART_CONT_BASENAME="$( cut -d ':' -f 1 <<< "$MEGAMOLBART_CONT" )" # Remove tag
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
 
     echo "Building MegaMolBART training container..."
     docker build --network host \
-        -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_BRANCH} \
-        -t ${MEGAMOLBART_CONT_BASENAME}:${GITHUB_SHA} \
+        -t ${IMG_NAME[0]}:${GITHUB_BRANCH} \
+        -t ${IMG_NAME[0]}:${IMG_NAME[1]} \
+        -t ${IMG_NAME[0]}:${VERSION} \
+        -t ${IMG_NAME[0]}:latest \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
         --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
@@ -204,9 +217,25 @@ build() {
 
 
 push() {
+    VERSION=${GITHUB_SHA}
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --version)
+                VERSION="$2"
+                shift
+                shift
+                ;;
+            *)
+                echo "Unknown option $1. Please --version to specify a version."
+                exit 1
+                ;;
+        esac
+    done
+
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker push ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
-    docker push ${MEGAMOLBART_CONT}:${GITHUB_SHA}
+    docker push ${IMG_NAME[0]}:latest
+    docker push ${IMG_NAME[0]}:${VERSION}
     exit
 }
 
@@ -219,9 +248,34 @@ pull() {
 
 
 dev() {
-    set -x
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev " 
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
+    local DEV_IMG="${MEGAMOLBART_CONT}"
+    local CMD='bash'
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--image)
+                DEV_IMG="$2"
+                shift
+                shift
+                ;;
+            -d|--deamon)
+                DOCKER_CMD="${DOCKER_CMD} -d"
+                shift
+                ;;
+            *)
+                echo "Unknown option $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH}"
+    DOCKER_CMD="${DOCKER_CMD} -v $(pwd)/models:/models"
+    DOCKER_CMD="${DOCKER_CMD} --env WANDB_API_KEY=$WANDB_API_KEY"
+    DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=$PROJECT_MOUNT_PATH"
+
+    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev "
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
     exit
 }
 
@@ -252,12 +306,13 @@ jupyter() {
         --NotebookApp.password_required=False
 }
 
-
 case $1 in
     build)
-        ;&
+        $@
+        ;;
     push)
-        ;&
+        $@
+        ;;
     pull)
         ;&
     dev)
