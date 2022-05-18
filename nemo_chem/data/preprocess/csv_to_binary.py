@@ -77,7 +77,6 @@ class CsvToBinary:
             # Create an identical folder structure in the output directory as the input dir.
             for path, subdir, files in os.walk(self.input_dir):
                 subdir = path[len(self.input_dir)+1:]
-                folder_path = os.path.join(self.out_dir, subdir)
                 os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
 
         outbinfiles = []
