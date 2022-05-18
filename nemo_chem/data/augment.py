@@ -27,7 +27,7 @@ from nemo_chem.tokenizer import MolEncTokenizer
 
 __all__ = ['MoleculeEnumeration']
 
-
+# FIXME: work in progress
 class MoleculeEnumeration(object):
     def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
@@ -189,3 +189,167 @@ class MoleculeEnumeration(object):
                           'target_smiles': canon_targets} # smiles strings
 
         return collate_output
+
+    def tokenize(self, sents1, sents2=None, mask=False, pad=False):
+        # TODO this function needs cleanup
+        if sents2:
+            warnings.simplefilter('error', DeprecationWarning) # This functionality does not work, fail loudly
+            warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
+        if pad is True:
+            warnings.simplefilter('always', DeprecationWarning)
+            warnings.warn('Padding by the tokenizer is not supported in this version of MegaMolBART and may not produce correct results', category=DeprecationWarning)
+
+        if sents2 is not None and len(sents1) != len(sents2):
+            raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
+
+        tokens = self.tokenizer._regex_match(sents1)
+        m_tokens, token_masks = self.tokenizer.mask_tokens(tokens, empty_mask=not mask)
+
+        sent_masks = None
+        if sents2 is not None:
+            sents2_tokens = self._regex_match(sents2)
+            sents2_m_tokens, sents2_masks = self.mask_tokens(sents2_tokens, empty_mask=not mask)
+            tokens, sent_masks = self._concat_sentences(tokens, sents2_tokens, self.tokenizer.sep_token)
+            m_tokens, _ = self._concat_sentences(m_tokens, sents2_m_tokens, self.tokenizer.sep_token)
+            token_masks, _ = self._concat_sentences(token_masks, sents2_masks, False)
+
+        # TODO this removes bos/eos addition since NeMo handles differently. 
+        # Now handled in collate function
+        # tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens] 
+        # m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
+        # token_masks = [[True] + ts + [True] for ts in token_masks]
+        # sent_masks = [[1] + mask + [0] for mask in sent_masks] if sent_masks is not None else None
+
+        output = {}
+
+        if pad:
+            tokens, orig_pad_masks = self._pad_seqs(tokens, self.tokenizer.pad_token)
+            m_tokens, masked_pad_masks = self._pad_seqs(m_tokens, self.tokenizer.pad_token)
+            token_masks, _ = self._pad_seqs(token_masks, False)
+            sent_masks, _ = self._pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
+            output["original_pad_masks"] = orig_pad_masks
+            output["masked_pad_masks"] = masked_pad_masks
+
+        output["original_tokens"] = tokens
+
+        if mask:
+            output["masked_tokens"] = m_tokens
+            output["token_masks"] = token_masks
+
+        if sent_masks is not None:
+            output["sentence_masks"] = sent_masks
+
+        return output
+
+    def _regex_match(self, smiles):
+        tokenized = []
+        for smi in smiles:
+            tokens = self.tokenizer.prog.findall(smi)
+            tokenized.append(tokens)
+
+        return tokenized
+
+    @staticmethod
+    def _get_compiled_regex(regex, extra_tokens):
+        regex_string = r"("
+        for token in extra_tokens:
+            processed_token = token
+            for special_character in "()[].|":
+                processed_token = processed_token.replace(special_character, f"\\{special_character}")
+            regex_string += processed_token + r"|"
+
+        regex_string += regex + r"|"
+        regex_string += r".)"
+        return re.compile(regex_string)
+
+    @staticmethod
+    def _concat_sentences(tokens1, tokens2, sep):
+        warnings.simplefilter('error', DeprecationWarning) # This function does not work, fail loudly
+        warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
+
+        tokens = [ts1 + [sep] + ts2 for ts1, ts2 in zip(tokens1, tokens2)]
+        sent_masks = [([1] * len(ts1)) + [1] + ([0] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]  # 1/True = Active, 0/False = Inactive
+        return tokens, sent_masks
+
+    def detokenize(self, tokens_list):
+        new_tokens_list = []
+        for tokens in tokens_list:
+            if tokens[0] == self.tokenizer.begin_token:
+                tokens = tokens[1:]
+
+            # Remove any tokens after the end token (and end token) if it's there 
+            if self.tokenizer.end_token in tokens:
+                end_token_idx = tokens.index(self.tokenizer.end_token)
+                tokens = tokens[:end_token_idx]
+
+            new_tokens_list.append(tokens)
+
+        strs = ["".join(tokens) for tokens in new_tokens_list]
+        return strs
+    
+    def mask_tokens(self, tokens, empty_mask=False):
+        if empty_mask:
+            mask = [[True] * len(ts) for ts in tokens]
+            return tokens, mask
+
+        masked_tokens = []
+        token_masks = []
+
+        for ts in tokens:
+            # FIXME: add config
+            # if self.mask_scheme == "replace":
+            #     masked, token_mask = self._mask_replace(ts)
+            # elif self.mask_scheme == "span":
+            masked, token_mask = self._mask_span(ts)
+            # else:
+            #     raise ValueError(f"Unrecognised mask scheme: {self.mask_scheme}")
+
+            masked_tokens.append(masked)
+            token_masks.append(token_mask)
+
+        return masked_tokens, token_masks
+
+    def _mask_replace(self, ts):
+        mask_bools = [True, False]
+        weights = [self.mask_prob, 1 - self.mask_prob]
+        token_mask = random.choices(mask_bools, weights=weights, k=len(ts))
+        masked = [self._mask_token(ts[i]) if m else ts[i] for i, m in enumerate(token_mask)]
+        return masked, token_mask
+
+    def _mask_span(self, ts):
+        curr_token = 0
+        masked = []
+        token_mask = []
+
+        mask_bools = [True, False]
+        weights = [self.mask_prob, 1 - self.mask_prob]
+        sampled_mask = random.choices(mask_bools, weights=weights, k=len(ts))
+
+        while curr_token < len(ts):
+            # If mask, sample from a poisson dist to get length of mask
+            if sampled_mask[curr_token]:
+                mask_len = torch.poisson(torch.tensor(self.span_lambda)).long().item()
+                masked.append(self.mask_token)
+                token_mask.append(True)
+                curr_token += mask_len
+
+            # Otherwise don't mask
+            else:
+                masked.append(ts[curr_token])
+                token_mask.append(False)
+                curr_token += 1
+
+        return masked, token_mask
+
+    def _mask_token(self, token):
+        rand = random.random()
+        if rand < self.show_mask_token_prob:
+            return self.mask_token
+
+        elif rand < self.show_mask_token_prob + ((1 - self.show_mask_token_prob) / 2):
+            token_idx = random.choice(self.chem_token_idxs)
+            return self.decode_vocab[token_idx]
+
+        else:
+            return token
+    
