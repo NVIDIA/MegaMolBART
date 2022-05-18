@@ -6,7 +6,7 @@ trainer:
   num_nodes: 8
 
 model:
-  name: xlarge_span_aug
+  name: large_span_aug
   # model architecture
   num_layers: 8
   hidden_size: 1024
