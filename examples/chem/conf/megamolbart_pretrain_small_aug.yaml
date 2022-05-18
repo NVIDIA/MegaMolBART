@@ -9,7 +9,7 @@ data:
   encoder_mask: False
 
 model:
-  name: small_span
+  name: small_aug
   # model architecture
   num_layers: 6
   hidden_size: 512
