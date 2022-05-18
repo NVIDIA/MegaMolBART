@@ -1,0 +1,16 @@
+defaults:
+  - megamolbart_pretrain_base
+
+trainer:
+  devices: 8
+  num_nodes: 8
+
+data:  
+  encoder_mask: False
+
+model:
+  name: small_span
+  # model architecture
+  num_layers: 6
+  hidden_size: 512
+  num_attention_heads: 8
