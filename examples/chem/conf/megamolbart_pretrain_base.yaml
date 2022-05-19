@@ -10,11 +10,11 @@ trainer:
   precision: 16 # 16, 32
   accelerator: gpu # gpu, cpu
   max_epochs: null # use max_steps instead with NeMo Megatron models
-  max_steps: 1000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
-  log_every_n_steps: 20 # number of interations between logging
-  val_check_interval: 100 # set to integer when using steps to determine frequency of validation, use fraction with epochs
+  max_steps: 2000000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
+  log_every_n_steps: 100 # number of interations between logging
+  val_check_interval: 2000 # set to integer when using steps to determine frequency of validation, use fraction with epochs
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before training
-  limit_val_batches: 10 # number of batches in validation step, use fraction for fraction of data
+  limit_val_batches: 200 # number of batches in validation step, use fraction for fraction of data
   limit_test_batches: 0 # number of batches in test step, use fraction for fraction of data
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
