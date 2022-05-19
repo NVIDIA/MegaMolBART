@@ -61,7 +61,7 @@ model:
     num_enumerations: 5 #You can change this number of how many every enumerations you want on every SMILE string.
 ```
 ### Training
-For training, make the following changes in teh *data* field of your config
+For training, make the following changes in the *data* field of your config
 ```
 model:
   data:
