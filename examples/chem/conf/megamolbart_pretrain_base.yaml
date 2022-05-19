@@ -1,15 +1,12 @@
-defaults:
-  - model: small
-
 name: MegaMolBART
-do_training: True # set to false if data preprocessing will be done
-do_testing: False # set to true to run evaluation on test data after training
+do_training: True # set to false if data preprocessing steps must be completed
+do_testing: False # set to true to run evaluation on test data after training, requires test_dataset section
 seed: 42
-restore_from_path: null # used when starting from a .nemo checkpoint file
+restore_from_path: null # used when starting from a .nemo file
 
 trainer:
-  devices: 8 # number of GPUs or CPUs
-  num_nodes: 4
+  devices: 1 # number of GPUs or CPUs
+  num_nodes: 1
   precision: 16 # 16, 32
   accelerator: gpu # gpu, cpu
   max_epochs: null # use max_steps instead with NeMo Megatron models
@@ -26,7 +23,7 @@ trainer:
   replace_sampler_ddp: False # use NeMo Megatron samplers
 
 model:
-  name: small_aug
+  name: ${name}
   micro_batch_size: 32
   tensor_model_parallel_size: 1 # model parallelism 
 
@@ -36,15 +33,13 @@ model:
 
   data:  
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
-    dataset_files: x[000..146].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
+    dataset_files: x[000..001].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
     encoder_augment: True # always True
-    encoder_mask: False # task = aug
-    decoder_augment: True # task = aug
+    encoder_mask: True # task = mask(span)_aug
+    decoder_augment: True # task = mask(span)_aug
     decoder_mask: False # always False 
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
-    dataset_format: csv #csv or bin
-    num_enumerations: 5 # number of enumerations to perform on each smile. Only used during preprocessing for binary format
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models
