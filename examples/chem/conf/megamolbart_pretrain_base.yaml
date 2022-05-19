@@ -52,9 +52,9 @@ model:
     sched:
       name: NoamAnnealing
       d_model: ${model.hidden_size}
-      warmup_steps: 8 # use to set warmup_steps explicitly or leave as null to calculate
+      warmup_steps: 8000 # use to set warmup_steps explicitly or leave as null to calculate
       warmup_ratio: null # calculate warmup_steps from warmup_ratio * max_steps, but will throw error if max_steps * warmup_ratio < 1
-      max_steps: 1000 # can also use ${trainer.max_steps} to scale
+      max_steps: 1000000 # can also use ${trainer.max_steps} to scale
       min_lr: 1e-5
 
 exp_manager:
