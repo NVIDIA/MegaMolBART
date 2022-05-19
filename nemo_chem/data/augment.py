@@ -192,8 +192,8 @@ class MoleculeEnumeration(object):
 
     def tokenize(self, sents1, mask=False):
         # TODO this function needs cleanup
-        tokens = self.tokenizer._regex_match(sents1)
-        m_tokens, token_masks = self.tokenizer.mask_tokens(tokens, empty_mask=not mask)
+        tokens = self.tokenizer.text_to_tokens(sents1)
+        m_tokens, token_masks = self.mask_tokens(tokens, empty_mask=not mask)
 
         output = {}
         output["original_tokens"] = tokens
@@ -203,52 +203,6 @@ class MoleculeEnumeration(object):
             output["token_masks"] = token_masks
 
         return output
-
-    def _regex_match(self, smiles):
-        tokenized = []
-        for smi in smiles:
-            tokens = self.tokenizer.prog.findall(smi)
-            tokenized.append(tokens)
-
-        return tokenized
-
-    @staticmethod
-    def _get_compiled_regex(regex, extra_tokens):
-        regex_string = r"("
-        for token in extra_tokens:
-            processed_token = token
-            for special_character in "()[].|":
-                processed_token = processed_token.replace(special_character, f"\\{special_character}")
-            regex_string += processed_token + r"|"
-
-        regex_string += regex + r"|"
-        regex_string += r".)"
-        return re.compile(regex_string)
-
-    @staticmethod
-    def _concat_sentences(tokens1, tokens2, sep):
-        warnings.simplefilter('error', DeprecationWarning) # This function does not work, fail loudly
-        warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
-
-        tokens = [ts1 + [sep] + ts2 for ts1, ts2 in zip(tokens1, tokens2)]
-        sent_masks = [([1] * len(ts1)) + [1] + ([0] * len(ts2)) for ts1, ts2 in zip(tokens1, tokens2)]  # 1/True = Active, 0/False = Inactive
-        return tokens, sent_masks
-
-    def detokenize(self, tokens_list):
-        new_tokens_list = []
-        for tokens in tokens_list:
-            if tokens[0] == self.tokenizer.begin_token:
-                tokens = tokens[1:]
-
-            # Remove any tokens after the end token (and end token) if it's there 
-            if self.tokenizer.end_token in tokens:
-                end_token_idx = tokens.index(self.tokenizer.end_token)
-                tokens = tokens[:end_token_idx]
-
-            new_tokens_list.append(tokens)
-
-        strs = ["".join(tokens) for tokens in new_tokens_list]
-        return strs
     
     def mask_tokens(self, tokens, empty_mask=False):
         if empty_mask:
@@ -292,7 +246,7 @@ class MoleculeEnumeration(object):
             # If mask, sample from a poisson dist to get length of mask
             if sampled_mask[curr_token]:
                 mask_len = torch.poisson(torch.tensor(self.span_lambda)).long().item()
-                masked.append(self.mask_token)
+                masked.append(self.tokenizer.mask_token)
                 token_mask.append(True)
                 curr_token += mask_len
 
@@ -305,9 +259,10 @@ class MoleculeEnumeration(object):
         return masked, token_mask
 
     def _mask_token(self, token):
+        # FIXME: not working
         rand = random.random()
         if rand < self.show_mask_token_prob:
-            return self.mask_token
+            return self.tokenizer.mask_token
 
         elif rand < self.show_mask_token_prob + ((1 - self.show_mask_token_prob) / 2):
             token_idx = random.choice(self.chem_token_idxs)
