@@ -2,12 +2,12 @@ defaults:
   - megamolbart_pretrain_base
 
 trainer:
-  devices: 8
-  num_nodes: 8
+  devices: 1
+  num_nodes: 1
 
 model:
   name: xsmall_span_aug
   # model architecture
-  num_layers: 6
-  hidden_size: 512
-  num_attention_heads: 8
+  num_layers: 2
+  hidden_size: 256
+  num_attention_heads: 4

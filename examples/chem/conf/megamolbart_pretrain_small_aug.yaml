@@ -2,8 +2,8 @@ defaults:
   - megamolbart_pretrain_base
 
 trainer:
-  devices: 8
-  num_nodes: 8
+  devices: 4
+  num_nodes: 4
 
 data:  
   encoder_mask: False

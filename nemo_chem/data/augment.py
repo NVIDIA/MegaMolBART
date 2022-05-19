@@ -22,14 +22,12 @@ from typing import List
 import numpy as np
 import math
 
-from nemo_chem.tokenizer import MolEncTokenizer
-
+from nemo.collections.common.tokenizers.char_tokenizer import TokenizerSpec
 
 __all__ = ['MoleculeEnumeration']
 
-# FIXME: work in progress
 class MoleculeEnumeration(object):
-    def __init__(self, tokenizer: MolEncTokenizer, seq_length: int,
+    def __init__(self, tokenizer: TokenizerSpec, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
                 canonicalize_input: bool, pad_size_divisible_by_8: bool, 
