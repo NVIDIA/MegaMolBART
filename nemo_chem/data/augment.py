@@ -26,6 +26,7 @@ from nemo.collections.common.tokenizers.char_tokenizer import TokenizerSpec
 
 __all__ = ['MoleculeEnumeration']
 
+# FIXME: apply masking on ids instead of tokens
 class MoleculeEnumeration(object):
     def __init__(self, tokenizer: TokenizerSpec, seq_length: int,
                 encoder_augment: bool, encoder_mask: bool, 
@@ -105,7 +106,7 @@ class MoleculeEnumeration(object):
             dict: token output
         """
         # Tokenize with optional masking, padding is done later due to differences in encoder/decoder bos/eos tokens
-        token_output = self.tokenizer.tokenize(batch, pad=False, mask=mask_data)
+        token_output = self.tokenize(batch, mask=mask_data)
 
         if mask_data:
             tokens = token_output['masked_tokens']
@@ -125,6 +126,7 @@ class MoleculeEnumeration(object):
         return token_output
 
     def _pad_seqs(self, seqs, pad_token):
+        # TODO: switch to torch.nn.utils.rnn.pad_sequence
         pad_length = max([len(seq) for seq in seqs])
         if self.pad_size_divisible_by_8:
             pad_length = int(math.ceil(pad_length/8) * 8)
@@ -147,7 +149,7 @@ class MoleculeEnumeration(object):
         encoder_dict = self._prepare_tokens(encoder_smiles, mask_data=self.encoder_mask)
         encoder_tokens = encoder_dict['tokens'] # TODO boolean masks are never used from this function -- remove
 
-        enc_token_ids = self.tokenizer.convert_tokens_to_ids(encoder_tokens)
+        enc_token_ids = self.tokenizer.token_to_ids(encoder_tokens)
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
@@ -164,7 +166,7 @@ class MoleculeEnumeration(object):
         decoder_dict = self._prepare_tokens(decoder_smiles, mask_data=self.decoder_mask)
         decoder_tokens = decoder_dict['tokens']
 
-        dec_token_ids = self.tokenizer.convert_tokens_to_ids(decoder_tokens)
+        dec_token_ids = self.tokenizer.token_to_ids(decoder_tokens)
 
         label_ids = [sample + [self.tokenizer.eos_id] for sample in dec_token_ids] # assign label_ids before adding bos_id to decoder
         dec_token_ids = [[self.tokenizer.bos_id] + sample for sample in dec_token_ids]
@@ -188,54 +190,17 @@ class MoleculeEnumeration(object):
 
         return collate_output
 
-    def tokenize(self, sents1, sents2=None, mask=False, pad=False):
+    def tokenize(self, sents1, mask=False):
         # TODO this function needs cleanup
-        if sents2:
-            warnings.simplefilter('error', DeprecationWarning) # This functionality does not work, fail loudly
-            warnings.warn('Sentence tokenization is not currently supported in MegaMolBART and will not produce correct results', category=DeprecationWarning)
-        if pad is True:
-            warnings.simplefilter('always', DeprecationWarning)
-            warnings.warn('Padding by the tokenizer is not supported in this version of MegaMolBART and may not produce correct results', category=DeprecationWarning)
-
-        if sents2 is not None and len(sents1) != len(sents2):
-            raise ValueError("Sentence 1 batch and sentence 2 batch must have the same number of elements")
-
         tokens = self.tokenizer._regex_match(sents1)
         m_tokens, token_masks = self.tokenizer.mask_tokens(tokens, empty_mask=not mask)
 
-        sent_masks = None
-        if sents2 is not None:
-            sents2_tokens = self._regex_match(sents2)
-            sents2_m_tokens, sents2_masks = self.mask_tokens(sents2_tokens, empty_mask=not mask)
-            tokens, sent_masks = self._concat_sentences(tokens, sents2_tokens, self.tokenizer.sep_token)
-            m_tokens, _ = self._concat_sentences(m_tokens, sents2_m_tokens, self.tokenizer.sep_token)
-            token_masks, _ = self._concat_sentences(token_masks, sents2_masks, False)
-
-        # TODO this removes bos/eos addition since NeMo handles differently. 
-        # Now handled in collate function
-        # tokens = [[self.begin_token] + ts + [self.end_token] for ts in tokens] 
-        # m_tokens = [[self.begin_token] + ts + [self.end_token] for ts in m_tokens]
-        # token_masks = [[True] + ts + [True] for ts in token_masks]
-        # sent_masks = [[1] + mask + [0] for mask in sent_masks] if sent_masks is not None else None
-
         output = {}
-
-        if pad:
-            tokens, orig_pad_masks = self._pad_seqs(tokens, self.tokenizer.pad_token)
-            m_tokens, masked_pad_masks = self._pad_seqs(m_tokens, self.tokenizer.pad_token)
-            token_masks, _ = self._pad_seqs(token_masks, False)
-            sent_masks, _ = self._pad_seqs(sent_masks, False) if sent_masks is not None else (None, None)
-            output["original_pad_masks"] = orig_pad_masks
-            output["masked_pad_masks"] = masked_pad_masks
-
         output["original_tokens"] = tokens
 
         if mask:
             output["masked_tokens"] = m_tokens
             output["token_masks"] = token_masks
-
-        if sent_masks is not None:
-            output["sentence_masks"] = sent_masks
 
         return output
 
