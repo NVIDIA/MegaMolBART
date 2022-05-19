@@ -55,7 +55,6 @@ class PrepareDataset:
         if self.pad_size_divisible_by_8:
             pad_length = int(math.ceil(pad_length/8) * 8)
         padded = [np.append(seq, np.array([pad_token] * (pad_length - len(seq)))) for seq in seqs]
-        print (padded)
         masks = [([1] * len(seq)) + ([0] * (pad_length - len(seq))) for seq in seqs] # 1/True = Active, 0/False = Inactive
         return padded, masks
 
