@@ -66,9 +66,7 @@ model:
   tokenizer: 
     library: 'regex'
     type: null
-    model: null
-    vocab_file: null
-    merge_file: null
+    model: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.model
     mask_scheme: span # FIXME: move to data
     mask_prob: 0.1 # FIXME: move to data
 
