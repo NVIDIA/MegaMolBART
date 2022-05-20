@@ -152,13 +152,14 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return dataloader
 
     def _eval_step(self, tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask):
-        ret_dict = self(tokens_enc, tokens_dec, enc_mask, dec_mask, lm_labels=labels,)
+        ret_dict = self.forward(tokens_enc, tokens_dec, enc_mask, dec_mask, lm_labels=labels,)
         tokens_loss = ret_dict['tokens_loss']
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
 
     def _inference_step(self, batch, batch_idx, log_n_batches=10):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
+        print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
 
@@ -267,7 +268,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         if encoder_hidden_states is None:
             encoder_hidden_states = itemgetter("enc_output")(
-                self(
+                self.forward(
                     encoder_input_ids=tokens_enc,
                     decoder_input_ids=None,
                     encoder_attn_mask=enc_mask,
@@ -283,7 +284,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         for _ in range(num_tokens_to_generate):
             dec_mask = predicted_tokens_dec != self.tokenizer.pad_id
             token_logits = itemgetter("token_logits")(
-                self(
+                self.forward(
                     encoder_input_ids=tokens_enc,
                     decoder_input_ids=predicted_tokens_dec,
                     encoder_attn_mask=enc_mask,
