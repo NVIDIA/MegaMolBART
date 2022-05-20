@@ -158,7 +158,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return loss, ret_dict
 
     def _inference_step(self, batch, batch_idx, log_n_batches=10):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
 
@@ -213,7 +213,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             data_parallel_rank = parallel_state.get_data_parallel_rank()
             logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
 
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
 
         assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
         assert tokens_dec.max() < self.tokenizer.vocab_size, AssertionError('Decoder tokens are larger than vocabulary')
