@@ -152,7 +152,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return dataloader
 
     def _eval_step(self, tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask):
-        ret_dict = self(tokens_enc, tokens_dec, enc_mask, dec_mask, tokentype_ids=None, lm_labels=labels,)
+        ret_dict = self(tokens_enc, tokens_dec, enc_mask, dec_mask, lm_labels=labels,)
         tokens_loss = ret_dict['tokens_loss']
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
@@ -272,7 +272,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                     decoder_input_ids=None,
                     encoder_attn_mask=enc_mask,
                     decoder_attn_mask=None,
-                    tokentype_ids=None,
                     lm_labels=None,
                     enc_hidden_states=None,
                     output_enc_hidden_only=True,
@@ -289,7 +288,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                     decoder_input_ids=predicted_tokens_dec,
                     encoder_attn_mask=enc_mask,
                     decoder_attn_mask=dec_mask,
-                    tokentype_ids=None,
                     lm_labels=None,
                     enc_hidden_states=encoder_hidden_states,
                     output_enc_hidden_only=False,
