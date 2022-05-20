@@ -167,10 +167,11 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             global_batch["enc_mask"],
             global_batch["dec_mask"],
         )
-        # print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
 
+        print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
         device = next(self.parameters()).device
         [t.to(device) for t in (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)]
+        print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
 
         return (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)
         # return (
