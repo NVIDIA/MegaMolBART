@@ -75,24 +75,24 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
                 logging.warning(f'Warning: maximum learning rate for Noam Scheduler ({max_lr}) is less than minimum ({min_lr}).')
         return
 
-    def _build_tokenizer(self):
-        """
-        Tokenizer from MegaMolBART.
-        """
-        # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
-        vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
-        if not os.path.exists(vocab_path):
-            raise ValueError(f'Vocab file not found at {vocab_path}')
+    # def _build_tokenizer(self):
+    #     """
+    #     Tokenizer from MegaMolBART.
+    #     """
+    #     # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
+    #     vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
+    #     if not os.path.exists(vocab_path):
+    #         raise ValueError(f'Vocab file not found at {vocab_path}')
 
-        # self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
-        # TODO: use tokenizer config to define toenizer
-        model_path = os.path.splitext(vocab_path)[0]+".model"
-        self.tokenizer = get_nmt_tokenizer(
-            library='regex',
-            # include model files inside .nemo file
-            tokenizer_model=self.register_artifact("tokenizer_model", model_path),
-            vocab_file=self.register_artifact("vocab_file", vocab_path),
-        )
+    #     # self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
+    #     # TODO: use tokenizer config to define toenizer
+    #     model_path = os.path.splitext(vocab_path)[0]+".model"
+    #     self.tokenizer = get_nmt_tokenizer(
+    #         library='regex',
+    #         # include model files inside .nemo file
+    #         tokenizer_model=self.register_artifact("tokenizer_model", model_path),
+    #         vocab_file=self.register_artifact("vocab_file", vocab_path),
+    #     )
 
     def build_train_valid_test_datasets(self):
         logging.info('Building MegaMolBART datasets.')
