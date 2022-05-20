@@ -157,9 +157,34 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         loss = self.loss_func(loss_mask, tokens_loss)
         return loss, ret_dict
 
+    def process_global_batch(self, global_batch):
+        # FIXME: move to device correctly
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask =  (
+            global_batch["text_enc"],
+            global_batch["text_dec"],
+            global_batch["loss_mask"],
+            global_batch["labels"],
+            global_batch["enc_mask"],
+            global_batch["dec_mask"],
+        )
+        # print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
+
+        device = next(self.parameters()).device
+        [t.to(device) for t in (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)]
+
+        return (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)
+        # return (
+        #     global_batch["text_enc"],
+        #     global_batch["text_dec"],
+        #     global_batch["loss_mask"],
+        #     global_batch["labels"],
+        #     global_batch["enc_mask"],
+        #     global_batch["dec_mask"],
+        # )
+
+
     def _inference_step(self, batch, batch_idx, log_n_batches=10):
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
-        print(f"tokens_enc = {tokens_enc.device} tokens_dec = {tokens_dec.device} loss_mask = {loss_mask.device} labels = {labels.device} enc_mask = {enc_mask.device} dec_mask = {dec_mask.device}")
         loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
                                          labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
 
