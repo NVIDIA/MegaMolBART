@@ -32,6 +32,7 @@ class MoleculeEnumeration(object):
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
                 canonicalize_input: bool, pad_size_divisible_by_8: bool, 
+                mask_scheme: str, mask_prob: float,
                 **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length
@@ -41,6 +42,8 @@ class MoleculeEnumeration(object):
         self.decoder_mask = decoder_mask
         self.canonicalize_input = canonicalize_input
         self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
+        self.mask_scheme = mask_scheme
+        self.mask_prob = mask_prob
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
     def _smiles_augmeter_func(self, smiles: str, augment_data: bool, canonicalize_input: bool):
