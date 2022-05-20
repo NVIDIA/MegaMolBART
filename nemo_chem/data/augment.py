@@ -154,7 +154,7 @@ class MoleculeEnumeration(object):
         encoder_dict = self._prepare_tokens(encoder_smiles, mask_data=self.encoder_mask)
         encoder_tokens = encoder_dict['tokens'] # TODO boolean masks are never used from this function -- remove
 
-        enc_token_ids = self.tokenizer.token_to_ids(encoder_tokens)
+        enc_token_ids = [self.tokenizer.token_to_ids(t) for t in encoder_tokens]
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
         
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
@@ -171,7 +171,7 @@ class MoleculeEnumeration(object):
         decoder_dict = self._prepare_tokens(decoder_smiles, mask_data=self.decoder_mask)
         decoder_tokens = decoder_dict['tokens']
 
-        dec_token_ids = self.tokenizer.token_to_ids(decoder_tokens)
+        dec_token_ids = [self.tokenizer.token_to_ids(t) for t in decoder_tokens]
 
         label_ids = [sample + [self.tokenizer.eos_id] for sample in dec_token_ids] # assign label_ids before adding bos_id to decoder
         dec_token_ids = [[self.tokenizer.bos_id] + sample for sample in dec_token_ids]
