@@ -45,6 +45,7 @@ class MoleculeEnumeration(object):
         self.pad_size_divisible_by_8 = pad_size_divisible_by_8 # workaround for CUDA alignment bug
         self.mask_scheme = mask_scheme
         self.mask_prob = mask_prob
+        self.span_lambda = span_lambda
         # self.aug = CanonicalSMILESAugmenter().randomize_mol_restricted
 
     def _smiles_augmeter_func(self, smiles: str, augment_data: bool, canonicalize_input: bool):
