@@ -33,7 +33,7 @@ class MoleculeEnumeration(object):
                 encoder_augment: bool, encoder_mask: bool, 
                 decoder_augment: bool, decoder_mask: bool, 
                 canonicalize_input: bool, pad_size_divisible_by_8: bool, 
-                mask_scheme: str, mask_prob: float,
+                mask_scheme: str, mask_prob: float, span_lambda: float,
                 **kwargs):
         self.tokenizer = tokenizer
         self.seq_length = seq_length

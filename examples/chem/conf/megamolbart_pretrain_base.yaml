@@ -79,6 +79,7 @@ model:
     decoder_mask: False # always False 
     mask_scheme: span 
     mask_prob: 0.1 
+    span_lambda: 3.0
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
 
