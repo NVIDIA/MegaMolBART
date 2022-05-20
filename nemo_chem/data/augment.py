@@ -192,6 +192,7 @@ class MoleculeEnumeration(object):
 
     def tokenize(self, sents1, mask=False):
         # TODO this function needs cleanup
+        print(f"type = {type(sents1)} sents1 = {sents1}")
         tokens = self.tokenizer.text_to_tokens(sents1)
         m_tokens, token_masks = self.mask_tokens(tokens, empty_mask=not mask)
 
