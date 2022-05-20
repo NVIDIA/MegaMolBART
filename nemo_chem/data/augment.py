@@ -21,6 +21,7 @@ from pysmilesutils.augment import SMILESAugmenter
 from typing import List
 import numpy as np
 import math
+import random
 
 from nemo.collections.common.tokenizers.char_tokenizer import TokenizerSpec
 
