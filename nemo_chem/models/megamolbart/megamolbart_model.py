@@ -159,6 +159,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def process_global_batch(self, global_batch):
         # FIXME: move to device correctly
+        # FIXME: move to precission correctly (fails with 16)
         tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask =  (
             global_batch["text_enc"],
             global_batch["text_dec"],

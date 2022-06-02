@@ -236,21 +236,24 @@ push() {
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
     docker push ${IMG_NAME[0]}:latest
     docker push ${IMG_NAME[0]}:${VERSION}
+    docker push ${IMG_NAME[0]}:${GITHUB_BRANCH}
     exit
 }
 
 
 pull() {
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker pull ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
+    docker pull ${IMG_NAME[0]}:${GITHUB_BRANCH}
     exit
 }
 
 
 dev() {
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
     set -x
     DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev ${@:1}" 
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
+    ${DOCKER_CMD} -it ${IMG_NAME[0]}:${GITHUB_BRANCH} bash
     exit
 }
 
@@ -265,13 +268,15 @@ attach() {
 
 
 root() {
-    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+    ${DOCKER_CMD} -it --user root ${IMG_NAME[0]}:${GITHUB_BRANCH} bash
     exit
 }
 
 
 jupyter() {
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} jupyter-lab --no-browser \
+    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+    ${DOCKER_CMD} -it ${IMG_NAME[0]}:${GITHUB_BRANCH} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
