@@ -35,6 +35,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 # TODO: update to nemo 1.10
 # RUN pip install --upgrade numpy wandb nemo_toolkit[all]==1.7.2
 RUN pip install --upgrade numpy wandb
+RUN pip install --upgrade einops
 COPY conda/env.yml /tmp/env.yml
 RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
 

@@ -270,23 +270,23 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting validation epoch')
-        return self._inference_step(batch, batch_idx, log_n_batches=10)
+    # def validation_step(self, batch, batch_idx):
+    #     if batch_idx == 0:
+    #         logging.info('Starting validation epoch')
+    #     return self._inference_step(batch, batch_idx, log_n_batches=10)
 
-    def test_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting test epoch')
-        return self._inference_step(batch, batch_idx, log_n_batches=10)
+    # def test_step(self, batch, batch_idx):
+    #     if batch_idx == 0:
+    #         logging.info('Starting test epoch')
+    #     return self._inference_step(batch, batch_idx, log_n_batches=10)
 
-    def validation_epoch_end(self, outputs):
-        logging.info('Finishing validation epoch')
-        self._inference_epoch_end(outputs, mode='val')
+    # def validation_epoch_end(self, outputs):
+    #     logging.info('Finishing validation epoch')
+    #     self._inference_epoch_end(outputs, mode='val')
 
-    def test_epoch_end(self, outputs):
-        logging.info('Finishing test epoch')
-        self._inference_epoch_end(outputs, mode='test')
+    # def test_epoch_end(self, outputs):
+    #     logging.info('Finishing test epoch')
+    #     self._inference_epoch_end(outputs, mode='test')
 
     def decode(self, tokens_enc, enc_mask, num_tokens_to_generate=None, encoder_hidden_states=None):
         # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited
