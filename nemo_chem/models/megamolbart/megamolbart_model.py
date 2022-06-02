@@ -230,45 +230,45 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         self.log_dict(logged_results, prog_bar=True)
 
-    def training_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting training loop')
+    # def training_step(self, batch, batch_idx):
+    #     if batch_idx == 0:
+    #         logging.info('Starting training loop')
 
-        # Log a few samples to check data parallel distribution
-        if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
-            target_smiles = batch['target_smiles']
-            data_parallel_world_size = parallel_state.get_data_parallel_world_size()
-            data_parallel_rank = parallel_state.get_data_parallel_rank()
-            logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
+    #     # Log a few samples to check data parallel distribution
+    #     if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
+    #         target_smiles = batch['target_smiles']
+    #         data_parallel_world_size = parallel_state.get_data_parallel_world_size()
+    #         data_parallel_rank = parallel_state.get_data_parallel_rank()
+    #         logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
 
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
+    #     tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
 
-        assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
-        assert tokens_dec.max() < self.tokenizer.vocab_size, AssertionError('Decoder tokens are larger than vocabulary')
-        assert labels.max() < self.tokenizer.vocab_size, AssertionError('Label tokens are larger than vocabulary')
+    #     assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
+    #     assert tokens_dec.max() < self.tokenizer.vocab_size, AssertionError('Decoder tokens are larger than vocabulary')
+    #     assert labels.max() < self.tokenizer.vocab_size, AssertionError('Label tokens are larger than vocabulary')
 
-        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
-                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+    #     loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
+    #                                      labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
         
-        # cache reduced loss while accumulating gradients
-        reduced_loss = average_losses_across_data_parallel_group([loss])
-        self._reduced_loss_buffer.append(reduced_loss[0])
+    #     # cache reduced loss while accumulating gradients
+    #     reduced_loss = average_losses_across_data_parallel_group([loss])
+    #     self._reduced_loss_buffer.append(reduced_loss[0])
 
-        if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-            # Reduced loss for logging.
-            average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-            lr = self._optimizer.param_groups[0]['lr']
-            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
+    #     if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
+    #         # Reduced loss for logging.
+    #         average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
+    #         lr = self._optimizer.param_groups[0]['lr']
+    #         consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
 
-            logs = {'global_step': self.trainer.global_step,
-                    'reduced_loss': average_reduced_loss,
-                    'lr': lr,
-                    'consumed_samples': consumed_samples}
+    #         logs = {'global_step': self.trainer.global_step,
+    #                 'reduced_loss': average_reduced_loss,
+    #                 'lr': lr,
+    #                 'consumed_samples': consumed_samples}
 
-            self.log_dict(logs)
-            self._reduced_loss_buffer = []
+    #         self.log_dict(logs)
+    #         self._reduced_loss_buffer = []
 
-        return loss
+    #     return loss
 
     # def validation_step(self, batch, batch_idx):
     #     if batch_idx == 0:
