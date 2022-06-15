@@ -24,10 +24,10 @@ trainer:
 
 model:
   name: ${name}
-  # model parallelism 
+  # model parallelism
   global_batch_size: 32
   micro_batch_size: 32
-  tensor_model_parallel_size: 1 # model parallelism 
+  tensor_model_parallel_size: 1 # model parallelism
   pipeline_model_parallel_size: 1
   resume_from_checkpoint: null # manually set the checkpoint file to load from
   pipeline_model_parallel_split_rank: 0 # rank at which decoder starts.
@@ -63,25 +63,26 @@ model:
   activation: 'gelu' # Options ['gelu', 'geglu', 'swiglu', 'reglu']
   headscale: False # Whether to learn extra parameters that scale the output of the each self-attention head.
 
-  tokenizer: 
+  tokenizer:
     library: 'regex'
     type: null
     model: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.model
     vocab_file: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.vocab
     merge_file: null
 
-  data:  
+  data:
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
     dataset_files: x[000..001].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: True # task = mask(span)_aug
-    decoder_mask: False # always False 
-    mask_scheme: span 
-    mask_prob: 0.1 
+    decoder_mask: False # always False
+    mask_scheme: span
+    mask_prob: 0.1
     span_lambda: 3.0
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
+    num_enumerations: 5
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models
@@ -113,8 +114,9 @@ exp_manager:
     save_last: True # always save last checkpoint
     always_save_nemo: True # not implemented for model parallel, additionally save NeMo-style checkpoint during validation, set to False if checkpoint saving is time consuming
     filename: '${name}-${model.name}--{val_molecular_accuracy:.2f}-{val_reduced_loss:.2f}-{step}-{consumed_samples}'
+    # filename: '${name}-${model.name}--{val_reduced_loss:.2f}-{step}-{consumed_samples}'
     model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}
-  
+
   # logging
   exp_dir: /result/nemo_experiments/${.name}/${.wandb_logger_kwargs.name}
   explicit_log_dir: ${.exp_dir}

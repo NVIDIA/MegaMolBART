@@ -113,7 +113,7 @@ def main(cfg) -> None:
         logging.info("************** Starting Data PreProcessing ***********")
         preprocess = Preprocess()
         preprocess.prepare_dataset(links_file='conf/dataset/ZINC-downloader-test.txt',
-                                 output_dir=cfg.model.data.dataset_path)
+                                   output_dir=cfg.model.data.dataset_path)
         if cfg.model.data.dataset_format == "bin":
             out_dir = os.path.join(cfg.model.data.dataset_path, "bin")
             csvtobin = CsvToBinary(input_dir=cfg.model.data.dataset_path,
