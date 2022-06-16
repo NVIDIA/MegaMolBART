@@ -120,9 +120,9 @@ fi
 if [ $write_env -eq 1 ]; then
     echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
     echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
-    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
     echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
+    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
     echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
     echo REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN} >> $LOCAL_ENV
@@ -163,7 +163,6 @@ else
 fi
 
 DOCKER_CMD="docker run \
-    --rm \
     --network host \
     -v /etc/passwd:/etc/passwd:ro \
     -v /etc/group:/etc/group:ro \
@@ -172,10 +171,12 @@ DOCKER_CMD="docker run \
     -p ${JUPYTER_PORT}:8888 \
     -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
+    -v ${RESULT_PATH}:${RESULT_MOUNT_PATH}
     --shm-size=1g \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     -e HOME=${PROJECT_MOUNT_PATH} \
+    -e NUMBA_CACHE_DIR=/tmp/ \
     -w ${PROJECT_MOUNT_PATH} \
     -u $(id -u):$(id -u)"
 
@@ -249,11 +250,36 @@ pull() {
 }
 
 
+setup() {
+    mkdir -p ${DATA_PATH}
+    mkdir -p ${RESULT_PATH}
+
+    DEV_PYTHONPATH="/workspace/nemo_chem"
+
+    if [ ! -z "${NEMO_PATH}" ];
+    then
+        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/NeMo "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/NeMo"
+    fi
+
+    DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=${DEV_PYTHONPATH}"
+    DOCKER_CMD="${DOCKER_CMD} --env WANDB_API_KEY=$WANDB_API_KEY"
+}
+
 dev() {
-    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+    setup
     set -x
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev ${@:1}" 
-    ${DOCKER_CMD} -it ${IMG_NAME[0]}:${GITHUB_BRANCH} bash
+    ${DOCKER_CMD} --rm -it --name nemo_megamolbart ${@:1} ${MEGAMOLBART_CONT} bash
+    set +x
+    exit
+}
+
+
+run() {
+    setup
+    set -x
+    ${DOCKER_CMD} -d ${MEGAMOLBART_CONT} ${@:1}
+    set +x
     exit
 }
 
@@ -296,6 +322,9 @@ case $1 in
     pull)
         ;&
     dev)
+        $@
+        ;;
+    run)
         $@
         ;;
     attach)

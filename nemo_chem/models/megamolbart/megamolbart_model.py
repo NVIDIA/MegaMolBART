@@ -263,9 +263,16 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         return logs
 
     def validation_epoch_end(self, outputs):
+        if len(outputs) == 0:
+            return
+
         logging.info('Finishing validation epoch')
         all_keys = list(outputs[0].keys())
-        new_outputs = {k: super().validation_epoch_end([o[k] for o in outputs]) for k in all_keys}
+        new_outputs = {}
+        for k in all_keys:
+            new_outputs[k] = super().validation_epoch_end([o[k] for o in outputs])
+
+        # new_outputs = {k: super().validation_epoch_end([o[k] for o in outputs]) for k in all_keys}
         # super().validation_epoch_end(outputs)
         self._inference_epoch_end(outputs, mode='val')
 

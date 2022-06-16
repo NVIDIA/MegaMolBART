@@ -4,7 +4,7 @@
 ####
 
 ### CONFIG ###
-MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
+MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FORMAT='csv' # "csv" or "bin"
 DATA_MOUNT=/data/zinc_csv
 DATA_FILES_SELECTED=x000.csv
@@ -47,7 +47,7 @@ execute() {
         --config-name=${MEGAMOLBART_CONFIG_FILE} \
         do_training=${DO_TRAINING} \
         exp_manager.exp_dir=${RESULTS_MOUNT} \
-        exp_manager.wandb_logger_kwargs.offline="True" \
+        exp_manager.wandb_logger_kwargs.offline="False" \
         model.data.dataset_path=${DATA_MOUNT} \
         +model.data.dataset_format=${DATA_FORMAT} \
         model.data.dataset_files=${DATA_FILES_SELECTED}
