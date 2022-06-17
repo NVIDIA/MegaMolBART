@@ -154,14 +154,6 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-if [ ${GITHUB_BRANCH} == '__dev__' ]; then
-    echo "Using dev mode -- latest commit of local repo will be used."
-    GITHUB_SHA=$(git rev-parse HEAD | head -c7)
-    GITHUB_BRANCH=${GITHUB_SHA}
-else
-    GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
-fi
-
 DOCKER_CMD="docker run \
     --network host \
     -v /etc/passwd:/etc/passwd:ro \
@@ -181,30 +173,26 @@ DOCKER_CMD="docker run \
     -u $(id -u):$(id -u)"
 
 
-build() {
-    VERSION=${GITHUB_SHA}
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --version)
-                VERSION="$2"
-                shift
-                shift
-                ;;
-            *)
-                echo "Unknown option $1. Please --version to specify a version."
-                exit 1
-                ;;
-        esac
-    done
+function version {
+    if [ ${GITHUB_BRANCH} == '__dev__' ]; then
+        echo "Using dev mode -- latest commit of local repo will be used."
+        GITHUB_SHA=$(git rev-parse HEAD | head -c7)
+        GITHUB_BRANCH=${GITHUB_SHA}
+    else
+        GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
+    fi
 
+    echo "${GITHUB_SHA}";
+}
+
+
+build() {
     set -e
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
 
     echo "Building MegaMolBART training container..."
     docker build --network host \
-        -t ${IMG_NAME[0]}:${GITHUB_BRANCH} \
-        -t ${IMG_NAME[0]}:${IMG_NAME[1]} \
-        -t ${IMG_NAME[0]}:${VERSION} \
+        -t ${MEGAMOLBART_CONT} \
         -t ${IMG_NAME[0]}:latest \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
@@ -218,10 +206,10 @@ build() {
 
 
 push() {
-    VERSION=${GITHUB_SHA}
+    VERSION=$(version)
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --version)
+            -v|--version)
                 VERSION="$2"
                 shift
                 shift
@@ -234,18 +222,14 @@ push() {
     done
 
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+
+    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${VERSION}
+    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${GITHUB_BRANCH}
+
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
     docker push ${IMG_NAME[0]}:latest
     docker push ${IMG_NAME[0]}:${VERSION}
     docker push ${IMG_NAME[0]}:${GITHUB_BRANCH}
-    exit
-}
-
-
-pull() {
-    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
-    docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker pull ${IMG_NAME[0]}:${GITHUB_BRANCH}
     exit
 }
 
@@ -265,6 +249,7 @@ setup() {
     DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=${DEV_PYTHONPATH}"
     DOCKER_CMD="${DOCKER_CMD} --env WANDB_API_KEY=$WANDB_API_KEY"
 }
+
 
 dev() {
     setup
@@ -293,16 +278,8 @@ attach() {
 }
 
 
-root() {
-    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
-    ${DOCKER_CMD} -it --user root ${IMG_NAME[0]}:${GITHUB_BRANCH} bash
-    exit
-}
-
-
 jupyter() {
-    local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
-    ${DOCKER_CMD} -it ${IMG_NAME[0]}:${GITHUB_BRANCH} jupyter-lab --no-browser \
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
@@ -312,6 +289,7 @@ jupyter() {
         --NotebookApp.password_required=False
 }
 
+
 case $1 in
     build)
         $@
@@ -319,8 +297,6 @@ case $1 in
     push)
         $@
         ;;
-    pull)
-        ;&
     dev)
         $@
         ;;
@@ -330,8 +306,6 @@ case $1 in
     attach)
         $@
         ;;
-    root)
-        ;&
     jupyter)
         $1
         ;;

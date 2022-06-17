@@ -13,37 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from operator import itemgetter
 from omegaconf.dictconfig import DictConfig
-from omegaconf import open_dict
 from rdkit import Chem
-from collections import defaultdict
-from packaging import version
-import numpy as np
 
 import torch
-import torch.nn as nn
 from pytorch_lightning.trainer.trainer import Trainer
 
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
-import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
-from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
 from nemo_chem.utils import flatten_dict
 from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets, PrepareDataset
-from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
-try:
-    from apex.transformer import tensor_parallel, parallel_state
-
-    HAVE_APEX = True
-except (ImportError, ModuleNotFoundError):
-    HAVE_APEX = False
 
 # Disable logging of invalid SMILES moloecules
 from rdkit import RDLogger
@@ -74,25 +58,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             if max_lr <= min_lr:
                 logging.warning(f'Warning: maximum learning rate for Noam Scheduler ({max_lr}) is less than minimum ({min_lr}).')
         return
-
-    # def _build_tokenizer(self):
-    #     """
-    #     Tokenizer from MegaMolBART.
-    #     """
-    #     # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
-    #     vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
-    #     if not os.path.exists(vocab_path):
-    #         raise ValueError(f'Vocab file not found at {vocab_path}')
-
-    #     # self.tokenizer = MolEncTokenizer.from_vocab_file(vocab_path=vocab_path, **self._tokenizer_config)
-    #     # TODO: use tokenizer config to define toenizer
-    #     model_path = os.path.splitext(vocab_path)[0]+".model"
-    #     self.tokenizer = get_nmt_tokenizer(
-    #         library='regex',
-    #         # include model files inside .nemo file
-    #         tokenizer_model=self.register_artifact("tokenizer_model", model_path),
-    #         vocab_file=self.register_artifact("vocab_file", vocab_path),
-    #     )
 
     def build_train_valid_test_datasets(self):
         logging.info('Building MegaMolBART datasets.')
@@ -194,46 +159,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         self.log_dict(logged_results, prog_bar=True)
 
-    # def training_step(self, batch, batch_idx):
-    #     if batch_idx == 0:
-    #         logging.info('Starting training loop')
-
-    #     # Log a few samples to check data parallel distribution
-    #     if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
-    #         target_smiles = batch['target_smiles']
-    #         data_parallel_world_size = parallel_state.get_data_parallel_world_size()
-    #         data_parallel_rank = parallel_state.get_data_parallel_rank()
-    #         logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
-
-    #     tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_global_batch(batch)
-
-    #     assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
-    #     assert tokens_dec.max() < self.tokenizer.vocab_size, AssertionError('Decoder tokens are larger than vocabulary')
-    #     assert labels.max() < self.tokenizer.vocab_size, AssertionError('Label tokens are larger than vocabulary')
-
-    #     loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask,
-    #                                      labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
-
-    #     # cache reduced loss while accumulating gradients
-    #     reduced_loss = average_losses_across_data_parallel_group([loss])
-    #     self._reduced_loss_buffer.append(reduced_loss[0])
-
-    #     if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-    #         # Reduced loss for logging.
-    #         average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-    #         lr = self._optimizer.param_groups[0]['lr']
-    #         consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
-
-    #         logs = {'global_step': self.trainer.global_step,
-    #                 'reduced_loss': average_reduced_loss,
-    #                 'lr': lr,
-    #                 'consumed_samples': consumed_samples}
-
-    #         self.log_dict(logs)
-    #         self._reduced_loss_buffer = []
-
-    #     return loss
-
     def validation_step(self, batch, batch_idx):
         loss_mean = super().validation_step(batch, batch_idx)
         token_logits = self.validation_step_logits(batch, batch_idx)
@@ -272,52 +197,12 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         for k in all_keys:
             new_outputs[k] = super().validation_epoch_end([o[k] for o in outputs])
 
-        # new_outputs = {k: super().validation_epoch_end([o[k] for o in outputs]) for k in all_keys}
-        # super().validation_epoch_end(outputs)
         self._inference_epoch_end(outputs, mode='val')
 
     def test_epoch_end(self, outputs):
         logging.info('Finishing test epoch')
         super().test_epoch_end(outputs)
         self._inference_epoch_end(outputs, mode='test')
-
-    # def decode(self, tokens_enc, enc_mask, num_tokens_to_generate=None, encoder_hidden_states=None):
-    #     # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited
-    #     if num_tokens_to_generate is None:
-    #         num_tokens_to_generate=self._cfg.max_position_embeddings
-
-    #     if encoder_hidden_states is None:
-    #         encoder_hidden_states = self.forward(
-    #                 encoder_input_ids=tokens_enc,
-    #                 decoder_input_ids=None,
-    #                 encoder_attn_mask=enc_mask,
-    #                 decoder_attn_mask=None,
-    #                 lm_labels=None,
-    #                 output_enc_hidden_only=True,
-    #             )
-
-    #     predicted_tokens_dec = (
-    #         torch.LongTensor([self.tokenizer.bos_id] * enc_mask.size(0)).unsqueeze(1).to(enc_mask.device)
-    #     )
-    #     for _ in range(num_tokens_to_generate):
-    #         dec_mask = predicted_tokens_dec != self.tokenizer.pad_id
-    #         token_logits = itemgetter("token_logits")(
-    #             self.forward(
-    #                 encoder_input_ids=tokens_enc,
-    #                 decoder_input_ids=predicted_tokens_dec,
-    #                 encoder_attn_mask=enc_mask,
-    #                 decoder_attn_mask=dec_mask,
-    #                 lm_labels=None,
-    #                 enc_hidden_states=encoder_hidden_states,
-    #                 output_enc_hidden_only=False,
-    #             )
-    #         )
-    #         token_logits = tensor_parallel.gather_from_tensor_model_parallel_region(token_logits)
-    #         token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-    #         log_probs, token_ids = torch.max(nn.functional.log_softmax(token_logits, dim=-1), dim=-1)
-    #         predicted_tokens_dec = torch.cat([predicted_tokens_dec, token_ids[:, -1].unsqueeze(1)], 1)
-
-    #     return predicted_tokens_dec, log_probs
 
     def sample_molecules(self, tokens_enc, enc_mask):
         """Autoregressively sample SMILES molecules from encoder hidden state
@@ -347,6 +232,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         predicted_tokens_text = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
         sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_text)
+
+        # TODO: WAR for decoding error. Remove it once it is fixed.
+        if sampled_smiles[0][0] == '^':
+            sampled_smiles = [x[1:] for x in sampled_smiles]
 
         self.unfreeze()
         return sampled_smiles
