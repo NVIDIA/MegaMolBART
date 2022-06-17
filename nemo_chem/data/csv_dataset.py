@@ -33,13 +33,18 @@ try:
 except (ImportError, ModuleNotFoundError):
     HAVE_APEX = False
 
-__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset']
+__all__ = ['MoleculeCsvDatasetConfig', 'MoleculeCsvDataset', 'DatasetFileConfig']
+
+@dataclass
+class DatasetFileConfig():
+    train: str = None
+    test: str = None
+    val: str = None
 
 @dataclass
 class MoleculeCsvDatasetConfig():
     dataset_path: str = ''
-    dataset_files: str = 'data.csv'
-    dataset_type: str = 'zinc_csv'
+    dataset: DatasetFileConfig = None
     newline_int: int = 10
     header_lines: int = 1
     skip_lines: int = 0
@@ -80,7 +85,7 @@ class MoleculeCsvDataset(Dataset):
         self._workers = workers
 
         self.mdata_midx_size_list = None
-        
+
         # load all files into memmap
         is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
         # is_global_rank_0 = (not is_distributed) or (is_distributed and torch.distributed.get_rank() == 0)
@@ -88,7 +93,6 @@ class MoleculeCsvDataset(Dataset):
         is_global_rank_0 = sum([0 if r is None else r for r in rank_indexes]) == 0
 
         if is_global_rank_0:
-            
             data_parallel_rank, tensor_parallel_rank, pipeline_parallel_rank, virtual_pipeline_parallel_rank = rank_indexes
             logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}, virtual_pipeline_parallel_rank {virtual_pipeline_parallel_rank} ')
             start_time = time.time()

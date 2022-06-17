@@ -7,7 +7,7 @@
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FORMAT='csv' # "csv" or "bin"
 DATA_MOUNT=/data/zinc_csv
-DATA_FILES_SELECTED=x000.csv
+DATA_FILES_SELECTED="x[000..100].csv"
 CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
@@ -50,7 +50,7 @@ execute() {
         exp_manager.wandb_logger_kwargs.offline="False" \
         model.data.dataset_path=${DATA_MOUNT} \
         +model.data.dataset_format=${DATA_FORMAT} \
-        model.data.dataset_files=${DATA_FILES_SELECTED}
+        model.data.dataset.train=${DATA_FILES_SELECTED}
     set +x
 }
 

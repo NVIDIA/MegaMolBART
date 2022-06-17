@@ -233,10 +233,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         predicted_tokens_text = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
         sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_text)
 
-        # TODO: WAR for decoding error. Remove it once it is fixed.
-        if sampled_smiles[0][0] == '^':
-            sampled_smiles = [x[1:] for x in sampled_smiles]
-
         self.unfreeze()
         return sampled_smiles
 

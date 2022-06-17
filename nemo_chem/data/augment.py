@@ -30,9 +30,9 @@ __all__ = ['MoleculeEnumeration']
 # FIXME: apply masking on ids instead of tokens
 class MoleculeEnumeration(object):
     def __init__(self, tokenizer: TokenizerSpec, seq_length: int,
-                encoder_augment: bool, encoder_mask: bool, 
-                decoder_augment: bool, decoder_mask: bool, 
-                canonicalize_input: bool, pad_size_divisible_by_8: bool, 
+                encoder_augment: bool, encoder_mask: bool,
+                decoder_augment: bool, decoder_mask: bool,
+                canonicalize_input: bool, pad_size_divisible_by_8: bool,
                 mask_scheme: str, mask_prob: float, span_lambda: float,
                 **kwargs):
         self.tokenizer = tokenizer
@@ -65,8 +65,8 @@ class MoleculeEnumeration(object):
             np.random.shuffle(atom_order)
             aug_mol = Chem.RenumberAtoms(mol, atom_order) # TODO how to use PySMILESutils for this
 
-            # There is a very rare possibility that RDKit will not be able to generate 
-            # the SMILES for the augmented mol. In this case we just use the canonical 
+            # There is a very rare possibility that RDKit will not be able to generate
+            # the SMILES for the augmented mol. In this case we just use the canonical
             # mol to generate the SMILES
             try:
                 aug_smiles = Chem.MolToSmiles(aug_mol, canonical=False)
@@ -141,12 +141,12 @@ class MoleculeEnumeration(object):
         return padded, masks
 
     def collate_fn(self, batch: List[str], label_pad: int = -1):
-        """Collate function for NeMo MegaMolBART. Format of data has been altered for NeMo per 'NB' comments. 
+        """Collate function for NeMo MegaMolBART. Format of data has been altered for NeMo per 'NB' comments.
         This code should be cleaned up and validated once new tokenizer from NeMo is incorporated."""
 
-        # Dimensions required by NeMo: [batch, sequence + padding] 
+        # Dimensions required by NeMo: [batch, sequence + padding]
         # Encoder
-        encoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.encoder_augment, canonicalize_input=self.canonicalize_input) 
+        encoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.encoder_augment, canonicalize_input=self.canonicalize_input)
                                for smiles in batch]
         encoder_smiles = [x[0] for x in encoder_smiles_list]
         canon_targets = [x[1] for x in encoder_smiles_list]
@@ -156,13 +156,13 @@ class MoleculeEnumeration(object):
 
         enc_token_ids = [self.tokenizer.token_to_ids(t) for t in encoder_tokens]
         enc_token_ids, encoder_mask = self._pad_seqs(enc_token_ids, self.tokenizer.pad_id)
-        
+
         enc_token_ids = torch.tensor(enc_token_ids, dtype=torch.int64)
         encoder_mask = torch.tensor(encoder_mask, dtype=torch.int64)
 
         # Decoder
         if self.decoder_augment:
-            decoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.decoder_augment, canonicalize_input=False) 
+            decoder_smiles_list = [self._smiles_augmeter_func(smiles, augment_data=self.decoder_augment, canonicalize_input=False)
                                    for smiles in encoder_smiles]
             decoder_smiles = [x[0] for x in decoder_smiles_list]
         else:
@@ -179,17 +179,17 @@ class MoleculeEnumeration(object):
 
         dec_token_ids = torch.tensor(dec_token_ids, dtype=torch.int64)
         decoder_mask = torch.tensor(decoder_mask, dtype=torch.int64)
-        
+
         label_token_ids, loss_mask = self._pad_seqs(label_ids, self.tokenizer.pad_id)
         label_token_ids = torch.tensor(label_token_ids, dtype=torch.int64)
         loss_mask = torch.tensor(loss_mask, dtype=torch.int64)
         label_token_ids[~loss_mask.to(torch.bool)] = label_pad
-        
+
         collate_output = {'text_enc': enc_token_ids,
                           'enc_mask': encoder_mask,
                           'text_dec': dec_token_ids,
                           'dec_mask': decoder_mask,
-                          'labels': label_token_ids, 
+                          'labels': label_token_ids,
                           'loss_mask': loss_mask,
                           'target_smiles': canon_targets} # smiles strings
 
@@ -208,7 +208,7 @@ class MoleculeEnumeration(object):
             output["token_masks"] = token_masks
 
         return output
-    
+
     def mask_tokens(self, tokens, empty_mask=False):
         if empty_mask:
             mask = [[True] * len(ts) for ts in tokens]
@@ -275,4 +275,3 @@ class MoleculeEnumeration(object):
 
         else:
             return token
-    

@@ -1,6 +1,6 @@
 # MegaMolBART
 
-MegaMolBART is a NeMo collection for large scale deep learning in cheminformatics with Megatron. [NeMo](https://github.com/NVIDIA/NeMo) is NVIDIA's toolkit for deep learning experimentation. 
+MegaMolBART is a NeMo collection for large scale deep learning in cheminformatics with Megatron. [NeMo](https://github.com/NVIDIA/NeMo) is NVIDIA's toolkit for deep learning experimentation.
 
 ## Quick Start
 
@@ -45,19 +45,19 @@ Each of these master parameter files depends on a heirarchy of dependent yaml fi
 
 ## Edit SLURM / computer execution script
 
-The bash scripts found in `examples/chem/slurm` are configurable for the location of system directories for data, results, and (optionally) development code. These files are also used to configure the size of the training run (number of nodes and gpus). Note that MegaMolBART currently supports on data parallel training. 
+The bash scripts found in `examples/chem/slurm` are configurable for the location of system directories for data, results, and (optionally) development code. These files are also used to configure the size of the training run (number of nodes and gpus). Note that MegaMolBART currently supports on data parallel training.
 
 For SLURM, once a working bash script has been created, consecutive training runs can be queued with the `auto_launcher.sh` script: `./auto_launcher.sh -n 5 megamolbart_pretrain_slurm.sh`.
 
 ## Conversion from CSV to NeMo format Binary Data
 ### In Beta phase! Use at your own risk
 ### Data Preprocessing
-We support conversion of csv data to NeMo format binary data. The megamolbart_pretrain.py script can be used to preprocess the data into binary. 
+We support conversion of csv data to NeMo format binary data. The megamolbart_pretrain.py script can be used to preprocess the data into binary.
 Copy paste below fields into the *data* field of your config.
 """
 model:
   data:
-    dataset_format: bin 
+    dataset_format: bin
     num_enumerations: 5 #You can change this number of how many every enumerations you want on every SMILE string.
 """
 ### Training
@@ -66,9 +66,12 @@ For training, make the following changes in teh *data* field of your config
 model:
   data:
     dataset_format: bin
-    dataset_files: x[000..146]  
+    dataset:
+      train: x[000..146].csv
+      test: x[000..10].csv
+      val: x000.csv
 """
-All files from 000 to 146 will be read for training. Do NOT add any extension to the data files here. The code looks for x[000...146].bin and x[000...146].idx on it's own. Giving an extension would mean that the code looks for x000.bin.bin and x000.bin.idx files, it will lead to File Not Found Errors. 
+All files from 000 to 146 will be read for training. Do NOT add any extension to the data files here. The code looks for x[000...146].bin and x[000...146].idx on it's own. Giving an extension would mean that the code looks for x000.bin.bin and x000.bin.idx files, it will lead to File Not Found Errors.
 
 ## Process and train with FULL default ZINC15 tranches dataset
 Currently, the pretrain script uses a "test" default ZINC15 tranches data downloader text file to process and train. This is to prevent about 100GB of data being downloaded accidentally. If you wish to run with ALL of default ZINC15 tranches data, make the following changes.

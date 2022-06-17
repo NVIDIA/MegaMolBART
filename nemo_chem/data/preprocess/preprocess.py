@@ -139,7 +139,7 @@ class Preprocess(object):
         logging.info(f'Processing file {filename}...')
 
         df = pd.read_csv(filename, header=None, names=['zinc_id', 'smiles'])
-        recs = int(df.shape[0] * 0.01)
+        recs = int(df.shape[0] * 0.01) # TODO: Revist the validation and test dataset size
 
         test_df = df.sample(n=recs)
         df = df.drop(test_df.index)  # remove test data from training data

@@ -12,7 +12,7 @@ trainer:
   max_epochs: null # use max_steps instead with NeMo Megatron models
   max_steps: 2000000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
   log_every_n_steps: 100 # number of interations between logging
-  val_check_interval: 1000 # set to integer when using steps to determine frequency of validation, use fraction with epochs
+  val_check_interval: 10000 # set to integer when using steps to determine frequency of validation, use fraction with epochs
   num_sanity_val_steps: 2 # set to 0 or small number to test validation before training
   limit_val_batches: 200 # number of batches in validation step, use fraction for fraction of data
   limit_test_batches: 0 # number of batches in test step, use fraction for fraction of data
@@ -72,7 +72,10 @@ model:
 
   data:
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
-    dataset_files: x[000..001].csv # inclusive range of data files to load or can load a single file, e.g. x000.csv
+    dataset: # inclusive range of data files to load or can load a single file, e.g. x000.csv
+      train: x[000..002].csv
+      test: x[000..002].csv
+      val: x000.csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: True # task = mask(span)_aug
