@@ -84,7 +84,7 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo:latest}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
@@ -92,7 +92,7 @@ RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
 REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=NotSpecified}
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=UserName:PersonalToken}
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 ###############################################################################
@@ -120,9 +120,9 @@ fi
 if [ $write_env -eq 1 ]; then
     echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
     echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
-    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo DATA_PATH=${DATA_PATH} >> $LOCAL_ENV
     echo RESULT_PATH=${RESULT_PATH} >> $LOCAL_ENV
+    echo JUPYTER_PORT=${JUPYTER_PORT} >> $LOCAL_ENV
     echo REGISTRY_USER=${REGISTRY_USER} >> $LOCAL_ENV
     echo REGISTRY=${REGISTRY} >> $LOCAL_ENV
     echo REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN} >> $LOCAL_ENV
@@ -154,16 +154,7 @@ then
     PARAM_RUNTIME="--gpus all"
 fi
 
-if [ ${GITHUB_BRANCH} == '__dev__' ]; then
-    echo "Using dev mode -- latest commit of local repo will be used."
-    GITHUB_SHA=$(git rev-parse HEAD | head -c7)
-    GITHUB_BRANCH=${GITHUB_SHA}
-else
-    GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
-fi
-
 DOCKER_CMD="docker run \
-    --rm \
     --network host \
     -v /etc/passwd:/etc/passwd:ro \
     -v /etc/group:/etc/group:ro \
@@ -172,38 +163,36 @@ DOCKER_CMD="docker run \
     -p ${JUPYTER_PORT}:8888 \
     -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
+    -v ${RESULT_PATH}:${RESULT_MOUNT_PATH}
     --shm-size=1g \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     -e HOME=${PROJECT_MOUNT_PATH} \
+    -e NUMBA_CACHE_DIR=/tmp/ \
     -w ${PROJECT_MOUNT_PATH} \
     -u $(id -u):$(id -u)"
 
 
-build() {
-    VERSION=${GITHUB_SHA}
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --version)
-                VERSION="$2"
-                shift
-                shift
-                ;;
-            *)
-                echo "Unknown option $1. Please --version to specify a version."
-                exit 1
-                ;;
-        esac
-    done
+function version {
+    if [ ${GITHUB_BRANCH} == '__dev__' ]; then
+        echo "Using dev mode -- latest commit of local repo will be used."
+        GITHUB_SHA=$(git rev-parse HEAD | head -c7)
+        GITHUB_BRANCH=${GITHUB_SHA}
+    else
+        GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
+    fi
 
+    echo "${GITHUB_SHA}";
+}
+
+
+build() {
     set -e
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
 
     echo "Building MegaMolBART training container..."
     docker build --network host \
-        -t ${IMG_NAME[0]}:${GITHUB_BRANCH} \
-        -t ${IMG_NAME[0]}:${IMG_NAME[1]} \
-        -t ${IMG_NAME[0]}:${VERSION} \
+        -t ${MEGAMOLBART_CONT} \
         -t ${IMG_NAME[0]}:latest \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
@@ -217,10 +206,10 @@ build() {
 
 
 push() {
-    VERSION=${GITHUB_SHA}
+    VERSION=$(version)
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --version)
+            -v|--version)
                 VERSION="$2"
                 shift
                 shift
@@ -233,49 +222,49 @@ push() {
     done
 
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+
+    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${VERSION}
+    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${GITHUB_BRANCH}
+
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
     docker push ${IMG_NAME[0]}:latest
     docker push ${IMG_NAME[0]}:${VERSION}
+    docker push ${IMG_NAME[0]}:${GITHUB_BRANCH}
     exit
 }
 
 
-pull() {
-    docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
-    docker pull ${MEGAMOLBART_CONT}:${GITHUB_BRANCH}
-    exit
+setup() {
+    mkdir -p ${DATA_PATH}
+    mkdir -p ${RESULT_PATH}
+
+    DEV_PYTHONPATH="/workspace/nemo_chem"
+
+    if [ ! -z "${NEMO_PATH}" ];
+    then
+        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/NeMo "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/NeMo"
+    fi
+
+    DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=${DEV_PYTHONPATH}"
+    DOCKER_CMD="${DOCKER_CMD} --env WANDB_API_KEY=$WANDB_API_KEY"
 }
 
 
 dev() {
-    local DEV_IMG="${MEGAMOLBART_CONT}"
-    local CMD='bash'
+    setup
+    set -x
+    ${DOCKER_CMD} --rm -it --name nemo_megamolbart ${@:1} ${MEGAMOLBART_CONT} bash
+    set +x
+    exit
+}
 
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -i|--image)
-                DEV_IMG="$2"
-                shift
-                shift
-                ;;
-            -d|--deamon)
-                DOCKER_CMD="${DOCKER_CMD} -d"
-                shift
-                ;;
-            *)
-                echo "Unknown option $1"
-                exit 1
-                ;;
-        esac
-    done
 
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH}"
-    DOCKER_CMD="${DOCKER_CMD} -v $(pwd)/models:/models"
-    DOCKER_CMD="${DOCKER_CMD} --env WANDB_API_KEY=$WANDB_API_KEY"
-    DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=$PROJECT_MOUNT_PATH"
-
-    DOCKER_CMD="${DOCKER_CMD} -v ${RESULT_PATH}:${RESULT_MOUNT_PATH} --env WANDB_API_KEY=$WANDB_API_KEY --name nemo_megamolbart_dev "
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} bash
+run() {
+    setup
+    set -x
+    ${DOCKER_CMD} -d ${MEGAMOLBART_CONT} ${@:1}
+    set +x
     exit
 }
 
@@ -289,14 +278,8 @@ attach() {
 }
 
 
-root() {
-    ${DOCKER_CMD} -it --user root ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} bash
-    exit
-}
-
-
 jupyter() {
-    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT}:${GITHUB_BRANCH} jupyter-lab --no-browser \
+    ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
@@ -306,6 +289,7 @@ jupyter() {
         --NotebookApp.password_required=False
 }
 
+
 case $1 in
     build)
         $@
@@ -313,16 +297,15 @@ case $1 in
     push)
         $@
         ;;
-    pull)
-        ;&
     dev)
+        $@
+        ;;
+    run)
         $@
         ;;
     attach)
         $@
         ;;
-    root)
-        ;&
     jupyter)
         $1
         ;;
@@ -330,3 +313,4 @@ case $1 in
         usage
         ;;
 esac
+
