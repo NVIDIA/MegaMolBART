@@ -83,6 +83,7 @@ model:
     micro_batch_size: ${model.micro_batch_size}
     num_workers: 10
     num_enumerations: 5
+    dataloader_type: single
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models
