@@ -100,6 +100,9 @@ def main(cfg) -> None:
     trainer = setup_trainer(cfg)
     model = MegaMolBARTModel(cfg.model, trainer)
 
+    # FIXME: remove me
+    import pdb; pdb.set_trace()
+
     logging.info("************** Model parameters and their sizes ***********")
     for name, param in model.named_parameters():
         logging.info(f'{name}: {param.size()}')

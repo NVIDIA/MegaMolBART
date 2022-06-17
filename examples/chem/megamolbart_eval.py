@@ -19,7 +19,6 @@ import torch
 from pytorch_lightning.trainer.trainer import Trainer
 from torch.utils.data import DataLoader
 
-from nemo.collections.nlp.data.language_modeling.megatron.request_dataset import T5RequestDataset
 from nemo_chem.models.megamolbart import MegaMolBARTModel
 from nemo.collections.nlp.modules.common.megatron.megatron_init import fake_initialize_model_parallel
 from nemo.collections.nlp.parts.nlp_overrides import NLPDDPPlugin, NLPSaveRestoreConnector
@@ -28,6 +27,7 @@ from nemo.utils.app_state import AppState
 assert torch.cuda.is_available()
 
 from torch.utils.data.dataset import Dataset
+from typing import Dict
 
 class MoleculeRequestDataset(Dataset):
     def __init__(self, request: Dict, tokenizer) -> None:
@@ -59,7 +59,7 @@ def main():
         "--prompt", type=str, default="N[C@H]1CCC(=O)[C@H](O)[C@H](O)[C@H]1O", required=False, help="Prompt for the model (a text to complete)"
     )
     parser.add_argument(
-        "--tokens_to_generate", type=int, default="16", required=False, help="How many tokens to add to prompt"
+        "--tokens_to_generate", type=int, default="100", required=False, help="How many tokens to add to prompt"
     )
     parser.add_argument(
         "--tensor_model_parallel_size", type=int, default=1, required=False,
@@ -102,7 +102,7 @@ def main():
             pipeline_model_parallel_split_rank_=args.pipeline_model_parallel_split_rank,
         )
 
-    model = MoleculeRequestDataset.restore_from(
+    model = MegaMolBARTModel.restore_from(
         restore_path=args.model_file, trainer=trainer, save_restore_connector=NLPSaveRestoreConnector(),
     )
     model.freeze()
@@ -112,14 +112,18 @@ def main():
         "tokens_to_generate": args.tokens_to_generate,
     }
 
-    dataset = T5RequestDataset(request, model.tokenizer)
+    dataset = MoleculeRequestDataset(request, model.tokenizer)
 
     request_dl = DataLoader(dataset)
 
-    response = trainer.predict(model, request_dl)
+    response = trainer.predict(model, request_dl)[0]
+    input_mol = response['prompt']
+    recon_mol = ''.join(response['completion']['text'])
 
     print("***************************")
-    print(response)
+    print(f"Reconstruction: {'PASS' if input_mol == recon_mol else 'FAIL'}")
+    print(f"input molecule:         {input_mol}")
+    print(f"reconstructed molecule: {recon_mol}")
     print("***************************")
 
 
