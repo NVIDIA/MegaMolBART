@@ -27,6 +27,30 @@ from nemo.utils.app_state import AppState
 
 assert torch.cuda.is_available()
 
+from torch.utils.data.dataset import Dataset
+
+class MoleculeRequestDataset(Dataset):
+    def __init__(self, request: Dict, tokenizer) -> None:
+        super().__init__()
+        self.request = request
+        self.tokenizer = tokenizer
+
+        # tokenize prompt
+        self.request['tokenized_prompt'] = ' '.join(self.tokenizer.text_to_tokens(request['prompt']))
+        tokens = self.tokenizer.text_to_ids(request['prompt'])
+        self.request['tokens'] = torch.tensor(tokens)
+        self.mask_prompt(self.request['prompt'])
+
+    def mask_prompt(self, sample):
+        sample = torch.LongTensor(self.tokenizer.text_to_ids(sample))
+        self.request['masked_sample'] = sample
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, index):
+        return self.request
+
 
 def main():
     parser = ArgumentParser()
@@ -78,7 +102,7 @@ def main():
             pipeline_model_parallel_split_rank_=args.pipeline_model_parallel_split_rank,
         )
 
-    model = MegaMolBARTModel.restore_from(
+    model = MoleculeRequestDataset.restore_from(
         restore_path=args.model_file, trainer=trainer, save_restore_connector=NLPSaveRestoreConnector(),
     )
     model.freeze()
