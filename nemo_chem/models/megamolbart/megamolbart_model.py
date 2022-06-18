@@ -19,10 +19,8 @@ from rdkit import Chem
 import torch
 from pytorch_lightning.trainer.trainer import Trainer
 
-from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
-from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
 from nemo_chem.utils import flatten_dict
@@ -204,7 +202,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         super().test_epoch_end(outputs)
         self._inference_epoch_end(outputs, mode='test')
 
-    def sample_molecules(self, tokens_enc, enc_mask):
+    def sample_molecules(self, tokens_enc, enc_mask, hidden_states=None):
         """Autoregressively sample SMILES molecules from encoder hidden state
 
         Args:
@@ -218,7 +216,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.freeze()
 
         # Decode encoder hidden state to tokens
-        predicted_tokens_ids, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
+        predicted_tokens_ids, log_probs = self.decode(tokens_enc,
+                                                      enc_mask,
+                                                      self._cfg.max_position_embeddings,
+                                                      enc_output=hidden_states)
         predicted_tokens_ids = predicted_tokens_ids.cpu().detach().numpy().tolist()
 
         # Prune tokens by eos / padding and convert to SMILES

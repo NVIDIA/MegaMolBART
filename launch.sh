@@ -163,15 +163,15 @@ DOCKER_CMD="docker run \
     -p ${JUPYTER_PORT}:8888 \
     -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
     -v ${DATA_PATH}:${DATA_MOUNT_PATH} \
+    -v ${MODEL_PATH}:/models \
     -v ${RESULT_PATH}:${RESULT_MOUNT_PATH}
     --shm-size=1g \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     -e HOME=${PROJECT_MOUNT_PATH} \
+    -e TMPDIR=/tmp/ \
     -e NUMBA_CACHE_DIR=/tmp/ \
-    -w ${PROJECT_MOUNT_PATH} \
-    -u $(id -u):$(id -u)"
-
+    -w ${PROJECT_MOUNT_PATH} "
 
 function version {
     if [ ${GITHUB_BRANCH} == '__dev__' ]; then

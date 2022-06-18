@@ -54,7 +54,7 @@ class MoleculeRequestDataset(Dataset):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--model_file", type=str, default="/result/nemo_experiments/megamolbart/MegaMolBART-megamolbart_pretrain_small_span_aug.nemo", required=False, help="Pass path to model's .nemo file")
+    parser.add_argument("--model_file", type=str, default="/models/Small_Span_Aug_2f63a83b_220424_Draco_nodes_4_gpus_16-PORTED.nemo", required=False, help="Pass path to model's .nemo file")
     parser.add_argument(
         "--prompt", type=str, default="N[C@H]1CCC(=O)[C@H](O)[C@H](O)[C@H]1O", required=False, help="Prompt for the model (a text to complete)"
     )

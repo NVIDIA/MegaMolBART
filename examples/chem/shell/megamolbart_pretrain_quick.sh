@@ -7,7 +7,7 @@
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
 DATA_FORMAT='csv' # "csv" or "bin"
 DATA_MOUNT=/data/zinc_csv
-DATA_FILES_SELECTED="x[000..100].csv"
+DATA_FILES_SELECTED="x[000..146].csv"
 CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
