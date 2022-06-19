@@ -37,7 +37,9 @@ class NeMoMegaMolBARTWrapper():
         self.cfg = self.model._cfg
         self.max_seq_len = self.cfg.max_position_embeddings
         self.tokenizer = self.model.tokenizer
-        self.sampler = TopkDecoder(self.tokenizer, self.max_seq_len)
+        self.sampler = TopkDecoder(self.model,
+                                   self.tokenizer,
+                                   self.max_seq_len)
 
         pad_size_divisible_by_8 = True if self.cfg.masked_softmax_fusion else False
         self.mol_enum = MoleculeEnumeration(tokenizer=self.tokenizer,
@@ -207,34 +209,39 @@ class NeMoMegaMolBARTWrapper():
     def sample(self,
                smis,
                num_samples=10,
-               scaled_radius: float=None):
+               sampling_method='greedy',
+               sampling_kwarg={'scaled_radius': 2, 'topk': 10}):
         """
         Sample from model given hidden states and mask
         """
         hidden_states, enc_masks = self.smis_to_hidden(smis)
 
-        from nemo.collections.nlp.modules.common.transformer import TopKSequenceGenerator
-        from nemo.collections.nlp.modules.common import TokenClassifier
-        if scaled_radius is None:
-            # log_softmax = TokenClassifier(
-            #     hidden_size=self.model.hidden_size,
-            #     num_classes=self.tokenizer.vocab_size,
-            #     activation=self.cfg.head.activation,
-            #     log_softmax=self.cfg.head.log_softmax,
-            #     dropout=self.cfg.head.dropout,
-            #     use_transformer_init=self.cfg.head.use_transformer_init,
-            # )
+        if sampling_method == 'greedy':
+            pass
+        elif sampling_method == 'tokp':
+            from nemo.collections.nlp.modules.common.transformer import TopKSequenceGenerator
+            from nemo.collections.nlp.modules.common import TokenClassifier
+
+            log_softmax = TokenClassifier(
+                hidden_size=self.decoder.hidden_size,
+                num_classes=self.decoder_vocab_size,
+                activation=cfg.head.activation,
+                log_softmax=cfg.head.log_softmax,
+                dropout=cfg.head.dropout,
+                use_transformer_init=cfg.head.use_transformer_init,
+            )
+
+            log_softmax = self.model.enc_dec_model.enc_dec_model.encoder.model.layers[0].self_attention.scale_mask_softmax,
             generator = TopKSequenceGenerator(
                 embedding=self.model.enc_dec_model.decoder_embedding,
                 decoder=self.model,
-                log_softmax=self.model.enc_dec_model.enc_dec_model.encoder.model.layers[0].self_attention.scale_mask_softmax,
+                log_softmax=log_softmax,
                 max_sequence_length=self.cfg.max_position_embeddings,
                 beam_size=10,
                 bos=self.tokenizer.bos_id,
                 pad=self.tokenizer.pad_id,
                 eos=self.tokenizer.eos_id,
             )
-
             resp = generator(encoder_hidden_states=hidden_states)
 
             decode_fn = partial(self._compute_logits,
@@ -242,15 +249,18 @@ class NeMoMegaMolBARTWrapper():
             samples, sample_emb, sample_masks = self.sampler(
                 decode_fn,
                 batch_size=hidden_states.shape[0],
-                tokens_enc=tokens,
+                hidden_states=hidden_states,
                 enc_masks=enc_masks,
                 top_k=num_samples,
                 device=hidden_states.device)
-        else:
+        elif sampling_method == 'radius':
+            scaled_radius = sampling_kwarg['scaled_radius']
             sample_masks = enc_masks.repeat_interleave(num_samples, 0)
             sample_emb = hidden_states.repeat_interleave(num_samples, 0)
-            sample_emb = scaled_radius * torch.randn(sample_emb.shape).to(sample_emb.device)
+            sample_emb = sample_emb + (scaled_radius * torch.randn(sample_emb.shape).to(sample_emb.device))
 
             samples = self.hidden_to_smis(sample_emb, sample_masks)
+        else:
+            raise ValueError(f'Invalid samping method {sampling_method}')
 
         return samples, sample_emb, sample_masks

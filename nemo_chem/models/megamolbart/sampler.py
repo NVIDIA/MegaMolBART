@@ -7,15 +7,16 @@ class TopkDecoder(torch.nn.Module):
     Top-k decoding functions for sampling
     """
 
-    def __init__(self, tokenizer, max_seq_len):
+    def __init__(self, model, tokenizer, max_seq_len):
         super(TopkDecoder, self).__init__()
 
+        self.model = model
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
 
-    def forward(self, decode_fn, batch_size, tokens_enc, enc_masks, top_k=1, temp=1, device='cpu'):
+    def forward(self, decode_fn, batch_size, hidden_states, enc_masks, top_k=1, temp=1, device='cpu'):
         predicted_seqs = (
-            torch.LongTensor([self.tokenizer.bos_id] * tokens_enc.size(0)).unsqueeze(1).to(device)
+            torch.LongTensor([self.tokenizer.bos_id] * hidden_states.size(0)).unsqueeze(1).to(device)
         )
         predicted_seq_probs = torch.zeros((batch_size * top_k, 1),
                                           device=device,
@@ -26,10 +27,10 @@ class TopkDecoder(torch.nn.Module):
 
         #TODO: Break once eos is reached for all samples
         for _ in range(self.max_seq_len):
-            token_logits, hidden_states, enc_output_masks = \
-                decode_fn(predicted_tokens_dec=predicted_seqs,
-                          tokens_enc=tokens_enc,
-                          enc_masks=enc_masks)
+            # token_logits, hidden_states, enc_output_masks = \
+            #     decode_fn(predicted_tokens_dec=predicted_seqs,
+            #               tokens_enc=hidden_states,
+            #               enc_masks=enc_masks)
 
             # Resize tensors for holding temp values
             predicted_seqs = predicted_seqs.repeat_interleave(top_k, 0)
@@ -37,14 +38,17 @@ class TopkDecoder(torch.nn.Module):
 
             if first:
                 enc_masks = enc_masks.repeat_interleave(top_k, 0)
-                tokens_enc = tokens_enc.repeat_interleave(top_k, 0)
+                hidden_states = hidden_states.repeat_interleave(top_k, 0)
                 first = False
 
             # Get top-k for each item in batch
-            log_probs, token_ids = torch.topk(
-                nn.functional.log_softmax(token_logits, dim=-1),
-                top_k)
-            log_probs = (log_probs / temp).softmax(log_probs.dim() - 1)
+            predicted_tokens_ids, log_probs = self.model.decode(None,
+                                            enc_masks,
+                                            self.cfg.max_position_embeddings,
+                                            enc_output=hidden_states)
+
+            #TODO: placeholder value ****
+            token_ids = predicted_tokens_ids
 
             # For each sequence add the predicted token to create seq for next step
             next_seq_probs = None

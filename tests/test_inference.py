@@ -81,7 +81,7 @@ def test_sample():
         with load_model(cfg) as inferer:
             smis = ['c1cc2ccccc2cc1',
                     'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC']
-            # samples, emb, masks = inferer.sample(smis, num_samples=10, scaled_radius=1)
-            samples, emb, masks = inferer.sample(smis, num_samples=10)
+            samples, emb, masks = inferer.sample(smis, num_samples=10, sampling_method='radius')
+            # samples, emb, masks = inferer.sample(smis, num_samples=10)
             log.info(smis)
             log.info(samples)
