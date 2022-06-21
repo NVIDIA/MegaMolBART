@@ -15,4 +15,3 @@
 
 from .megamolbart_model import *
 from .infer import *
-# from .sampler import *

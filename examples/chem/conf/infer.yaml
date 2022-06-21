@@ -6,10 +6,10 @@ model:
   parallel_size: 1
 
   tokenizer:
-    vocab_path: /models/vocab/megamolbart.vocab
-    model_path: /models/vocab/megamolbart.model
-    # vocab_path: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.vocab
-    # model_path: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.model
+    # vocab_path: /models/vocab/megamolbart.vocab
+    # model_path: /models/vocab/megamolbart.model
+    vocab_path: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.vocab
+    model_path: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.model
 
   data:
     encoder_augment: False
