@@ -66,8 +66,8 @@ model:
   tokenizer:
     library: 'regex'
     type: null
-    model: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.model
-    vocab_file: /workspace/nemo_chem/nemo_chem/vocab/megamolbart.vocab
+    model: /workspace/nemo_chem/models/vocab/megamolbart.model
+    vocab_file: /workspace/nemo_chem/models/vocab/megamolbart.vocab
     merge_file: null
 
   data:
