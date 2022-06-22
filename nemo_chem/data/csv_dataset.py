@@ -25,7 +25,8 @@ import numpy as np
 
 from nemo.core import Dataset
 from nemo.utils import logging
-from .data_index import build_index_files
+from nemo.collections.nlp.data.language_modeling.text_memmap_dataset import CSVMemMapDataset
+# from .data_index import build_index_files
 
 try:
     from apex.transformer.parallel_state import get_rank_info
@@ -47,9 +48,11 @@ class MoleculeCsvDatasetConfig():
     dataset: DatasetFileConfig = None
     newline_int: int = 10
     header_lines: int = 1
-    skip_lines: int = 0
     data_col: int = 1
     data_sep: str = ','
+    sort_dataset_paths: bool = True
+    # FIXME: remove unneeded config variables
+    skip_lines: int = 0
     micro_batch_size: int = 1
     encoder_augment: bool = False
     encoder_mask: bool = False
@@ -62,7 +65,7 @@ class MoleculeCsvDatasetConfig():
     num_workers: Optional[int] = None
 
 
-class MoleculeCsvDataset(Dataset):
+class MoleculeCsvDataset(CSVMemMapDataset):
     """
     Allow per-line lazy access to multiple text files using numpy memmap.
     """
@@ -70,96 +73,116 @@ class MoleculeCsvDataset(Dataset):
                  dataset_paths,
                  cfg,
                  workers=None):
+        super().__init__(
+        dataset_paths=dataset_paths,
+        newline_int=cfg.get('newline_int'), 
+        header_lines=cfg.get('header_lines'), # skip first N lines
+        workers=workers,
+        tokenizer=None,
+        sort_dataset_paths=cfg.get('sort_dataset_paths'),
+        data_col=cfg.get('data_col'),
+        data_sep=cfg.get('data_sep'),
+    )
 
-        if len(dataset_paths) < 1:
-            raise ValueError("Dataset file list must contain at least one file name")
+# FIXME: delete me
+# class MoleculeCsvDataset(Dataset):
+#     """
+#     Allow per-line lazy access to multiple text files using numpy memmap.
+#     """
+#     def __init__(self,
+#                  dataset_paths,
+#                  cfg,
+#                  workers=None):
 
-        super().__init__()
+#         if len(dataset_paths) < 1:
+#             raise ValueError("Dataset file list must contain at least one file name")
 
-        # TODO not all of these need their state set
-        self._header_lines = cfg.get('header_lines') # skip first N lines
-        self._skip_lines = cfg.get('skip_lines')
-        self._data_col = cfg.get('data_col')
-        self._data_sep = cfg.get('data_sep')
-        self._newline_int = cfg.get('newline_int')
-        self._workers = workers
+#         super().__init__()
 
-        self.mdata_midx_size_list = None
+#         # TODO not all of these need their state set
+#         self._header_lines = cfg.get('header_lines') # skip first N lines
+#         self._skip_lines = cfg.get('skip_lines')
+#         self._data_col = cfg.get('data_col')
+#         self._data_sep = cfg.get('data_sep')
+#         self._newline_int = cfg.get('newline_int')
+#         self._workers = workers
 
-        # load all files into memmap
-        is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
-        # is_global_rank_0 = (not is_distributed) or (is_distributed and torch.distributed.get_rank() == 0)
-        rank_indexes = get_rank_info() # will return 0,0,0 if no dp/mp
-        is_global_rank_0 = sum([0 if r is None else r for r in rank_indexes]) == 0
+#         self.mdata_midx_size_list = None
 
-        if is_global_rank_0:
-            data_parallel_rank, tensor_parallel_rank, pipeline_parallel_rank, virtual_pipeline_parallel_rank = rank_indexes
-            logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}, virtual_pipeline_parallel_rank {virtual_pipeline_parallel_rank} ')
-            start_time = time.time()
-            build_index_files(dataset_paths, self._newline_int, workers=self._workers)
-            logging.info(f'Time to build memory mapped indexes: {time.time() - start_time}')
-        else:
-            logging.info(f'Building memory mapped indexes was skipped on this process because it is not global rank 0')
+#         # load all files into memmap
+#         is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+#         # is_global_rank_0 = (not is_distributed) or (is_distributed and torch.distributed.get_rank() == 0)
+#         rank_indexes = get_rank_info() # will return 0,0,0 if no dp/mp
+#         is_global_rank_0 = sum([0 if r is None else r for r in rank_indexes]) == 0
 
-        if is_distributed:
-            torch.distributed.barrier()
+#         if is_global_rank_0:
+#             data_parallel_rank, tensor_parallel_rank, pipeline_parallel_rank, virtual_pipeline_parallel_rank = rank_indexes
+#             logging.info(f'Building memory mapped indexes on tensor_parallel_rank {tensor_parallel_rank}, pipeline_parallel_rank {pipeline_parallel_rank}, data_parallel_rank {data_parallel_rank}, virtual_pipeline_parallel_rank {virtual_pipeline_parallel_rank} ')
+#             start_time = time.time()
+#             build_index_files(dataset_paths, self._newline_int, workers=self._workers)
+#             logging.info(f'Time to build memory mapped indexes: {time.time() - start_time}')
+#         else:
+#             logging.info(f'Building memory mapped indexes was skipped on this process because it is not global rank 0')
 
-        logging.info(f"Loading data files")
-        mdata_midx_size_list = [self.load_file(fn) for fn in dataset_paths]
+#         if is_distributed:
+#             torch.distributed.barrier()
 
-        logging.info("Computing global indices")
-        joint_midx = [0]
-        for i in range(len(mdata_midx_size_list)):
-            midx = mdata_midx_size_list[i][1]
-            joint_midx.append(joint_midx[-1] + (len(midx) - self._header_lines))
+#         logging.info(f"Loading data files")
+#         mdata_midx_size_list = [self.load_file(fn) for fn in dataset_paths]
 
-        self.joint_midx = joint_midx
-        self.mdata_midx_size_list = mdata_midx_size_list
+#         logging.info("Computing global indices")
+#         joint_midx = [0]
+#         for i in range(len(mdata_midx_size_list)):
+#             midx = mdata_midx_size_list[i][1]
+#             joint_midx.append(joint_midx[-1] + (len(midx) - self._header_lines))
 
-    def __del__(self):
-        if self.mdata_midx_size_list:
-            for mdata, midx, size in self.mdata_midx_size_list:
-                mdata._mmap.close()
+#         self.joint_midx = joint_midx
+#         self.mdata_midx_size_list = mdata_midx_size_list
 
-    def __len__(self):
-        return self.joint_midx[-1]
+#     def __del__(self):
+#         if self.mdata_midx_size_list:
+#             for mdata, midx, size in self.mdata_midx_size_list:
+#                 mdata._mmap.close()
 
-    def __getitem__(self, idx):
-        """
-        Return a string
-        """
-        # Identify the file containing the record
-        file_id = 0
-        for end_idx in self.joint_midx[1:]:
-            if idx < end_idx:
-                break
-            file_id += 1
-        file_row = idx - self.joint_midx[file_id]
+#     def __len__(self):
+#         return self.joint_midx[-1]
 
-        rec_start = self.mdata_midx_size_list[file_id][1][file_row]
-        rec_end = self.mdata_midx_size_list[file_id][1][file_row + 1 + self._skip_lines]
-        data = self.mdata_midx_size_list[file_id][0][rec_start:rec_end].tobytes().decode("ascii")
-        return data.split(self._data_sep)[self._data_col]
+#     def __getitem__(self, idx):
+#         """
+#         Return a string
+#         """
+#         # Identify the file containing the record
+#         file_id = 0
+#         for end_idx in self.joint_midx[1:]:
+#             if idx < end_idx:
+#                 break
+#             file_id += 1
+#         file_row = idx - self.joint_midx[file_id]
 
-    @staticmethod
-    def load_file(fn):
-        """
-        Loads a text file as np.int8.
-        Returns:
-            mdata - memorymap of np.int8
-            midx - indices pointing to the end-of-line (or end of file) position
-        """
-        logging.info(f"Loading {fn}")
-        idx_fn = fn + ".idx"
+#         rec_start = self.mdata_midx_size_list[file_id][1][file_row]
+#         rec_end = self.mdata_midx_size_list[file_id][1][file_row + 1 + self._skip_lines]
+#         data = self.mdata_midx_size_list[file_id][0][rec_start:rec_end].tobytes().decode("ascii")
+#         return data.split(self._data_sep)[self._data_col]
 
-        # create data map
-        mdata = np.memmap(fn, dtype=np.uint8, mode='r')
+#     @staticmethod
+#     def load_file(fn):
+#         """
+#         Loads a text file as np.int8.
+#         Returns:
+#             mdata - memorymap of np.int8
+#             midx - indices pointing to the end-of-line (or end of file) position
+#         """
+#         logging.info(f"Loading {fn}")
+#         idx_fn = fn + ".idx"
 
-        if os.path.exists(idx_fn):
-            idx_dict = pickle.load(open(idx_fn, 'rb'))
-            midx = idx_dict['midx']
-            size = idx_dict.get('size', None)
-        else:
-            raise ValueError(f'Memory map for {fn} is not found')
+#         # create data map
+#         mdata = np.memmap(fn, dtype=np.uint8, mode='r')
 
-        return (mdata, midx, size)
+#         if os.path.exists(idx_fn):
+#             idx_dict = pickle.load(open(idx_fn, 'rb'))
+#             midx = idx_dict['midx']
+#             size = idx_dict.get('size', None)
+#         else:
+#             raise ValueError(f'Memory map for {fn} is not found')
+
+#         return (mdata, midx, size)
