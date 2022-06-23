@@ -26,7 +26,7 @@ import warnings
 
 __all__ = ['MolEncTokenizer', 'MolEncTokenizerBaseConfig', 'MolEncTokenizerFromVocabFileConfig', 'MolEncTokenizerFromSmilesConfig', 'DEFAULT_SEQ_LEN', 'DEFAULT_VOCAB_PATH', 'DEFAULT_MODEL_PATH']
 
-DEFAULT_VOCAB_DIR = os.path.join(nemo_chem.__path__[0], 'vocab')
+DEFAULT_VOCAB_DIR = os.path.join(nemo_chem.__path__[0], '../models/vocab')
 DEFAULT_VOCAB_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.vocab')
 DEFAULT_MODEL_PATH = os.path.join(DEFAULT_VOCAB_DIR, 'megamolbart.model')
 

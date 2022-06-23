@@ -87,6 +87,7 @@ model:
     num_workers: 10
     num_enumerations: 5
     dataloader_type: single
+    dataset_format: csv
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models
