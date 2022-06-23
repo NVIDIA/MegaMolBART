@@ -73,8 +73,8 @@ model:
   data:
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
     dataset: # inclusive range of data files to load or can load a single file, e.g. x000.csv
-      train: x[000..002].csv
-      test: x[000..002].csv
+      train: x[000..146].csv
+      test: x[000..146].csv
       val: x000.csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug

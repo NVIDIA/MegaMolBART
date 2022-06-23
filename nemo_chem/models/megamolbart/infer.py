@@ -1,4 +1,3 @@
-import math
 import logging
 import torch
 
@@ -210,7 +209,6 @@ class NeMoMegaMolBARTWrapper():
                 embs = self.smis_to_embedding(samples)
         else:
             raise ValueError(f'Invalid samping method {sampling_method}')
-
 
         if return_embedding:
             return samples, embs

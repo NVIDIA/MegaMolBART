@@ -159,6 +159,7 @@ DOCKER_CMD="docker run \
     -v /etc/passwd:/etc/passwd:ro \
     -v /etc/group:/etc/group:ro \
     -v /etc/shadow:/etc/shadow:ro \
+    -u $(id -u):$(id -u) \
     ${PARAM_RUNTIME} \
     -p ${JUPYTER_PORT}:8888 \
     -v ${PROJECT_PATH}:${PROJECT_MOUNT_PATH} \
@@ -242,8 +243,8 @@ setup() {
 
     if [ ! -z "${NEMO_PATH}" ];
     then
-        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/NeMo "
-        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/NeMo"
+        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/workspace/nemo "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/workspace/nemo"
     fi
 
     DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=${DEV_PYTHONPATH}"
