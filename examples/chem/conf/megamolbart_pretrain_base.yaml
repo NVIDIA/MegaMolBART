@@ -7,7 +7,7 @@ restore_from_path: null # used when starting from a .nemo file
 trainer:
   devices: 1 # number of GPUs or CPUs
   num_nodes: 1
-  precision: 32 # 16, 32
+  precision: 16 # 16, 32
   accelerator: gpu # gpu, cpu
   max_epochs: null # use max_steps instead with NeMo Megatron models
   max_steps: 2000000 # consumed_samples = global_step * micro_batch_size * data_parallel_size * accumulate_grad_batches
@@ -75,7 +75,7 @@ model:
     dataset: # inclusive range of data files to load or can load a single file, e.g. x000.csv
       train: x[000..146].csv
       test: x[000..146].csv
-      val: x000.csv
+      val:  x[000..146].csv
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: True # task = mask(span)_aug
