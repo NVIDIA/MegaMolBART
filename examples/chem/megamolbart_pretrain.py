@@ -22,7 +22,12 @@ from pytorch_lightning.plugins.environments.torchelastic_environment import Torc
 from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from pytorch_lightning.trainer.connectors.checkpoint_connector import CheckpointConnector
 
-from nemo.collections.nlp.parts.nlp_overrides import GradScaler, MegatronHalfPrecisionPlugin, NLPDDPPlugin
+from nemo.collections.nlp.parts.nlp_overrides import (
+    GradScaler,
+    MegatronHalfPrecisionPlugin,
+    NLPDDPPlugin,
+    PipelineMixedPrecisionPlugin,
+)
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import StatelessTimer, exp_manager
@@ -38,9 +43,7 @@ def setup_trainer(cfg):
     megatron_amp_o2 = cfg.model.get('megatron_amp_O2', False)
     plugins = [
         NLPDDPPlugin(
-            no_ddp_communication_hook=(
-                megatron_amp_o2 and cfg.trainer.precision == 'bf16'
-            ),  # Only bf16 uses fp32_grad_accum.
+            no_ddp_communication_hook=True,
             gradient_as_bucket_view=cfg.model.gradient_as_bucket_view,
             find_unused_parameters=False,
         )
@@ -56,20 +59,32 @@ def setup_trainer(cfg):
         if megatron_amp_o2:
             plugins.append(MegatronHalfPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
         else:
-            plugins.append(NativeMixedPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
+            plugins.append(PipelineMixedPrecisionPlugin(precision=cfg.trainer.precision, device='cuda', scaler=scaler))
 
     if cfg.get('cluster_type', None) == 'BCP':
         plugins.append(TorchElasticEnvironment())
 
     trainer = Trainer(plugins=plugins, **cfg.trainer, callbacks=[ModelSummary(max_depth=3)])
+    exp_manager(trainer, cfg.get("exp_manager", None))
+    # recursive_make_dirs(log_dir)
+    # recursive_make_dirs(trainer.checkpoint_callback.dirpath)
 
-    resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
-    trainer.checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
-    
-    # Override timer callback and convert to a stateless one
+    # update resume from checkpoint found by exp_manager
+    if cfg.model.resume_from_checkpoint is not None:
+        resume_from_checkpoint = cfg.model.resume_from_checkpoint
+    else:
+        resume_from_checkpoint = trainer._checkpoint_connector.resume_from_checkpoint_fit_path
+    logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
+
+    trainer._checkpoint_connector = CheckpointConnector(trainer, resume_from_checkpoint=resume_from_checkpoint)
+    # Override timer callback to a stateless one
     for idx, callback in enumerate(trainer.callbacks):
         if isinstance(callback, Timer):
             trainer.callbacks[idx] = StatelessTimer(cfg.trainer.max_time,)
+
+    # hydra interpolation does not work here as the interpolation key is lost when PTL saves hparams
+    with open_dict(cfg):
+        cfg.model.precision = cfg.trainer.precision
 
     return trainer
 
@@ -83,19 +98,6 @@ def main(cfg) -> None:
     logging.info(f'\n{OmegaConf.to_yaml(cfg)}')
 
     trainer = setup_trainer(cfg)
-
-    log_dir = exp_manager(trainer, cfg.get("exp_manager", None))
-    recursive_make_dirs(log_dir)
-    recursive_make_dirs(trainer.checkpoint_callback.dirpath)
-
-    # update resume from checkpoint found by exp_manager
-    resume_from_checkpoint = trainer.checkpoint_connector.resume_from_checkpoint_fit_path
-    logging.info(f'Resuming training from checkpoint: {resume_from_checkpoint}')
-
-    # hydra interpolation does not work here as the interpolation key is lost when PTL saves hparams
-    with open_dict(cfg):
-        cfg.model.precision = cfg.trainer.precision
-
     model = MegaMolBARTModel(cfg.model, trainer)
 
     logging.info("************** Model parameters and their sizes ***********")
@@ -112,7 +114,7 @@ def main(cfg) -> None:
         logging.info("Processing data into CSV files")
         preprocess = Preprocess()
         preprocess.prepare_dataset(links_file='conf/dataset/ZINC-downloader-test.txt',
-                                 output_dir=cfg.model.data.dataset_path)
+                                   output_dir=cfg.model.data.dataset_path)
         if cfg.model.data.dataset_format == "bin":
             logging.info("Converting CSV data into Binary")
             csvtobin = CsvToBinary(input_dir=cfg.model.data.dataset_path,

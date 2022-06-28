@@ -14,3 +14,4 @@
 # limitations under the License.
 
 from .megamolbart_model import *
+from .infer import *

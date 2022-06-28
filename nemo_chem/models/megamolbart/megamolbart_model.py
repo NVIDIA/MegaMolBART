@@ -13,36 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from operator import itemgetter
 from omegaconf.dictconfig import DictConfig
-from omegaconf import open_dict
 from rdkit import Chem
-from collections import defaultdict
-from packaging import version
-import numpy as np
 
 import torch
-import torch.nn as nn
 from pytorch_lightning.trainer.trainer import Trainer
 
-import nemo
 from nemo.collections.nlp.models.language_modeling.megatron_lm_encoder_decoder_model import MegatronLMEncoderDecoderModel
 from nemo.utils import logging
-from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
-from nemo_chem.tokenizer import MolEncTokenizer, DEFAULT_VOCAB_PATH, DEFAULT_MODEL_PATH
 from nemo_chem.utils import flatten_dict
 from nemo_chem.data import DatasetTypes, MoleculeEnumeration, build_train_valid_test_datasets, PrepareDataset
-from nemo.collections.nlp.modules.common.megatron.utils import average_losses_across_data_parallel_group
 
-try:
-    from apex.transformer import tensor_parallel, parallel_state
-
-    HAVE_APEX = True
-except (ImportError, ModuleNotFoundError):
-    HAVE_APEX = False
 
 # Disable logging of invalid SMILES moloecules
 from rdkit import RDLogger
@@ -73,36 +56,6 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             if max_lr <= min_lr:
                 logging.warning(f'Warning: maximum learning rate for Noam Scheduler ({max_lr}) is less than minimum ({min_lr}).')
         return
-
-    def _build_tokenizer(self):
-        """
-        Tokenizer from MegaMolBART.
-        """
-        # TODO set defaults in tokenizer once NeMo 1.8 conversion is complete
-        vocab_path = self._cfg.tokenizer.get('vocab_path', DEFAULT_VOCAB_PATH)
-        if not os.path.exists(vocab_path):
-            raise ValueError(f'Vocab file not found at {vocab_path}')
-
-        model_path = self._cfg.tokenizer.get('model_path', DEFAULT_MODEL_PATH)
-        if not os.path.exists(model_path):
-            raise ValueError(f'Model file not found at {model_path}')
-
-        with open_dict(self._cfg):
-            self._cfg.tokenizer.vocab_path = vocab_path
-            self._cfg.tokenizer.model_path = model_path
-
-        # TODO cleanup once NeMo 1.8 conversion is complete
-        USE_NEMO_REGEX_TOKENIZER = version.parse(nemo.__shortversion__) >= version.parse('1.8')
-        if USE_NEMO_REGEX_TOKENIZER:
-            # TODO: use tokenizer config to define tokenizer
-            self.tokenizer = get_nmt_tokenizer(
-                library='regex',
-                # include model files inside .nemo file
-                tokenizer_model = self.register_artifact("tokenizer_model", model_path),
-                vocab_file = self.register_artifact("vocab_file", vocab_path),
-            )
-        else:
-            self.tokenizer = MolEncTokenizer.from_vocab_file(**self._cfg.tokenizer)
 
     def build_train_valid_test_datasets(self):
         logging.info('Building MegaMolBART datasets.')
@@ -136,55 +89,47 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
     def build_pretraining_data_loader(self, dataset, consumed_samples):
         """Buld dataloader given an input dataset."""
-        
+
         assert self._cfg.data.dataloader_type == 'single', AssertionError(
             f'Only the Megatron sequential ("single") sampler is currently supported. {self._cfg.data.dataloader_type} was chosen.'
             )
-        
+
         dataloader = super().build_pretraining_data_loader(dataset=dataset, consumed_samples=consumed_samples)
-        
+
         # Add collate function and unpin memory to avoid crash with CUDA misaligned address
         dataloader.pin_memory = False # must be False with CSV dataset TODO check with binary
         pad_size_divisible_by_8 = True if self._cfg.masked_softmax_fusion else False
 
-        ## TODO: We can use the Enum DatasetType() defined in the utils.py here. 
+        ## TODO: We can use the Enum DatasetType() defined in the utils.py here.
         if self._cfg.data.dataset_format == "bin":
-            dataloader.collate_fn = PrepareDataset(tokenizer=self.tokenizer, 
-                                                        seq_length=self._cfg.seq_length, 
+            dataloader.collate_fn = PrepareDataset(tokenizer=self.tokenizer,
+                                                        seq_length=self._cfg.seq_length,
                                                         pad_size_divisible_by_8=pad_size_divisible_by_8,
                                                         **self._cfg.data).collate_fn
         elif self._cfg.data.dataset_format == "csv":
-            dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer, 
-                                                        seq_length=self._cfg.seq_length, 
+            dataloader.collate_fn = MoleculeEnumeration(tokenizer=self.tokenizer,
+                                                        seq_length=self._cfg.seq_length,
                                                         pad_size_divisible_by_8=pad_size_divisible_by_8,
                                                         **self._cfg.data).collate_fn
-        
+
         return dataloader
 
-    def _eval_step(self, tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask):
-        ret_dict = self(tokens_enc, tokens_dec, enc_mask, dec_mask, tokentype_ids=None, lm_labels=labels,)
-        tokens_loss = ret_dict['tokens_loss']
-        loss = self.loss_func(loss_mask, tokens_loss)
-        return loss, ret_dict
+    def process_global_batch(self, global_batch):
+        # FIXME: move to device correctly
+        # FIXME: move to precission correctly (fails with 16)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask =  (
+            global_batch["text_enc"],
+            global_batch["text_dec"],
+            global_batch["loss_mask"],
+            global_batch["labels"],
+            global_batch["enc_mask"],
+            global_batch["dec_mask"],
+        )
 
-    def _inference_step(self, batch, batch_idx, log_n_batches=10):
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
-        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
-                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
+        device = next(self.parameters()).device
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = [t.to(device) for t in (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)]
 
-        target_smiles = batch['target_smiles']
-        token_logits = ret_dict['token_logits']
-        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-
-        log_mol = True if batch_idx < log_n_batches else False # TODO enable logging in yaml config
-        metrics = self.calculate_metrics(token_logits=token_logits, loss_mask=loss_mask, labels=labels, 
-                                         tokens_enc=tokens_enc, enc_mask=enc_mask, target_smiles=target_smiles, batch_idx=batch_idx, log_char=False, log_mol=log_mol)
-
-        logs = {'loss': loss}
-        for metric_name, metric_value in metrics.items():
-            logs[metric_name] = metric_value
-        
-        return logs
+        return (tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask)
 
     def _inference_epoch_end(self, outputs, mode):
         results_dict = flatten_dict(outputs)
@@ -192,7 +137,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         # Calculate metric averages
         # TODO this reduces all metrics across all data parallel groups
         # if too slow, can only reduce loss instead
-        averaged_results = {} 
+        averaged_results = {}
         for metric_name, metric_list in results_dict.items():
             reduced_metric = average_losses_across_data_parallel_group(metric_list)
             logged_name = 'reduced_loss' if metric_name == 'loss' else metric_name
@@ -212,107 +157,52 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
 
         self.log_dict(logged_results, prog_bar=True)
 
-    def training_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting training loop')
-
-        # Log a few samples to check data parallel distribution
-        if (logging.get_verbosity() <= logging.DEBUG) and (batch_idx < 2):
-            target_smiles = batch['target_smiles']
-            data_parallel_world_size = parallel_state.get_data_parallel_world_size()
-            data_parallel_rank = parallel_state.get_data_parallel_rank()
-            logging.debug(f'First two samples from DP rank {data_parallel_rank}/{data_parallel_world_size} for batch {batch_idx}: {target_smiles[:2]}')
-
-        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = self.process_batch(batch)
-
-        assert tokens_enc.max() < self.tokenizer.vocab_size, AssertionError('Encoder tokens are larger than vocabulary')
-        assert tokens_dec.max() < self.tokenizer.vocab_size, AssertionError('Decoder tokens are larger than vocabulary')
-        assert labels.max() < self.tokenizer.vocab_size, AssertionError('Label tokens are larger than vocabulary')
-
-        loss, ret_dict = self._eval_step(tokens_enc=tokens_enc, tokens_dec=tokens_dec, loss_mask=loss_mask, 
-                                         labels=labels, enc_mask=enc_mask, dec_mask=dec_mask)
-        
-        # cache reduced loss while accumulating gradients
-        reduced_loss = average_losses_across_data_parallel_group([loss])
-        self._reduced_loss_buffer.append(reduced_loss[0])
-
-        if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-            # Reduced loss for logging.
-            average_reduced_loss = sum(self._reduced_loss_buffer) / len(self._reduced_loss_buffer)
-            lr = self._optimizer.param_groups[0]['lr']
-            consumed_samples = self.compute_consumed_samples(self.trainer.global_step - self.init_global_step)
-
-            logs = {'global_step': self.trainer.global_step,
-                    'reduced_loss': average_reduced_loss,
-                    'lr': lr,
-                    'consumed_samples': consumed_samples}
-
-            self.log_dict(logs)
-            self._reduced_loss_buffer = []
-
-        return loss
-
     def validation_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting validation epoch')
-        return self._inference_step(batch, batch_idx, log_n_batches=10)
+        loss_mean = super().validation_step(batch, batch_idx)
+        token_logits = self.validation_step_logits(batch, batch_idx)
+        tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask = \
+            self.process_global_batch(batch)
 
-    def test_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            logging.info('Starting test epoch')
-        return self._inference_step(batch, batch_idx, log_n_batches=10)
+        target_smiles = batch['target_smiles']
+        token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
+
+        log_n_batches=10
+        log_mol = True if batch_idx < log_n_batches else False # TODO enable logging in yaml config
+        metrics = self.calculate_metrics(token_logits=token_logits,
+                                         loss_mask=loss_mask,
+                                         labels=labels,
+                                         tokens_enc=tokens_enc,
+                                         enc_mask=enc_mask,
+                                         target_smiles=target_smiles,
+                                         batch_idx=batch_idx,
+                                         log_char=False,
+                                         log_mol=log_mol)
+
+        logs = {'loss': loss_mean}
+        for metric_name, metric_value in metrics.items():
+            logs[metric_name] = metric_value
+
+        # return loss_mean
+        return logs
 
     def validation_epoch_end(self, outputs):
+        if len(outputs) == 0:
+            return
+
         logging.info('Finishing validation epoch')
+        all_keys = list(outputs[0].keys())
+        new_outputs = {}
+        for k in all_keys:
+            new_outputs[k] = super().validation_epoch_end([o[k] for o in outputs])
+
         self._inference_epoch_end(outputs, mode='val')
 
     def test_epoch_end(self, outputs):
         logging.info('Finishing test epoch')
+        super().test_epoch_end(outputs)
         self._inference_epoch_end(outputs, mode='test')
 
-    def decode(self, tokens_enc, enc_mask, num_tokens_to_generate=None, encoder_hidden_states=None):
-        # TODO: Revert to version from MegatonLMEncoderDecoderModel when sampling from padding tokens prohibited
-        if num_tokens_to_generate is None:
-            num_tokens_to_generate=self._cfg.max_position_embeddings
-
-        if encoder_hidden_states is None:
-            encoder_hidden_states = itemgetter("enc_output")(
-                self(
-                    encoder_input_ids=tokens_enc,
-                    decoder_input_ids=None,
-                    encoder_attn_mask=enc_mask,
-                    decoder_attn_mask=None,
-                    tokentype_ids=None,
-                    lm_labels=None,
-                    enc_hidden_states=None,
-                    output_enc_hidden_only=True,
-                )
-            )
-        predicted_tokens_dec = (
-            torch.LongTensor([self.tokenizer.bos_id] * enc_mask.size(0)).unsqueeze(1).to(enc_mask.device)
-        )
-        for _ in range(num_tokens_to_generate):
-            dec_mask = predicted_tokens_dec != self.tokenizer.pad_id
-            token_logits = itemgetter("token_logits")(
-                self(
-                    encoder_input_ids=tokens_enc,
-                    decoder_input_ids=predicted_tokens_dec,
-                    encoder_attn_mask=enc_mask,
-                    decoder_attn_mask=dec_mask,
-                    tokentype_ids=None,
-                    lm_labels=None,
-                    enc_hidden_states=encoder_hidden_states,
-                    output_enc_hidden_only=False,
-                )
-            )
-            token_logits = tensor_parallel.gather_from_tensor_model_parallel_region(token_logits)
-            token_logits[:, :, self.tokenizer.vocab_size:] = -float('Inf') # never pick padded tokens
-            log_probs, token_ids = torch.max(nn.functional.log_softmax(token_logits, dim=-1), dim=-1)
-            predicted_tokens_dec = torch.cat([predicted_tokens_dec, token_ids[:, -1].unsqueeze(1)], 1)
-
-        return predicted_tokens_dec, log_probs
-
-    def sample_molecules(self, tokens_enc, enc_mask):
+    def sample_molecules(self, tokens_enc, enc_mask, hidden_states=None):
         """Autoregressively sample SMILES molecules from encoder hidden state
 
         Args:
@@ -326,7 +216,10 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
         self.freeze()
 
         # Decode encoder hidden state to tokens
-        predicted_tokens_ids, log_probs = self.decode(tokens_enc, enc_mask, self._cfg.max_position_embeddings)
+        predicted_tokens_ids, log_probs = self.decode(tokens_enc,
+                                                      enc_mask,
+                                                      self._cfg.max_position_embeddings,
+                                                      enc_output=hidden_states)
         predicted_tokens_ids = predicted_tokens_ids.cpu().detach().numpy().tolist()
 
         # Prune tokens by eos / padding and convert to SMILES
@@ -337,7 +230,7 @@ class MegaMolBARTModel(MegatronLMEncoderDecoderModel):
             else:
                 # NB: this is slightly different from previous version in that pad tokens can be in the middle of sequence
                 predicted_tokens_ids[item] = [id for id in predicted_tokens_ if id != self.tokenizer.pad_id]
-            
+
         predicted_tokens_text = self.tokenizer.ids_to_tokens(predicted_tokens_ids)
         sampled_smiles = self.tokenizer.tokens_to_text(predicted_tokens_text)
 

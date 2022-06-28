@@ -1,0 +1,35 @@
+name: MegaMolBART_Inference
+desc: Minimum configuration for initializing a MegaMolBART model.
+
+model:
+  model_path: /models/Small_Span_Aug_2f63a83b_220424_Draco_nodes_4_gpus_16-PORTED.nemo
+  parallel_size: 1
+
+  tokenizer:
+    vocab_path: /models/vocab/megamolbart.vocab
+    model_path: /models/vocab/megamolbart.model
+
+  data:
+    encoder_augment: False
+    encoder_mask: False
+    decoder_augment: False
+    decoder_mask: False
+    mask_prob: 0
+
+formatters:
+  simple:
+    format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    stream: ext://sys.stdout
+  file:
+    class: logging.FileHandler
+    formatter: simple
+    filename: /logs/nemo_megamolbart.log
+root:
+  level: INFO
+  handlers: [console, file]
+
+disable_existing_loggers: false

@@ -80,7 +80,7 @@ def _build_train_valid_test_datasets(
     logging.info(f'Loading data from {dataset_paths}')
     dataset_list = []
     if dataset_format == "csv":
-        dataset = MoleculeCsvDataset(dataset_paths=dataset_paths, cfg=cfg, trainer=trainer)
+        dataset = MoleculeCsvDataset(dataset_paths=dataset_paths, cfg=cfg)
     elif dataset_format == "bin":
         for path in dataset_paths:
             data = MoleculeBinaryDataset(filepath=path, cfg=cfg, trainer=trainer, num_samples=num_samples)
@@ -103,26 +103,32 @@ def build_train_valid_test_datasets(
     train_valid_test_num_samples: List[int]
 ):
      # TODO metadata_file is currently not used
-     
+
     cfg = deepcopy(cfg)
     with open_dict(cfg):
         dataset_path = cfg.pop('dataset_path', '')
-        dataset_files = cfg.pop('dataset_files')
+        # dataset = cfg.pop('dataset')
         metadata_file = cfg.pop('metadata_file', None)
         dataset_format = cfg.pop('dataset_format')
 
+        ds_train = cfg.dataset.train
+        ds_val = cfg.dataset.val
+        ds_test = cfg.dataset.test
+
+        cfg.pop('dataset')
+
     # Build individual datasets.
-    filepath = os.path.join(dataset_path, 'train', dataset_files)
+    filepath = os.path.join(dataset_path, 'train', ds_train)
     metadata_path = os.path.join(dataset_path, 'train', metadata_file) if metadata_file else None
     train_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[0],
                                                      filepath, metadata_path, dataset_format)
 
-    filepath = os.path.join(dataset_path, 'val', dataset_files)
+    filepath = os.path.join(dataset_path, 'val', ds_val)
     metadata_path = os.path.join(dataset_path, 'val', metadata_file) if metadata_file else None
     validation_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[1],
                                                           filepath, metadata_path, dataset_format)
 
-    filepath = os.path.join(dataset_path, 'test', dataset_files)
+    filepath = os.path.join(dataset_path, 'test', ds_test)
     metadata_path = os.path.join(dataset_path, 'test', metadata_file) if metadata_file else None
     test_dataset = _build_train_valid_test_datasets(cfg, trainer, train_valid_test_num_samples[2],
                                                     filepath, metadata_path, dataset_format)
