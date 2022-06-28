@@ -54,22 +54,22 @@ For SLURM, once a working bash script has been created, consecutive training run
 ### Data Preprocessing
 We support conversion of csv data to NeMo format binary data. The megamolbart_pretrain.py script can be used to preprocess the data into binary.
 Copy paste below fields into the *data* field of your config.
-"""
+```
 model:
   data:
     dataset_format: bin
     num_enumerations: 5 #You can change this number of how many every enumerations you want on every SMILE string.
-"""
+```
 ### Training
-For training, make the following changes in teh *data* field of your config
-"""
+For training, make the following changes in the *data* field of your config
+```
 model:
   data:
     dataset_format: bin
     dataset:
-      train: x[000..146].csv
-      test: x[000..10].csv
-      val: x000.csv
+      train: x[000..146]
+      test: x[000..10]
+      val: x000
 """
 All files from 000 to 146 will be read for training. Do NOT add any extension to the data files here. The code looks for x[000...146].bin and x[000...146].idx on it's own. Giving an extension would mean that the code looks for x000.bin.bin and x000.bin.idx files, it will lead to File Not Found Errors.
 

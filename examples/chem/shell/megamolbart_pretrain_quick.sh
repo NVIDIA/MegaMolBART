@@ -4,13 +4,15 @@
 ####
 
 ### CONFIG ###
-MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_small_span_aug
+MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
+DO_TRAINING="True" # Set to False to process data, then True to train model
 DATA_FORMAT='csv' # "csv" or "bin"
 DATA_MOUNT=/data/zinc_csv
 CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
 RESULTS_MOUNT=${OUTPUT_MOUNT}/nemo_experiments/${DATA_FORMAT}/${MEGAMOLBART_CONFIG_FILE}
+DATA_FILES_SELECTED=x_OP_000..001_CL_ #x000
 ### END CONFIG ###
 
 

@@ -17,25 +17,24 @@
 "Take text files as input and output tokenized data in binarized format"
 ##TODO Merge it with the CSV format data preprocessing script
 
-import argparse
-import gzip
-import json
+import logging
 import os
-import sys
 from glob import glob
-from omegaconf import DictConfig, OmegaConf
-from dataclasses import dataclass
-from nemo.core.config.modelPT import NemoConfig
-import numpy as np
-#import ftfy
-import torch
-from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
-from nemo.collections.nlp.data.language_modeling.megatron import indexed_dataset
-from rdkit import Chem
-from pysmilesutils.augment import SMILESAugmenter
-from functools import partial
+from omegaconf import OmegaConf
 import multiprocessing
 import re
+from typing import List
+
+from rdkit import Chem
+import numpy as np
+import torch
+
+
+from nemo.collections.nlp.data.language_modeling.megatron import indexed_dataset
+from nemo.utils import logging
+
+from nemo_chem.tokenizer import MolEncTokenizer, MolEncTokenizerFromVocabFileConfig
+
 
 DATAFORMAT_EXT = [".csv", ".CSV"]
 
@@ -64,28 +63,35 @@ class CsvToBinary:
         self.inputfiles = [ifile for path, subdir, files in os.walk(self.input_dir)
                       for dformat in DATAFORMAT_EXT
                       for ifile in glob(os.path.join(path, "*" + dformat))]
+
         if len(self.inputfiles) == 0:
             raise FileNotFoundError('No CSV files found in folder.')
         else:
-            print(f'Found {len(self.inputfiles)} .csv files.') 
+            logging.info(f'Found {len(self.inputfiles)} .csv files.') 
 
-        ## Make sure there are no bin, idx files inside the output directory
-        # Initialize a dataset writer
-        os.makedirs(self.out_dir, exist_ok = True)
-        os.access(self.out_dir, os.W_OK)
-        # Create an identical folder structure in the output directory as the input dir.
-        for path, subdir, files in os.walk(self.input_dir):
-            subdir = path[len(self.input_dir)+1:]
-            os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
+        # If the destination path is not the same as where the CSVs exist, make an identical
+        # folder structure as the input directory at the destination
+        if self.out_dir != self.input_dir:
+            os.makedirs(self.out_dir, exist_ok=True)
+            os.access(self.out_dir, os.W_OK)
+            # Create an identical folder structure in the output directory as the input dir.
+            for path, subdir, files in os.walk(self.input_dir):
+                subdir = path[len(self.input_dir)+1:]
+                os.makedirs(os.path.join(self.out_dir, subdir), exist_ok=True)
 
-        self.outbinfiles = []
+        outbinfiles = []
+        outidxfiles = []
         for path, subdir, files in os.walk(self.out_dir):
             outbinfiles = [ifile for path, subdir, files in os.walk(self.out_dir)
                           for dformat in DATAFORMAT_EXT
                           for ifile in glob(os.path.join(path, "*.bin"))]
-
-        assert len(self.outbinfiles) == 0, "Found existing .bin files at the output location %s."
-        "Cannot overwrite the existing data. Please delete or provide a new output location." % outbinfiles
+            assert len(outbinfiles) == 0, "Found existing .bin files at the output location %s."
+            "Cannot overwrite the existing data. Please delete and retry." % outbinfiles
+            outidxfiles = [ifile for path, subdir, files in os.walk(self.out_dir)
+                          for dformat in DATAFORMAT_EXT
+                          for ifile in glob(os.path.join(path, "*.bin"))]
+            assert len(outidxfiles) == 0, "Found existing .idx files at the output location %s. "
+            "Cannot overwrite the existing data. Please delete and retry." % outidxfiles
 
 
     def _initialize_tokenizer(self):
@@ -100,12 +106,11 @@ class CsvToBinary:
 
         return tokenizer
 
-    def prepare_dataset(self):
-        sizes = []
-        batched_smiles = []
+    def prepare_dataset(self, num_workers=25):
         pool = multiprocessing.Pool(self.num_workers)
+
         for inputfile in self.inputfiles:
-            #ignore metadata.csv files
+            # Ignore metadata.csv files
             if "metadata.csv" in inputfile: continue
             subfolder_path = os.path.dirname(inputfile[len(self.input_dir)+1:])
             ifilebasename = os.path.splitext(os.path.basename(inputfile))[0]
@@ -113,31 +118,38 @@ class CsvToBinary:
             index_file = os.path.join(self.out_dir, subfolder_path, ifilebasename + ".idx")
 
             dataset_builder = indexed_dataset.make_builder(output_file, impl="mmap", vocab_size=self.tokenizer.vocab_size)
+            
             ifile = open(inputfile, "r")
-            out_iterator = pool.imap(self._process_data, ifile, 25)
+            out_iterator = pool.imap(self._process_data, ifile, num_workers)
             for enc_token_ids in out_iterator:
-                #we may return an empty list when the row doesn't match with our regex query
+                # We may return an empty list when the row doesn't match with our regex query
                 if not enc_token_ids: continue
-                ## If num_enumerations > 0, we will have more than one element
-                #in the list and we can't convert the list of lists into torch
-                #tensor because they all may have different lengths.
-                #Padding should only be done during training, so we cannot pad them here.
-                for enc_token_id in enc_token_ids:
+
+                # If num_enumerations > 0, we will have more than one element
+                # in the list and we can't convert the list of lists into torch
+                # tensor because they all may have different lengths.
+                # Padding should only be done during training, so we cannot pad them here.
+                for num, enc_token_id in enumerate(enc_token_ids):
                     dataset_builder.add_item(torch.tensor(enc_token_id))
+                logging.debug(f'Created {num} canonicalized smiles.')
+
             dataset_builder.end_document()
             dataset_builder.finalize(index_file)
 
     def _process_data(self, line):
         # First column is zincID and second column is the smiles string
         all_smiles = []
-        #Ignore header
-        ##TODO: This is specific to the current AZ format. Make this a config param in future.
+
+        # Ignore header
+        # TODO: This is specific to the current AZ format. Make this a config param in future.
         if not (re.match('^[0-9]+', line)): return all_smiles
         zinc_id, smiles = line.strip().split(",")
         all_smiles.append(smiles)
         mol = Chem.MolFromSmiles(smiles)
         atom_order: List[int] = list(range(mol.GetNumAtoms()))
-        while(self.num_enumerations):
+
+        num_enumerations = self.num_enumerations # NOTE: Don't increment self.num_enumerations to preserve starting value
+        while(num_enumerations):
             np.random.shuffle(atom_order)
             aug_mol = Chem.RenumberAtoms(mol, atom_order)
             try:
@@ -145,9 +157,10 @@ class CsvToBinary:
                 if aug_smiles not in all_smiles:
                     all_smiles.append(aug_smiles)
             except:
-                ## If RDKit couldn't generate augmented smile, we ignore and try again
+                # If RDKit couldn't generate augmented smile, we ignore and try again
                 pass
-            self.num_enumerations -= 1
+            num_enumerations -= 1
+
         token_output = self.tokenizer.tokenize(all_smiles, pad=False)
         enc_token_ids = self.tokenizer.convert_tokens_to_ids(token_output["original_tokens"])
         return enc_token_ids
