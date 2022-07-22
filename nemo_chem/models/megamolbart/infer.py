@@ -22,13 +22,17 @@ class NeMoMegaMolBARTWrapper():
     Implements functions to infer using MegaMolBART model
     '''
 
-    def __init__(self, model_cfg=None) -> None:
+    def __init__(self,
+                 model_cfg=None,
+                 random_weights=False) -> None:
         super().__init__()
 
         if model_cfg is None:
             # TODO: Create a default global variable for this
             model_cfg = OmegaConf.load(
                 '/workspace/nemo_chem/examples/chem/conf/infer.yaml')
+        if random_weights:
+            model_cfg['model']['model_path'] = None
 
         self.model = self.load_model(model_cfg)
         self.cfg = self.model._cfg
@@ -106,27 +110,23 @@ class NeMoMegaMolBARTWrapper():
         )
 
         app_state = AppState()
-        if args.tensor_model_parallel_size > 1 or args.pipeline_model_parallel_size > 1:
-            app_state.model_parallel_size = args.tensor_model_parallel_size * args.pipeline_model_parallel_size
-            (
-                app_state.tensor_model_parallel_rank,
-                app_state.pipeline_model_parallel_rank,
-                app_state.model_parallel_size,
-                app_state.data_parallel_size,
-                app_state.pipeline_model_parallel_split_rank,
-            ) = fake_initialize_model_parallel(
-                world_size=app_state.model_parallel_size,
-                rank=trainer.global_rank,
-                tensor_model_parallel_size_=args.tensor_model_parallel_size,
-                pipeline_model_parallel_size_=args.pipeline_model_parallel_size,
-                pipeline_model_parallel_split_rank_=args.pipeline_model_parallel_split_rank,
+        if model_cfg.model.model_path is not None:
+            model = MegaMolBARTModel.restore_from(
+                restore_path=model_cfg.model.model_path,
+                trainer=trainer,
+                save_restore_connector=NLPSaveRestoreConnector(),
             )
+        else:
+            # Initialize with random weights
+            cfg = OmegaConf.load(
+                '/workspace/nemo_chem/examples/chem/conf/megamolbart_pretrain_base.yaml')
+            cfg.model.num_layers=6
+            cfg.model.hidden_size=512
+            cfg.model.num_attention_heads=8
+            cfg.model.precision = cfg.trainer.precision
 
-        model = MegaMolBARTModel.restore_from(
-            restore_path=model_cfg.model.model_path,
-            trainer=trainer,
-            save_restore_connector=NLPSaveRestoreConnector(),
-        )
+            model = MegaMolBARTModel(cfg.model, trainer)
+
         model.freeze()
 
         return model
@@ -158,22 +158,15 @@ class NeMoMegaMolBARTWrapper():
         if isinstance(smis, str):
             smis = [smis]
 
-        tokens_enc, _ = self._tokenize(smis)
-        position_ids = torch.arange(tokens_enc.shape[1],
-                                    dtype=torch.int64,
-                                    device=tokens_enc.device)
-
-        embedding = self.model.enc_dec_model.encoder_embedding(tokens_enc, position_ids)
-        embedding = torch.mean(embedding, dim=1)
-        return embedding
+        hiddens, _ = self.smis_to_hidden(smis)
+        return torch.mean(hiddens, dim=1)
 
     def hidden_to_smis(self, hidden_states, enc_mask):
 
         predicted_tokens_ids, _ = self.model.decode(None,
                                                     enc_mask,
                                                     self.cfg.max_position_embeddings,
-                                                    enc_output=hidden_states,
-                                                    ignore_ids=[self.tokenizer.mask_id])
+                                                    enc_output=hidden_states)
 
         predicted_tokens_ids = predicted_tokens_ids.cpu().detach().numpy().tolist()
         for i, predicted_token_id in enumerate(predicted_tokens_ids):
@@ -201,12 +194,12 @@ class NeMoMegaMolBARTWrapper():
         if sampling_method == 'greedy-perturbate':
             scaled_radius = sampling_kwarg['scaled_radius']
             sample_masks = enc_masks.repeat_interleave(num_samples, 0)
-            sample_emb = hidden_states.repeat_interleave(num_samples, 0)
-            sample_emb = sample_emb + (scaled_radius * torch.randn(sample_emb.shape).to(sample_emb.device))
+            protrubed_hiddens = hidden_states.repeat_interleave(num_samples, 0)
+            protrubed_hiddens = protrubed_hiddens + (scaled_radius * torch.randn(protrubed_hiddens.shape).to(protrubed_hiddens.device))
 
-            samples = self.hidden_to_smis(sample_emb, sample_masks)
+            samples = self.hidden_to_smis(protrubed_hiddens, sample_masks)
             if return_embedding:
-                embs = self.smis_to_embedding(samples)
+                embs = torch.mean(protrubed_hiddens, dim=1)
         else:
             raise ValueError(f'Invalid samping method {sampling_method}')
 

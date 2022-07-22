@@ -84,7 +84,7 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidian/clara-lifesciences/megamolbart_training_nemo}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/t6a4nuz8vrsr/megamolbart:0.2.0-ea2}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
@@ -95,12 +95,8 @@ REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
 GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=UserName:PersonalToken}
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
-###############################################################################
-#
-# if $LOCAL_ENV file exists, source it to specify my environment
-#
-###############################################################################
 
+# if $LOCAL_ENV file exists, source it to specify my environment
 if [ -e ./$LOCAL_ENV ]
 then
     echo sourcing environment from ./$LOCAL_ENV
@@ -111,12 +107,7 @@ else
     write_env=1
 fi
 
-###############################################################################
-#
 # If $LOCAL_ENV was not found, write out a template for user to edit
-#
-###############################################################################
-
 if [ $write_env -eq 1 ]; then
     echo MEGAMOLBART_CONT=${MEGAMOLBART_CONT} >> $LOCAL_ENV
     echo PROJECT_PATH=${PROJECT_PATH} >> $LOCAL_ENV
@@ -131,15 +122,15 @@ if [ $write_env -eq 1 ]; then
     echo GITHUB_BRANCH=${GITHUB_BRANCH} >> $LOCAL_ENV
 fi
 
-###############################################################################
-#
-#          shouldn't need to make changes beyond this point
-#
-###############################################################################
-
 PROJECT_MOUNT_PATH="/workspace/nemo_chem"
 DATA_MOUNT_PATH="/data"
 RESULT_MOUNT_PATH='/result/nemo_experiments'
+
+# Additional variables when send in .env file, is used in the script:
+# NEMO_PATH         Path to NeMo source cdoe.
+# NEMO_BRANCH       Used only for building containers with non-std NeMo versions
+# CHEM_BENCH_PATH   Path to chembench source code. Used for generating benchmark
+#                   data
 
 # Compare Docker version to find Nvidia Container Toolkit support.
 # Please refer https://github.com/NVIDIA/nvidia-docker
@@ -169,45 +160,55 @@ DOCKER_CMD="docker run \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     -e HOME=${PROJECT_MOUNT_PATH} \
+    -e TMPDIR=/tmp/ \
     -e NUMBA_CACHE_DIR=/tmp/ \
-    -w ${PROJECT_MOUNT_PATH} \
-    -u $(id -u):$(id -u)"
-
-
-function version {
-    if [ ${GITHUB_BRANCH} == '__dev__' ]; then
-        echo "Using dev mode -- latest commit of local repo will be used."
-        GITHUB_SHA=$(git rev-parse HEAD | head -c7)
-        GITHUB_BRANCH=${GITHUB_SHA}
-    else
-        GITHUB_SHA=$(git ls-remote origin refs/heads/${GITHUB_BRANCH} | head -c7)
-    fi
-
-    echo "${GITHUB_SHA}";
-}
+    -w ${PROJECT_MOUNT_PATH} "
 
 
 build() {
-    set -e
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
+    local PACKAGE=0
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -p|--pkg)
+                PACKAGE=1
+                shift
+                shift
+                ;;
+            *)
+                echo "Unknown option $1. Please --version to specify a version."
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ ${PACKAGE} -eq 1 ]
+    then
+        echo "Coping model from ${MODEL_PATH}/NeMo_MegaMolBart-Small_Span_Aug.nemo..."
+        rm -rf ./.tmp/
+        mkdir -p ./.tmp/models
+        cp ${MODEL_PATH}/NeMo_MegaMolBart-Small_Span_Aug.nemo ./.tmp/models
+    fi
 
     echo "Building MegaMolBART training container..."
+    set -x
     docker build --network host \
         -t ${MEGAMOLBART_CONT} \
         -t ${IMG_NAME[0]}:latest \
         --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
         --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
         --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
-        -f Dockerfile.nemo_chem \
+        --build-arg NEMO_BRANCH=${NEMO_BRANCH} \
+        --build-arg PACKAGE=${PACKAGE} \
+        -f setup/Dockerfile \
         .
-
-    set +e
+    set +x
     exit
 }
 
 
 push() {
-    VERSION=$(version)
     while [[ $# -gt 0 ]]; do
         case $1 in
             -v|--version)
@@ -224,13 +225,16 @@ push() {
 
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
 
-    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${VERSION}
-    docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${GITHUB_BRANCH}
-
     docker login ${REGISTRY} -u ${REGISTRY_USER} -p ${REGISTRY_ACCESS_TOKEN}
     docker push ${IMG_NAME[0]}:latest
-    docker push ${IMG_NAME[0]}:${VERSION}
-    docker push ${IMG_NAME[0]}:${GITHUB_BRANCH}
+    docker push ${MEGAMOLBART_CONT}
+
+    if [ ! -z "${VERSION}" ];
+    then
+        docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${VERSION}
+        docker push ${IMG_NAME[0]}:${VERSION}
+    fi
+
     exit
 }
 
@@ -239,12 +243,22 @@ setup() {
     mkdir -p ${DATA_PATH}
     mkdir -p ${RESULT_PATH}
 
-    DEV_PYTHONPATH="/workspace/nemo_chem"
-
+    DEV_PYTHONPATH="/workspace/nemo_chem:/workspace/nemo_chem/generated"
     if [ ! -z "${NEMO_PATH}" ];
     then
         DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/workspace/nemo "
         DEV_PYTHONPATH="${DEV_PYTHONPATH}:/workspace/nemo"
+    fi
+
+    if [ ! -z "${CHEM_BENCH_PATH}" ];
+    then
+        DOCKER_CMD="${DOCKER_CMD} -v ${CHEM_BENCH_PATH}:/workspace/chembench "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/workspace/chembench"
+    fi
+
+    if [ ! -z "${MODEL_PATH}" ];
+    then
+        DOCKER_CMD="${DOCKER_CMD} -v ${MODEL_PATH}:/models"
     fi
 
     DOCKER_CMD="${DOCKER_CMD} --env PYTHONPATH=${DEV_PYTHONPATH}"
@@ -273,13 +287,14 @@ run() {
 attach() {
     set -x
     DOCKER_CMD="docker exec"
-    CONTAINER_ID=$(docker ps | grep nemo_megamolbart_dev | cut -d' ' -f1)
+    CONTAINER_ID=$(docker ps | grep nemo_megamolbart | cut -d' ' -f1)
     ${DOCKER_CMD} -it ${CONTAINER_ID} /bin/bash
     exit
 }
 
 
 jupyter() {
+    setup
     ${DOCKER_CMD} -it ${MEGAMOLBART_CONT} jupyter-lab --no-browser \
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
@@ -309,9 +324,9 @@ case $1 in
         ;;
     jupyter)
         $1
+        exit 0
         ;;
     *)
         usage
         ;;
 esac
-

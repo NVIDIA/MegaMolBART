@@ -2,7 +2,7 @@ name: MegaMolBART_Inference
 desc: Minimum configuration for initializing a MegaMolBART model.
 
 model:
-  model_path: /models/Small_Span_Aug_2f63a83b_220424_Draco_nodes_4_gpus_16-PORTED.nemo
+  model_path: /models/MegaMolBART_20220714.nemo
   parallel_size: 1
 
   tokenizer:

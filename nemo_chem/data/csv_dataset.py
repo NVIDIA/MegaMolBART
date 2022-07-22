@@ -73,12 +73,12 @@ class MoleculeCsvDataset(CSVMemMapDataset):
                  cfg,
                  workers=None):
         super().__init__(
-        dataset_paths=dataset_paths,
-        newline_int=cfg.get('newline_int'), 
-        header_lines=cfg.get('header_lines'), # skip first N lines
-        workers=workers,
-        tokenizer=None,
-        sort_dataset_paths=cfg.get('sort_dataset_paths'),
-        data_col=cfg.get('data_col'),
-        data_sep=cfg.get('data_sep'),
-    )
+            dataset_paths=dataset_paths,
+            newline_int=cfg.get('newline_int'),
+            header_lines=cfg.get('header_lines'), # skip first N lines
+            workers=workers,
+            tokenizer=None,
+            sort_dataset_paths=cfg.get('sort_dataset_paths'),
+            data_col=cfg.get('data_col'),
+            data_sep=cfg.get('data_sep'),
+        )

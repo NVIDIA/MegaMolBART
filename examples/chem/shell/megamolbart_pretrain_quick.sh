@@ -5,14 +5,18 @@
 
 ### CONFIG ###
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
-DO_TRAINING="True" # Set to False to process data, then True to train model
 DATA_FORMAT='csv' # "csv" or "bin"
-DATA_MOUNT=/data/zinc_csv
+DATA_MOUNT=/data/zinc_csv_split
 CODE_MOUNT=/workspace/nemo_chem
 OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
 RESULTS_MOUNT=${OUTPUT_MOUNT}/nemo_experiments/${DATA_FORMAT}/${MEGAMOLBART_CONFIG_FILE}
 DATA_FILES_SELECTED=x_OP_000..001_CL_ #x000
+
+TRAINING_ARGS="exp_manager.exp_dir=${RESULTS_MOUNT}"
+TRAINING_ARGS="${TRAINING_ARGS} exp_manager.wandb_logger_kwargs.offline=${WANDB_LOG}"
+TRAINING_ARGS="${TRAINING_ARGS} model.data.dataset_path=${DATA_MOUNT}"
+TRAINING_ARGS="${TRAINING_ARGS} model.data.dataset_format=${DATA_FORMAT}"
 ### END CONFIG ###
 
 
@@ -46,11 +50,8 @@ execute() {
     python megamolbart_pretrain.py \
         --config-path=conf \
         --config-name=${MEGAMOLBART_CONFIG_FILE} \
-        do_training=${DO_TRAINING} \
-        exp_manager.exp_dir=${RESULTS_MOUNT} \
-        exp_manager.wandb_logger_kwargs.offline="False" \
-        model.data.dataset_path=${DATA_MOUNT} \
-        +model.data.dataset_format=${DATA_FORMAT}
+        do_training=${DO_TRAINING}
+        ${TRAINING_ARGS}
     set +x
 }
 
@@ -84,6 +85,11 @@ parse_args() {
                 ;;
             -c|--config)
                 MEGAMOLBART_CONFIG_FILE="$2"
+                shift
+                shift
+                ;;
+            -a|--args)
+                TRAINING_ARGS="${TRAINING_ARGS} $2"
                 shift
                 shift
                 ;;

@@ -5,8 +5,8 @@ seed: 42
 restore_from_path: null # used when starting from a .nemo file
 
 trainer:
-  devices: 1 # number of GPUs or CPUs
-  num_nodes: 1
+  devices: 8 # number of GPUs or CPUs
+  num_nodes: 8
   precision: 16 # 16, 32
   accelerator: gpu # gpu, cpu
   max_epochs: null # use max_steps instead with NeMo Megatron models
@@ -23,7 +23,7 @@ trainer:
   replace_sampler_ddp: False # use NeMo Megatron samplers
 
 model:
-  name: ${name}
+  name: ${name}-united-token_head
   # model parallelism
   global_batch_size: 32
   micro_batch_size: 32
@@ -62,6 +62,8 @@ model:
   decoder_arch: 'transformer' # Options ['transformer', 'normformer']
   activation: 'gelu' # Options ['gelu', 'geglu', 'swiglu', 'reglu']
   headscale: False # Whether to learn extra parameters that scale the output of the each self-attention head.
+  share_word_embeddings: True # If True share encoder/decoder embeddings
+  share_decoder_tokens_head_embeddings: False # If True share decoder embeddings and decoder projection to logits
 
   tokenizer:
     library: 'regex'
@@ -71,11 +73,12 @@ model:
     merge_file: null
 
   data:
+    links_file: /workspace/nemo_chem/examples/chem/conf/dataset/ZINC-downloader-test.txt
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
-    dataset: # inclusive range of data files to load or can load a single file, e.g. x000.csv
-      train: x[000..146].csv
-      test: x[000..146].csv
-      val:  x[000..146].csv
+    dataset: # inclusive range of data files to load or can load a single file, e.g. x000
+      train: x[000..146]
+      test: x[000..146]
+      val: x000
     encoder_augment: True # always True
     encoder_mask: True # task = mask(span)_aug
     decoder_augment: True # task = mask(span)_aug
@@ -88,6 +91,7 @@ model:
     num_enumerations: 5
     dataloader_type: single
     dataset_format: csv
+    canonicalize_input: true
 
   optim:
     name: fused_adam # fused optimizers used by Megatron models

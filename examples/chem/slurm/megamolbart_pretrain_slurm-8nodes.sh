@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --nodes=1
+#SBATCH --nodes=8
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8      # n gpus per machine <required>
 #SBATCH --mail-type=FAIL
 #SBATCH --time=8:00:00
 #SBATCH --partition=batch_dgx1_m2
 #SBATCH --account=ent_aiapps_omics
-#SBATCH --job-name=bionemo-ea2-untied-token_head
+#SBATCH --job-name=bionemo-ea2-untied-token_head-8nodes-val
 #SBATCH --nv-meta=ml-model.megamolbart
 #SBATCH --mem=0                 # all mem avail
 #SBATCH --overcommit
@@ -31,7 +31,7 @@ set -x
 
 MEGAMOLBART_CONT="gitlab-master.nvidia.com#mlivne/nemo_containers:megamolbart-r1.10.0-ea2-untied-weights"
 DATA_PATH="/gpfs/fs1/projects/ent_aiapps/users/rilango/bionemo/data"
-RESULT_PATH="/gpfs/fs1/projects/ent_aiapps/users/mlivne/results/bionemo/2022-07-12-ea2-untied"
+RESULT_PATH="/gpfs/fs1/projects/ent_aiapps/users/mlivne/results/bionemo/2022-07-12-ea2-untied-node8-val"
 WANDB_API_KEY="1dadc548dae732414fcb97918f25942325315029"
 
 MOUNTS="$DATA_PATH:/data,$RESULT_PATH:/result"
@@ -50,8 +50,8 @@ python megamolbart_pretrain.py \
     --config-name=megamolbart_pretrain_small_span_aug \
     ++trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
     ++trainer.gpus=${SLURM_NTASKS_PER_NODE} \
-    model.global_batch_size=32 \
-    model.micro_batch_size=4 \
+    model.global_batch_size=16384 \
+    model.micro_batch_size=256 \
     model.tokenizer.model=/opt/nvidia/nemo_chem/models/vocab/megamolbart.model \
     model.tokenizer.vocab_file=/opt/nvidia/nemo_chem/models/vocab/megamolbart.vocab \
     model.data.links_file=/opt/nvidia/nemo_chem/examples/chem/conf/dataset/ZINC-downloader-test.txt

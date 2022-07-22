@@ -174,5 +174,13 @@ examples/neural_graphs/*.chkpt
 examples/neural_graphs/*.yml
 
 .hydra/
-nemo_experiments/
+.cupy/
+.fontconfig/
+.gnupg/
+.jupyter/
+.local/
+.netrc
+.tmp/
+lightning_logs/
+*.nemo
 

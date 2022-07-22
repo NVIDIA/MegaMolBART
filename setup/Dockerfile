@@ -13,12 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# FIXME: update to NeMo 1.10 image
-FROM nvcr.io/nvidia/nemo:22.03
+# TODO: Fix the image for GA
+FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.10.0-megamolbar
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH
-ARG NEMO_CHEM_HOME=/workspace/nemo_chem
+ARG NEMO_BRANCH
+ARG NEMO_CHEM_HOME=/opt/nvidia/nemo_chem
+ARG NEMO_HOME=/opt/nvidia/nemo
 ARG CONDA_ENV=base
+ARG PACKAGE=0
 
 # Activating base environment
 RUN echo "source activate ${CONDA_ENV}" > /etc/bash.bashrc
@@ -35,26 +38,34 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 ## Setup - Install and upgrade additional packages
 RUN pip install --upgrade numpy wandb
 RUN pip install --upgrade einops
-COPY conda/env.yml /tmp/env.yml
+COPY setup/conda/env.yml /tmp/env.yml
 RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
 
 ## PySMILES
 RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
     && cd /opt/pysmilesutils; pip install .
 
-# TODO: switch to public repo when available
-# RUN git clone https://github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
-## NeMo_MegaMolBART
-RUN git clone https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME} \
-    && cd ${NEMO_CHEM_HOME} \
-    && git checkout ${GITHUB_BRANCH}
+RUN git clone --branch ${GITHUB_BRANCH} \
+    https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME}
 
 RUN cd ${NEMO_CHEM_HOME} && conda run -n ${CONDA_ENV} pip install -e .
 
 # Recompile Megatron helpers -- NOTE this will need to be done if PYTHONPATH changes later
-ENV PYTHONPATH=${NEMO_CHEM_HOME}:$PYTHONPATH
+ENV PYTHONPATH=${NEMO_CHEM_HOME}:${NEMO_CHEM_HOME}/generated:${NEMO_HOME}:$PYTHONPATH
+ENV PACKAGE=${PACKAGE}
+ENV NEMO_CHEM_HOME=${NEMO_CHEM_HOME}
+ENV NEMO_HOME=${NEMO_HOME}
+ENV NEMO_BRANCH=${NEMO_BRANCH}
+
 RUN NEMO_PATH=$(python -c 'import nemo; print(nemo.__path__[0])') && \
    cd ${NEMO_PATH}/collections/nlp/data/language_modeling/megatron && \
    make
 
+COPY ./.tmp/ /tmp/
+COPY ./setup/config_model.sh /tmp
+COPY ./setup/startup.sh /opt/nvidia
+RUN bash /tmp/config_model.sh ${PACKAGE}
 WORKDIR ${NEMO_CHEM_HOME}
+COPY ./.tmp/ /tmp/
+
+CMD [ "bash", "-c", "/opt/nvidia/startup.sh"]

@@ -1,30 +1,28 @@
-# MegaMolBART Getting Started Guide
+# Quickstart Guide
 
 ## Introduction
 
-MegaMolBART is a deep learning model for small molecule drug discovery and cheminformatics based on SMILES. More information on MegaMolBART can be found on [NGC](add link).
-
-MegaMolBART relies on NeMo 1.7.2. NeMo provides a robust environment for developing, training, and deploying deep learning models, including Megatron models. NeMo provides enhancements to PyTorch Lighting such as hyperparameter configuarbility with yaml files and checkpoint management. It also has libraries for the development and training of large transformer models, such as MegaMolBART, that make multi-GPU, multi-node training with data parallelism, model parallelism, and mixed precision easily configurable. The [NeMo User Guide](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/) contains more information about all of these features.
+The following Quickstart guide contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster. The [README](./README.md) contains additional information that will be of use for extensive code development or model configuration changes will be made.
 
 ## Logging with Tensorboard and Weights and Biases
 
-NeMo provides optional logging with Tensorboard and Weights and Biases. Use of Weights and Biases is optional, but highly recommended. All that is required is an account and a [API key](https://docs.wandb.ai/guides/track/public-api-guide).
+NeMo provides optional logging with Tensorboard and Weights and Biases. Use of Weights and Biases is optional, but highly recommended. All that is required is an account and an [API key](https://docs.wandb.ai/guides/track/public-api-guide).
 
 ## Docker Container
 
-The latest docker container can be downloaded from [NGC](link added at release). A Dockerfile is also available within the [repo](https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/main/Dockerfile.nemo_chem) which can be used to adapt the container to your needs.
+The latest docker container can be downloaded from [NGC](https://ngc.nvidia.com/containers/t6a4nuz8vrsr:megamolbart/tags). A [Dockerfile](./setup/Dockerfile) is also available which can be used to adapt the container to your needs.
 
 The following are best practices for mounting volumes for data, results, and code within the container:
 
-- `/data` : the directory which will container the data (see Data Processing) should be mounted within the container.
+- `/data` : the directory which will container the data (see Data Processing section) should be mounted within the container.
 - `/result` : training results, including logs and checkpoints
-- `/workspace/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Development below), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
+- `/workspace/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Development section), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
 
 ## Data Processing
 
-MegaMolBART uses a subset of ZINC15 for training. The tranches can be downloaded and processed automatically.
+MegaMolBART uses a subset of ZINC15 for training, as described in the [README](./README.md). The tranches can be downloaded and processed automatically.
 
-A sample docker run command for processing data looks like the following, where `MEGAMOLBART_CONT` is the name and tag of the container you wish to use, and `DATA_PATH` is the location of the directory on the local machine for the data.
+A sample docker run command for processing data looks like the following, where `MEGAMOLBART_CONT` is edited to contain the name and tag of the container, and `DATA_PATH` is the location of the directory on the local machine for the data.
 
 ```bash
 #!/bin/bash
@@ -54,13 +52,13 @@ ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
 ```
 
-In the script above, the config directory corresponds to the `examples/chem/conf` directory within the repo. The config name here is the name of the model yaml config file, although model configuration parameters are not strictly used here.
+In the script above, the config directory corresponds to the `examples/chem/conf` directory within the repo. The config name here is the name of the model yaml config file and is required, although model configuration parameters are not utilized for data processing.
 
 ## Training MegaMolBART
 
 The easiest way to understand how training works is to train a very small version of the model.
 
-A sample docker run command for training looks like the following, where `RESULT_PATH` is where model training results are stored. The `WANDB_API_KEY` variable contains your API key or can be omitted if you do not have an account.
+A sample docker run command for training looks like the following, where `RESULT_PATH` is edited to where model training results are stored. The `WANDB_API_KEY` variable contains a Weights & Biases API key or can be omitted if you do not have an account.
 
 ```bash
 #!/bin/bash
@@ -92,7 +90,7 @@ ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
 ```
 
-NOTE: To make it more convenient, a basic shell script can be found [here](TODO: ADD THE LINK TO SHELL SCRIPT). This script is strictly available for experimental purposes. The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across several platforms.
+NOTE: To make it more convenient, a basic shell script can be found [here](./examples/chem/shell/megamolbart_pretrain_quick.sh). This script is strictly available for experimental purposes. The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across several platforms.
 
 ## SLURM Jobs
 
@@ -165,7 +163,7 @@ docker run -it \
 ${MEGAMOLBART_CONT} \
 cd ${HOME} && \
 pip install -e . && \
-bash recompile_megatron_helper.sh && \
+bash setup/recompile_megatron_helper.sh && \
 bash
 ```
 
