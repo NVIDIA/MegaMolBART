@@ -35,14 +35,11 @@ class DatasetTypes(Enum):
 
 def expand_dataset_paths(filepath: str, ext: str) -> List[str]:
     """Expand dataset paths from braces"""
-    print ("filepath: ", filepath)
-    print ("ext: ", ext)
     filepath = filepath + ext if ext else filepath
     # TODO this should eventually be moved to a Nemo fileutils module or similar
     filepath = re.sub(r"""\(|\[|\<|_OP_""", '{', filepath) # replaces '(', '[', '<' and '_OP_' with '{'
     filepath = re.sub(r"""\)|\]|\>|_CL_""", '}', filepath) # replaces ')', ']', '>' and '_CL_' with '}'
     dataset_paths = list(braceexpand.braceexpand(filepath))
-    print ("dataset_paths", dataset_paths)
     return dataset_paths
 
 def check_paths_exist(dataset_paths, dataset_format):

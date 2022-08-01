@@ -125,6 +125,13 @@ fi
 PROJECT_MOUNT_PATH="/workspace/nemo_chem"
 DATA_MOUNT_PATH="/data"
 RESULT_MOUNT_PATH='/result/nemo_experiments'
+DEV_CONT_NAME='nemo_megamolbart'
+
+# Additional variables when send in .env file, is used in the script:
+# NEMO_PATH         Path to NeMo source cdoe.
+# NEMO_BRANCH       Used only for building containers with non-std NeMo versions
+# CHEM_BENCH_PATH   Path to chembench source code. Used for generating benchmark
+#                   data
 
 # Additional variables when send in .env file, is used in the script:
 # NEMO_PATH         Path to NeMo source cdoe.
@@ -164,6 +171,13 @@ DOCKER_CMD="docker run \
     -e NUMBA_CACHE_DIR=/tmp/ \
     -w ${PROJECT_MOUNT_PATH} "
 
+DOCKER_BUILD_CMD="docker build --network host \
+    -t ${MEGAMOLBART_CONT} \
+    --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
+    --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
+    --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
+    --build-arg NEMO_BRANCH=${NEMO_BRANCH} \
+    -f setup/Dockerfile"
 
 build() {
     local IMG_NAME=($(echo ${MEGAMOLBART_CONT} | tr ":" "\n"))
@@ -176,6 +190,10 @@ build() {
                 shift
                 shift
                 ;;
+            -c|--clean)
+                DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} --no-cache"
+                shift
+                ;;
             *)
                 echo "Unknown option $1. Please --version to specify a version."
                 exit 1
@@ -185,24 +203,20 @@ build() {
 
     if [ ${PACKAGE} -eq 1 ]
     then
-        echo "Coping model from ${MODEL_PATH}/NeMo_MegaMolBart-Small_Span_Aug.nemo..."
+        local MODEL_FILE="${MODEL_PATH}/MegaMolBART_20220720.nemo"
+        echo "Coping model from ${MODEL_FILE}..."
         rm -rf ./.tmp/
         mkdir -p ./.tmp/models
-        cp ${MODEL_PATH}/NeMo_MegaMolBart-Small_Span_Aug.nemo ./.tmp/models
+        cp ${MODEL_FILE} ./.tmp/models
     fi
+
+    DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} --build-arg PACKAGE=${PACKAGE}"
+    DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} -t ${IMG_NAME[0]}:latest"
 
     echo "Building MegaMolBART training container..."
     set -x
-    docker build --network host \
-        -t ${MEGAMOLBART_CONT} \
-        -t ${IMG_NAME[0]}:latest \
-        --build-arg GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN} \
-        --build-arg GITHUB_BRANCH=${GITHUB_BRANCH} \
-        --build-arg NEMO_MEGAMOLBART_HOME=${PROJECT_MOUNT_PATH} \
-        --build-arg NEMO_BRANCH=${NEMO_BRANCH} \
-        --build-arg PACKAGE=${PACKAGE} \
-        -f setup/Dockerfile \
-        .
+    ${DOCKER_BUILD_CMD} .
+
     set +x
     exit
 }
@@ -267,9 +281,38 @@ setup() {
 
 
 dev() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -a|--additional-args)
+                DOCKER_CMD="${DOCKER_CMD} $2"
+                shift
+                shift
+                ;;
+            -t|--tmp)
+                DEV_CONT_NAME="${DEV_CONT_NAME}_$2"
+                shift
+                shift
+                ;;
+            -d|--demon)
+                DOCKER_CMD="${DOCKER_CMD} -d"
+                shift
+                ;;
+            -c|--cmd)
+                CMD="$2"
+                shift
+                shift
+                ;;
+            *)
+                echo "Unknown option '$1'.
+Available options are -a(--additional-args), -i(--image), -d(--demon) and -c(--cmd)"
+                exit 1
+                ;;
+        esac
+    done
+
     setup
     set -x
-    ${DOCKER_CMD} --rm -it --name nemo_megamolbart ${@:1} ${MEGAMOLBART_CONT} bash
+    ${DOCKER_CMD} --rm -it --name ${DEV_CONT_NAME} ${MEGAMOLBART_CONT} bash
     set +x
     exit
 }
@@ -287,7 +330,7 @@ run() {
 attach() {
     set -x
     DOCKER_CMD="docker exec"
-    CONTAINER_ID=$(docker ps | grep nemo_megamolbart | cut -d' ' -f1)
+    CONTAINER_ID=$(docker ps | grep ${DEV_CONT_NAME} | cut -d' ' -f1)
     ${DOCKER_CMD} -it ${CONTAINER_ID} /bin/bash
     exit
 }

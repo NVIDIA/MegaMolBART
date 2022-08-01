@@ -13,7 +13,7 @@ from nemo_chem.data import MoleculeEnumeration
 from nemo_chem.models.megamolbart import MegaMolBARTModel
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 __all__ = ["NeMoMegaMolBARTWrapper"]
 
 
@@ -29,6 +29,7 @@ class NeMoMegaMolBARTWrapper():
 
         if model_cfg is None:
             # TODO: Create a default global variable for this
+            log.info('Loading default configuration...')
             model_cfg = OmegaConf.load(
                 '/workspace/nemo_chem/examples/chem/conf/infer.yaml')
         if random_weights:
@@ -194,12 +195,12 @@ class NeMoMegaMolBARTWrapper():
         if sampling_method == 'greedy-perturbate':
             scaled_radius = sampling_kwarg['scaled_radius']
             sample_masks = enc_masks.repeat_interleave(num_samples, 0)
-            protrubed_hiddens = hidden_states.repeat_interleave(num_samples, 0)
-            protrubed_hiddens = protrubed_hiddens + (scaled_radius * torch.randn(protrubed_hiddens.shape).to(protrubed_hiddens.device))
+            perturbed_hiddens = hidden_states.repeat_interleave(num_samples, 0)
+            perturbed_hiddens = perturbed_hiddens + (scaled_radius * torch.randn(perturbed_hiddens.shape).to(perturbed_hiddens.device))
 
-            samples = self.hidden_to_smis(protrubed_hiddens, sample_masks)
+            samples = self.hidden_to_smis(perturbed_hiddens, sample_masks)
             if return_embedding:
-                embs = torch.mean(protrubed_hiddens, dim=1)
+                embs = torch.mean(perturbed_hiddens, dim=1)
         else:
             raise ValueError(f'Invalid samping method {sampling_method}')
 

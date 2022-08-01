@@ -64,8 +64,11 @@ RUN NEMO_PATH=$(python -c 'import nemo; print(nemo.__path__[0])') && \
 COPY ./.tmp/ /tmp/
 COPY ./setup/config_model.sh /tmp
 COPY ./setup/startup.sh /opt/nvidia
+COPY ./setup/entrypoint.sh /opt
+RUN chmod +x /opt/entrypoint.sh
 RUN bash /tmp/config_model.sh ${PACKAGE}
 WORKDIR ${NEMO_CHEM_HOME}
 COPY ./.tmp/ /tmp/
 
+ENTRYPOINT ["/opt/entrypoint.sh"]
 CMD [ "bash", "-c", "/opt/nvidia/startup.sh"]

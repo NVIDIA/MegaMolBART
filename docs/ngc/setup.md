@@ -3,7 +3,7 @@
 The docker container can be run using the following command:
 
 ```
-docker run -it -p 8888:8888 --gpus all nvcr.io/t6a4nuz8vrsr/megamolbart:0.2.0-ea2
+docker run -it -p 8888:8888 --gpus all nvcr.io/t6a4nuz8vrsr/megamolbart:0.2.0-ea3
 ```
 
 Additional information is also available:

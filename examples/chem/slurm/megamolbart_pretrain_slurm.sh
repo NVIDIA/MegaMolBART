@@ -32,7 +32,7 @@ set -x
 MEGAMOLBART_CONT="gitlab-master.nvidia.com#mlivne/nemo_containers:megamolbart-r1.10.0-ea2-untied-weights"
 DATA_PATH="/gpfs/fs1/projects/ent_aiapps/users/rilango/bionemo/data"
 RESULT_PATH="/gpfs/fs1/projects/ent_aiapps/users/mlivne/results/bionemo/2022-07-12-ea2-untied"
-WANDB_API_KEY="1dadc548dae732414fcb97918f25942325315029"
+WANDB_API_KEY=""
 
 MOUNTS="$DATA_PATH:/data,$RESULT_PATH:/result"
 

@@ -25,8 +25,8 @@ def test_smis_to_hiddens():
 
         with load_model(cfg) as inferer:
             smis = ['c1cc2ccccc2cc1',
-                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',
-                    'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
+                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',]
+                    # 'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
             hidden_state, pad_masks = inferer.smis_to_hidden(smis)
 
             assert hidden_state is not None
@@ -41,8 +41,8 @@ def test_smis_to_embedding():
 
         with load_model(cfg) as inferer:
             smis = ['c1cc2ccccc2cc1',
-                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',
-                    'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
+                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',]
+                    # 'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
             embedding = inferer.smis_to_embedding(smis)
 
             assert embedding is not None
@@ -56,8 +56,8 @@ def test_hidden_to_smis():
 
         with load_model(cfg) as inferer:
             smis = ['c1cc2ccccc2cc1',
-                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',
-                    'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
+                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',]
+                    # 'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
             hidden_state, pad_masks = inferer.smis_to_hidden(smis)
             infered_smis = inferer.hidden_to_smis(hidden_state, pad_masks)
             log.info(f'Input SMILES and Infered: {smis}, {infered_smis}')
@@ -83,8 +83,8 @@ def test_sample():
 
         with load_model(cfg) as inferer:
             smis = ['c1cc2ccccc2cc1',
-                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',
-                    'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
+                    'COc1cc2nc(N3CCN(C(=O)c4ccco4)CC3)nc(N)c2cc1OC',]
+                    # 'CC(=O)C(=O)N1CCC([C@H]2CCCCN2C(=O)c2ccc3c(n2)CCN(C(=O)OC(C)(C)C)C3)CC1']
             samples = inferer.sample(smis, num_samples=10, sampling_method='greedy-perturbate')
             samples = set(samples)
             log.info('\n'.join(smis))
