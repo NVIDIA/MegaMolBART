@@ -22,10 +22,18 @@
 
 N_CALLS=1
 
-while getopts "n:J:" opt; do
+PROPERTIES_FILE=""
+
+while getopts "n:p:J:" opt; do
   case $opt in
     n) N_CALLS=$OPTARG;;
-  esac
+    p)
+      PROPERTIES_FILE=$2
+      shift
+      shift
+      ;;
+  *)
+esac
 done
 
 # Grab the .sub file to run
@@ -34,6 +42,13 @@ if [[ -z $SUBFILE ]]; then
   echo "Usage: $(basename "$0") [flags] [sub file]"
   exit 1
 fi
+
+if [ -z "${PROPERTIES_FILE}" ];
+then
+  echo "Please use -p for properties file."
+  exit 1
+fi
+
 echo "Calling [$SUBFILE] $N_CALLS times."
 
 # Repeat calls
@@ -42,10 +57,10 @@ for (( i = 1; i <= $N_CALLS; i++ ))
 do
   if [ -z $PREV_JOBID ]; then
     echo "Submitting job ${i}"
-    OUTPUT=$(sbatch $SUBFILE)
+    OUTPUT=$(sbatch $SUBFILE -p ${PROPERTIES_FILE})
   else
     echo "Submitting job ${i} w/ dependency on jobid ${PREV_JOBID}"
-    OUTPUT=$(sbatch --dependency=afterany:${PREV_JOBID} $SUBFILE)
+    OUTPUT=$(sbatch --dependency=afterany:${PREV_JOBID} $SUBFILE -p ${PROPERTIES_FILE})
   fi
   PREV_JOBID="$(cut -d' ' -f4 <<< $OUTPUT)"
 done
