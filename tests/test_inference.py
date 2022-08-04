@@ -100,3 +100,7 @@ def test_sample():
 
             log.info('Valid Molecules' + "\n".join(valid_molecules))
             log.info(f'Total samples = {len(samples)} unique samples {len(set(samples))}  valids {len(valid_molecules)}')
+
+            if len(valid_molecules) < len(samples) * 0.3:
+                log.warning("TOO FEW VALID SAMPLES")
+            assert len(valid_molecules) == 0
