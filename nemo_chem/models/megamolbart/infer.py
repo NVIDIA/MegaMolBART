@@ -107,7 +107,8 @@ class NeMoMegaMolBARTWrapper():
             plugins=NLPDDPPlugin(),
             devices=1,
             accelerator='gpu',
-            precision=32,
+            precision=32, #TODO: Run benchmark to verify this value has no or
+            #                     minimum impact on KPIs.
         )
 
         app_state = AppState()

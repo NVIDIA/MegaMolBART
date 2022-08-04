@@ -14,7 +14,9 @@
 # limitations under the License.
 
 # TODO: Fix the image for GA
-FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.10.0-megamolbar
+FROM nvcr.io/nv-drug-discovery-dev/nemo:1.11rc-mmb
+# FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.11.0
+
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH
 ARG NEMO_BRANCH
@@ -36,8 +38,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 ## Setup - Install and upgrade additional packages
-RUN pip install --upgrade numpy wandb
-RUN pip install --upgrade einops
+# RUN pip install --upgrade numpy wandb
+# RUN pip install --upgrade einops
 COPY setup/conda/env.yml /tmp/env.yml
 RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
 
