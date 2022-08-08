@@ -84,16 +84,20 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/t6a4nuz8vrsr/megamolbart:0.2.0-ea2}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidia/clara/megamolbart:0.2.0}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
-JUPYTER_PORT=${JUPYTER_PORT:=8888}
 DATA_PATH=${DATA_PATH:=/tmp}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
+
+JUPYTER_PORT=${JUPYTER_PORT:=8888}
+
 REGISTRY_USER=${REGISTRY_USER:='$oauthtoken'}
 REGISTRY=${REGISTRY:=NotSpecified}
 REGISTRY_ACCESS_TOKEN=${REGISTRY_ACCESS_TOKEN:=NotSpecified}
-GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=UserName:PersonalToken}
+
 WANDB_API_KEY=${WANDB_API_KEY:=NotSpecified}
+
+GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:=UserName:PersonalToken}
 GITHUB_BRANCH=${GITHUB_BRANCH:=main}
 
 # if $LOCAL_ENV file exists, source it to specify my environment
@@ -132,12 +136,8 @@ DEV_CONT_NAME='nemo_megamolbart'
 # NEMO_BRANCH       Used only for building containers with non-std NeMo versions
 # CHEM_BENCH_PATH   Path to chembench source code. Used for generating benchmark
 #                   data
-
-# Additional variables when send in .env file, is used in the script:
-# NEMO_PATH         Path to NeMo source cdoe.
-# NEMO_BRANCH       Used only for building containers with non-std NeMo versions
-# CHEM_BENCH_PATH   Path to chembench source code. Used for generating benchmark
-#                   data
+# MODEL_PATH        Local dir to be mounted to /model
+# MODEL_FILE        Model file in MODEL_PATH to be packaged duing build
 
 # Compare Docker version to find Nvidia Container Toolkit support.
 # Please refer https://github.com/NVIDIA/nvidia-docker
@@ -203,7 +203,7 @@ build() {
 
     if [ ${PACKAGE} -eq 1 ]
     then
-        local MODEL_FILE="${MODEL_PATH}/MegaMolBART_20220720.nemo"
+        local MODEL_FILE="${MODEL_PATH}/${MODEL_FILE}"
         echo "Coping model from ${MODEL_FILE}..."
         rm -rf ./.tmp/
         mkdir -p ./.tmp/models
@@ -230,6 +230,11 @@ push() {
                 shift
                 shift
                 ;;
+            -a|--additional_copies)
+                ADDITIONAL_IMAGES="$2"
+                shift
+                shift
+                ;;
             *)
                 echo "Unknown option $1. Please --version to specify a version."
                 exit 1
@@ -245,8 +250,17 @@ push() {
 
     if [ ! -z "${VERSION}" ];
     then
-        docker tag ${IMG_NAME[0]}:latest ${IMG_NAME[0]}:${VERSION}
+        docker tag ${MEGAMOLBART_CONT} ${IMG_NAME[0]}:${VERSION}
         docker push ${IMG_NAME[0]}:${VERSION}
+    fi
+
+    if [ ! -z "${ADDITIONAL_IMAGES}" ];
+    then
+        IFS=',' read -ra IMAGES <<< ${ADDITIONAL_IMAGES}
+        for IMAGE in "${IMAGES[@]}"; do
+            docker tag ${MEGAMOLBART_CONT} ${IMAGE}
+            docker push ${IMAGE}
+        done
     fi
 
     exit

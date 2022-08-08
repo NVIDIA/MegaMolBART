@@ -103,4 +103,4 @@ def test_sample():
 
             if len(valid_molecules) < len(samples) * 0.3:
                 log.warning("TOO FEW VALID SAMPLES")
-            assert len(valid_molecules) == 0
+            assert len(valid_molecules) != 0
