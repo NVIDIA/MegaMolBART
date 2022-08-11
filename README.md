@@ -4,16 +4,15 @@
 
 MegaMolBART is a deep learning model for small molecule drug discovery and cheminformatics based on SMILES. MegaMolBART uses NVIDIA's Megatron framework, which is designed for the development of large transformer models. More information about MegaMolBART is available in the [model guide](../../docs/ngc/model.md).
 
-MegaMolBART relies on [NeMo](https://github.com/NVIDIA/NeMo). NeMo provides a robust environment for developing, training, and deploying deep learning models, including Megatron models. NeMo provides enhancements to PyTorch Lighting such as hyperparameter configuarbility with yaml files and checkpoint management. It also enables the development and training of large transformer models using NVIDIA's Megatron framework, which makes multi-GPU, multi-node training with data parallelism, model parallelism, and mixed precision easily configurable. The [NeMo User Guide](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/) contains more information about all of these features.
+MegaMolBART relies on [NeMo](https://github.com/NVIDIA/NeMo). NeMo provides a robust environment for developing, training, and deploying deep learning models, including Megatron models. NeMo provides enhancements to PyTorch Lighting such as hyperparameter configurability with yaml files and checkpoint management. It also enables the development and training of large transformer models using NVIDIA's Megatron framework, which makes multi-GPU, multi-node training with data parallelism, model parallelism, and mixed precision easily configurable. The [NeMo User Guide](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/) contains more information about all of these features.
 
 The ZINC-15 database is used for pre-training [1]. Approximately 1.45 Billion molecules (SMILES strings) were selected from [tranches](https://zinc15.docking.org/tranches/home/) meeting the following constraints: molecular weight <= 500 Daltons, LogP <= 5, reactivity level was "reactive", and purchasability was "annotated". SMILES formats, including chirality notations, are used as-is from ZINC.
 
-During pre-processing, the compounds are filtered to ensure a maximum length of 512 characters. Train, validation, and test splits are randomly split using a seed as 99% / 0.5% / 0.5%. Data canonicalization and augmentation during training are performed using RDKIT via masking and SMILES randomization as described previously [2].
+During pre-processing, the compounds are filtered to ensure a maximum length of 512 characters. Train, validation, and test splits are randomly split using a seed as 99% / 0.5% / 0.5%. Data canonicalization and augmentation during training are performed using RDKit via masking and SMILES randomization as described previously [2].
 
-## Quick Start
+The [Quickstart Guide](./QUICKSTART.md) contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster. The tutorial contained in the Quickstart is highly recommended to gain familiarity with how trainings are run and configured. The remainder of this README contains additional information that will be of use for more advanced tasks, such as code development or model configuration changes.
 
-The [Quickstart Guide](./QUICKSTART.md) contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster. The tutorial contained in the Quickstart is a great way to gain familiarity with how trainings are run and configured. The remainder of this README contains additional information that will be of use for more advanced tasks, such as code development or model configuration changes.
-
+## Development Guide
 ### Configure `launch.sh` Script
 
 The [`launch.sh` script](./launch.sh) can be used to build the NeMo MegaMolBART training container, push it to a registry, and to automate the mounting of paths inside the container. The script requires a settings file called `.env`. This file will automatically be created if it does not exist on first launch, but below is an example of the file. If created manually, it should be named `.env` and placed inside the repo. All of the variables are described in the `usage` section of [`launch.sh`](./launch.sh) in this directory. Missing variables will be substituted for the defaults in the script.
@@ -32,11 +31,13 @@ REGISTRY=NotSpecified
 
 ### Build Container
 
+**Use of the provided container from NGC is *highly* recommended. However, it is possible to build a container from scratch for customization.**
+
 The `launch.sh` script can be used to build and push containers to a registry. It can also be used to run interactive development jobs on a local system. See the instructions inside the script for more information. Once the `.env` script is created, a container can be built by running `bash launch.sh build`. If pushing to a registry is desired, `bash launch.sh push` will complete this task.
 
 ### Setup Data Processing and Training Files
 
-The following elements are required to process data or run a pre-training.
+The following elements are required to process data or run pre-training.
 
 #### Model Configuration File
 
@@ -46,7 +47,7 @@ MegaMolBART uses yaml based parameter files. The existing model configuration fi
 * [`megamolbart_pretrain_large_span_aug.yaml`](./examples/chem/conf/megamolbart_pretrain_large_span_aug.yaml): Large model with augmentation of the encoder SMILES and masking of decoder tokens
 * [`megamolbart_pretrain_xsmall_span_aug.yaml`](./examples/chem/conf/megamolbart_pretrain_xsmall_span_aug.yaml): Extra small model with augmentation of the encoder SMILES and masking of decoder tokens, mainly for testing and is used by default.
 
-Additional files can be created to suit other configurations. Though data process does not require an explicit model configuration, one of these files (or the default) must be provided.
+Additional files can be created to suit other configurations. Though data processing does not require an explicit model configuration, one of these files (or the default) must be provided.
 
 #### Python Run Script
 
@@ -63,6 +64,7 @@ The bash scripts found in [`examples/chem/slurm`](./examples/chem/slurm) and [`e
 By default, the python pretrain script uses a subset of the selected ZINC15 tranches to process and train. This is to prevent ~100GB of data from being downloaded accidentally. To process with all of the data from the ZINC15 tranches, the following modification is required:
 
 > Change the `links_file` path from `'conf/dataset/ZINC-downloader-test.txt'` to `'conf/dataset/ZINC-downloader.txt'` in the config file [here](https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/dev/examples/chem/conf/megamolbart_pretrain_base.yaml)
+
 ```yaml
 links_file: 'conf/dataset/ZINC-downloader.txt' # to process with all of the ZINC15 data
 ```

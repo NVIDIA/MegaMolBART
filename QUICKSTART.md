@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The following Quickstart guide contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster. The [README](./README.md) contains additional information that will be of use for extensive code development or model configuration changes will be made.
+The following Quickstart guide contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster.
 
 ## Logging with Tensorboard and Weights and Biases
 
@@ -10,19 +10,19 @@ NeMo provides optional logging with Tensorboard and Weights and Biases. Use of W
 
 ## Docker Container
 
-The latest docker container can be downloaded from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/containers/megamolbart/tags). A [Dockerfile](./setup/Dockerfile) is also available which can be used to adapt the container to your needs.
+The latest docker container can be downloaded from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/containers/megamolbart/tags). It is also possible to build a container (see the [README](./README.md)), but using the provided container is **highly** recommended.
 
 The following are best practices for mounting volumes for data, results, and code within the container:
 
 - `/data` : the directory which will container the data (see Data Processing section) should be mounted within the container.
 - `/result` : training results, including logs and checkpoints
-- `/workspace/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Development section), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
+- `/workspace/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Code Development section below), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
 
 ## Data Processing
 
 MegaMolBART uses a subset of ZINC15 for training, as described in the [README](./README.md). The tranches can be downloaded and processed automatically.
 
-A sample docker run command for processing data looks like the following, where `MEGAMOLBART_CONT` is edited to contain the name and tag of the container, and `DATA_PATH` is the location of the directory on the local machine for the data.
+A sample docker run command for processing data looks like the following, where `MEGAMOLBART_CONT` is edited to contain the name and tag of the container, and `DATA_PATH` is the location of the directory on the local machine which is mounted inside the container for the data.
 
 ```bash
 #!/bin/bash
@@ -56,9 +56,13 @@ In the script above, the config directory corresponds to the `examples/chem/conf
 
 ## Training MegaMolBART
 
-The easiest way to understand how training works is to train a very small version of the model.
+### Training on a Workstation
 
-A sample docker run command for training looks like the following, where `RESULT_PATH` is edited to where model training results are stored. The `WANDB_API_KEY` variable contains a Weights & Biases API key or can be omitted if you do not have an account.
+The easiest way to understand how training works is to train a very small version of the model. A sample docker run command for training on a workstation looks like the following, where `RESULT_PATH` is edited to where model training results are stored.
+
+The `WANDB_API_KEY` variable contains a Weights & Biases API key or can be omitted if you do not have an account. The variable `WANDB_OFFLINE` controls whether or not the Weights and Biases log files are uploaded to a Weights and Biases account during training. **If `WANDB_OFFLINE` is set to `FALSE` and an invalid `WANDB_API_KEY` is provided, the training will hang before starting.** Thus, it is recommended to leave it set to `TRUE` when getting started with MegaMolBART. Any log files can also be uploaded after the training has finished, as described in the Weights and Biases documentation.
+
+The remaining variables are as set previously.
 
 ```bash
 #!/bin/bash
@@ -67,11 +71,13 @@ MEGAMOLBART_CONT=""
 DATA_PATH=""
 RESULT_PATH=""
 WANDB_API_KEY=""
+WANDB_OFFLINE="TRUE" # Set to FALSE to upload to WandB during training
 
 RUN_SCRIPT="cd ${HOME}/examples/chem && \
 python megamolbart_pretrain.py \
 --config-path=conf \
---config-name=megamolbart_pretrain_xsmall_span_aug"
+--config-name=megamolbart_pretrain_xsmall_span_aug \
+exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE}"
 
 docker run -t \
 --rm \
@@ -90,11 +96,11 @@ ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
 ```
 
-NOTE: To make it more convenient, a basic shell script can be found [here](./examples/chem/shell/megamolbart_pretrain_quick.sh). This script is strictly available for experimental purposes. The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across several platforms.
+NOTE: To make it more convenient, a basic shell script can be found [here](./examples/chem/shell/megamolbart_pretrain_quick.sh). The shell script is most suitable for beginners or for quick feature testing. It's not meant for extensive customization across multiple platforms.
 
-## SLURM Jobs
+### SLURM Jobs
 
-A SLURM script for training on a cluster looks very similar to the above training script.
+A SLURM script for training on a cluster looks very similar to the above training script. The `SBATCH` commands must be configured as appropriate for the cluster on which the job will be executed.
 
 ```bash
 #!/bin/bash
@@ -112,6 +118,7 @@ MEGAMOLBART_CONT=""
 DATA_PATH=""
 RESULT_PATH=""
 WANDB_API_KEY=""
+WANDB_OFFLINE="TRUE" # Set to FALSE to upload to WandB during training
 
 MOUNTS="$DATA_PATH:/data,$RESULT_PATH:/result"
 
@@ -126,7 +133,8 @@ python megamolbart_pretrain.py \
     --config-path=conf \
     --config-name=megamolbart_pretrain_xsmall_span_aug \
     ++trainer.num_nodes=${SLURM_JOB_NUM_NODES} \
-    ++trainer.gpus=${SLURM_NTASKS_PER_NODE}
+    ++trainer.gpus=${SLURM_NTASKS_PER_NODE} \
+    exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE}
 
 set +x
 ```
@@ -135,7 +143,7 @@ set +x
 
 A sample docker run command for interactive development might look like the following, where `DATA_PATH,` `RESULT_PATH`, and `PROJECT_PATH` are the respective paths on the local machine. The `WANDB_API_KEY` variable contains your API key or can be omitted if you do not have an account.
 
-It is best practice to reinstall any development code before development or training by running the`pip install -e .` within the top level of the directory. It may also be necessary to recompile the Megatron helpers, which can be done right before
+It is best practice to reinstall any development code before development or training by running the `pip install -e .` within the top level of the directory. It may also be necessary to recompile the Megatron helpers, which can be done right before running the container.
 
 ```bash
 #!/bin/bash
@@ -145,6 +153,7 @@ DATA_PATH=""
 RESULT_PATH=""
 PROJECT_PATH=$(pwd)
 WANDB_API_KEY=""
+WANDB_OFFLINE="TRUE" # Set to FALSE to upload to WandB during training
 
 docker run -it \
 --rm \
@@ -186,4 +195,4 @@ Checkpoints are stored in the `checkpoints` directory and are managed by NeMo. F
 
 ### Tensorboard and Weights and Biases
 
-NeMo will also create a Tensorboard file in the results directory, if logging to Tensorboard has been enabled. The Weights and Biases loggs will be created in a directory called `wandb` and can optionally be uploaded after training if cluster restrictions do not allow it to be done during training.
+NeMo will also create a Tensorboard file in the results directory, if logging to Tensorboard has been enabled. The Weights and Biases logs will be created in a directory called `wandb` and can optionally be uploaded after training if `WANDB_OFFLINE` was set to `TRUE` during training.
