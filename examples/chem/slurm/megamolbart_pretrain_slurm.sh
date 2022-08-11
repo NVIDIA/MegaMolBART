@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --nodes=8
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8      # n gpus per machine <required>
 #SBATCH --mail-type=FAIL
 #SBATCH --time=8:00:00
 #SBATCH --partition=batch_dgx1_m2
 #SBATCH --account=ent_aiapps_omics
-#SBATCH --job-name=bionemo-ea2-untied-token_head-8nodes-val
+#SBATCH --job-name=bionemo
 #SBATCH --nv-meta=ml-model.megamolbart
 #SBATCH --mem=0                 # all mem avail
 #SBATCH --overcommit
