@@ -16,9 +16,13 @@ The ZINC-15 database was used for training [3]. Approximately 1.45 Billion molec
 
 Data augmentation during training was performed via masking and SMILES randomization as described previously [2].
 
-## How to Use this Model
 
-The [Quickstart](../../QUICKSTART.md) guide has instructions for pre-training MegaMolBART. An example of how to use a pretrained model for inference can be found in [this notebook](../../examples/chem/nbs/Inference.ipynb).
+## How to Use this Model
+MegaMolBART can be run on hardware with access to any NVIDIA GPU with memory greater than 8 GB. The model can also be used for:
+
+- Fetching embeddings from the latent space representing a SMILES string
+- SMILES strings sampled around the region of a input SMILES molecule
+
 
 ## References
 

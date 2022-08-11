@@ -9,17 +9,18 @@ MegaMolBART v0.2 container encloses all prerequisites for training and inference
  ```
  # For Docker version 19.03 or later
  docker run \
- --gpus all \
- --rm \
- -p 8888:8888 \
- nvcr.io/nvidia/clara/megamolbart:0.2.0
+    --gpus all \
+    --rm \
+    -p 8888:8888 \
+    nvcr.io/nvidia/clara/megamolbart:0.2.0
+
 
  # For Docker version 19.02 or older
  docker run \
- --runtime nvidia \
- --rm \
- -p 8888:8888 \
- nvcr.io/nvidia/clara/megamolbart:0.2.0
+    --runtime nvidia \
+    --rm \
+    -p 8888:8888 \
+    nvcr.io/nvidia/clara/megamolbart:0.2.0
  ```
 
 - In a browser open URL http://<<HOSTNAME/IP>>:8888
