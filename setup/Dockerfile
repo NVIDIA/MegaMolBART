@@ -14,9 +14,8 @@
 # limitations under the License.
 
 # TODO: Fix the image for GA
-# FROM nvcr.io/nv-drug-discovery-dev/nemo_chem_training:1.10.1
-FROM nvcr.io/nvidian/clara-lifesciences/nemo:1.11rc-mmb
-# FROM gitlab-master.nvidia.com/mlivne/nemo_containers:nemo-r1.11.0
+ARG BASE_IMAGE=nvcr.io/nvidian/clara-lifesciences/nemo:1.11rc-mmb
+FROM ${BASE_IMAGE}
 
 ARG GITHUB_ACCESS_TOKEN
 ARG GITHUB_BRANCH

@@ -132,8 +132,8 @@ RESULT_MOUNT_PATH='/result/nemo_experiments'
 DEV_CONT_NAME='nemo_megamolbart'
 
 # Additional variables when send in .env file, is used in the script:
+# BASE_IMAGE        Custom Base image for building.
 # NEMO_PATH         Path to NeMo source cdoe.
-# NEMO_BRANCH       Used only for building containers with non-std NeMo versions
 # CHEM_BENCH_PATH   Path to chembench source code. Used for generating benchmark
 #                   data
 # MODEL_PATH        Local dir to be mounted to /model
@@ -190,6 +190,11 @@ build() {
                 shift
                 shift
                 ;;
+            -b|--base-image)
+                BASE_IMAGE=$2
+                shift
+                shift
+                ;;
             -c|--clean)
                 DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} --no-cache"
                 shift
@@ -203,11 +208,20 @@ build() {
 
     if [ ${PACKAGE} -eq 1 ]
     then
+        set -e
         local MODEL_FILE="${MODEL_PATH}/${MODEL_FILE}"
         echo "Coping model from ${MODEL_FILE}..."
         rm -rf ./.tmp/
         mkdir -p ./.tmp/models
         cp ${MODEL_FILE} ./.tmp/models
+        set +e
+    else
+        mkdir -p ./.tmp/models
+    fi
+
+    if [ ! -z "${BASE_IMAGE}" ];
+    then
+        DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} --build-arg BASE_IMAGE=${BASE_IMAGE}"
     fi
 
     DOCKER_BUILD_CMD="${DOCKER_BUILD_CMD} --build-arg PACKAGE=${PACKAGE}"
@@ -216,7 +230,6 @@ build() {
     echo "Building MegaMolBART training container..."
     set -x
     ${DOCKER_BUILD_CMD} .
-
     set +x
     exit
 }
@@ -295,6 +308,7 @@ setup() {
 
 
 dev() {
+    CMD='bash'
     while [[ $# -gt 0 ]]; do
         case $1 in
             -a|--additional-args)
@@ -312,9 +326,9 @@ dev() {
                 shift
                 ;;
             -c|--cmd)
-                CMD="$2"
                 shift
-                shift
+                CMD="$@"
+                break
                 ;;
             *)
                 echo "Unknown option '$1'.
@@ -326,7 +340,7 @@ Available options are -a(--additional-args), -i(--image), -d(--demon) and -c(--c
 
     setup
     set -x
-    ${DOCKER_CMD} --rm -it --name ${DEV_CONT_NAME} ${MEGAMOLBART_CONT} bash
+    ${DOCKER_CMD} --rm -it --name ${DEV_CONT_NAME} ${MEGAMOLBART_CONT} ${CMD}
     set +x
     exit
 }
