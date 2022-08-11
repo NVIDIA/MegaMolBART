@@ -1,9 +1,9 @@
 # Model Upload to dev env.
 ngc registry model upload-version \
     --gpu-model A100 \
-    --org nv-drug-discovery-dev \
-    --source models/NeMo_MegaMolBart-Small_Span_Aug.nemo \
-    nv-drug-discovery-dev/megamolbart:0.2
+    --org nvstaging \
+    --source /data/bionemo/models/MegaMolBART_0_2_0.nemo \
+    nvstaging/clara/megamolbart:0.2.0
 
 
 # Commands for uploading containers are in launch.sh script
