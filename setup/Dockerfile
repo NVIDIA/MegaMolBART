@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # TODO: Fix the image for GA
-ARG BASE_IMAGE=nvcr.io/nvidian/clara-lifesciences/nemo:1.11rc-mmb
+ARG BASE_IMAGE=nvcr.io/nvidia/clara/megamolbart_taining:nemo_1.11_rc1
 FROM ${BASE_IMAGE}
 
 ARG GITHUB_ACCESS_TOKEN

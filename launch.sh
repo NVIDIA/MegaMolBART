@@ -188,7 +188,6 @@ build() {
             -p|--pkg)
                 PACKAGE=1
                 shift
-                shift
                 ;;
             -b|--base-image)
                 BASE_IMAGE=$2
