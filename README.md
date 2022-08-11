@@ -19,7 +19,7 @@ The [Quickstart Guide](./QUICKSTART.md) contains configuration information and e
 The [`launch.sh` script](./launch.sh) can be used to build the NeMo MegaMolBART training container, push it to a registry, and to automate the mounting of paths inside the container. The script requires a settings file called `.env`. This file will automatically be created if it does not exist on first launch, but below is an example of the file. If created manually, it should be named `.env` and placed inside the repo. All of the variables are described in the `usage` section of [`launch.sh`](./launch.sh) in this directory. Missing variables will be substituted for the defaults in the script.
 
 ```
-MEGAMOLBART_CONT=nvcr.io/t6a4nuz8vrsr/megamolbart:0.2.0-ea2
+MEGAMOLBART_CONT=nvcr.io/nvidia/clara/megamolbart:0.2.0
 PROJECT_PATH=$(pwd)
 DATA_PATH=${HOME}/data
 RESULT_PATH=${HOME}/result/nemo_experiments

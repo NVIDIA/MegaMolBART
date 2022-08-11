@@ -12,10 +12,10 @@ OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
 RESULTS_MOUNT=${OUTPUT_MOUNT}/nemo_experiments/${DATA_FORMAT}/${MEGAMOLBART_CONFIG_FILE}
 DATA_FILES_SELECTED=x_OP_000..001_CL_ #x000
-WANDB_LOG=True
+WANDB_OFFLINE=True
 
 TRAINING_ARGS="exp_manager.exp_dir=${RESULTS_MOUNT}"
-TRAINING_ARGS="${TRAINING_ARGS} exp_manager.wandb_logger_kwargs.offline=${WANDB_LOG}"
+TRAINING_ARGS="${TRAINING_ARGS} exp_manager.wandb_logger_kwargs.offline=${WANDB_OFFLINE}"
 TRAINING_ARGS="${TRAINING_ARGS} model.data.dataset_path=${DATA_MOUNT}"
 TRAINING_ARGS="${TRAINING_ARGS} model.data.dataset_format=${DATA_FORMAT}"
 ### END CONFIG ###
