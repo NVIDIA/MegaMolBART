@@ -2,7 +2,7 @@
 
 ## Introduction
 
-MegaMolBART is a deep learning model for small molecule drug discovery and cheminformatics based on SMILES. MegaMolBART uses NVIDIA's Megatron framework, which is designed for the development of large transformer models. More information about MegaMolBART is available in the [model guide](../../docs/ngc/model.md).
+MegaMolBART is a deep learning model for small molecule drug discovery and cheminformatics based on SMILES. MegaMolBART uses NVIDIA's [NeMo-Megatron](https://github.com/NVIDIA/NeMo) framework, which is designed for the development of large transformer models. More information about MegaMolBART is available in the [model guide](../../docs/ngc/model.md).
 
 MegaMolBART relies on [NeMo](https://github.com/NVIDIA/NeMo). NeMo provides a robust environment for developing, training, and deploying deep learning models, including Megatron models. NeMo provides enhancements to PyTorch Lighting such as hyperparameter configurability with yaml files and checkpoint management. It also enables the development and training of large transformer models using NVIDIA's Megatron framework, which makes multi-GPU, multi-node training with data parallelism, model parallelism, and mixed precision easily configurable. The [NeMo User Guide](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/) contains more information about all of these features.
 
@@ -105,6 +105,23 @@ model:
 **NOTE**: Do NOT add an extension to the data file lists. The appropriate extension (csv or bin) is added automatically.
 
 The training can be run as described in the [Quickstart Guide](./QUICKSTART.md#training-megamolbart). Additional parameters can be set in the yaml configuration file or in the shell/SLURM script as appropriate.
+
+
+### Testing model
+Please follow these instructions to inference a trained model.
+
+1. Add 'MODEL_PATH' in .env file located in the source code root dir.
+   Please ensure the value is the directory on the host machine containing the model file.
+2. Edit 'examples/chem/conf/infer.yaml' to update 'model.model_path'.
+   Change the filename to the desired model name. Please donot change the folder name.
+   e.g.
+    ```
+    model:
+	    model_path: /models/<<CHANGE ME.nemo>>
+    ```
+3. Execute './launch dev'
+
+To test/verify all inference operations please execute `pytests --log-cli-level=10 tests/test_inference.py` inside the container.
 
 ## References
 
