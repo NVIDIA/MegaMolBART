@@ -15,18 +15,33 @@ The [Quickstart Guide](./QUICKSTART.md) contains configuration information and e
 ## Development Guide
 ### Configure `launch.sh` Script
 
-The [`launch.sh` script](./launch.sh) can be used to build the NeMo MegaMolBART training container, push it to a registry, and to automate the mounting of paths inside the container. The script requires a settings file called `.env`. This file will automatically be created if it does not exist on first launch, but below is an example of the file. If created manually, it should be named `.env` and placed inside the repo. All of the variables are described in the `usage` section of [`launch.sh`](./launch.sh) in this directory. Missing variables will be substituted for the defaults in the script.
+The [`launch.sh` script](./launch.sh) can be used to build the NeMo MegaMolBART training container, push it to a registry, and to automate the mounting of paths inside the container. The script requires a settings file called `.env`. This file will automatically be created if it does not exist on first launch, but below is an example of the file. If created manually, it should be named `.env` and placed in the root of source path. All of the variables are described in the `usage` section of [`launch.sh`](./launch.sh) in this directory. Missing variables will be substituted for the defaults in the script.
 
 ```
+# Docker Image used for training, inference, and development
 MEGAMOLBART_CONT=nvcr.io/nvidia/clara/megamolbart:0.2.0
-PROJECT_PATH=$(pwd)
-DATA_PATH=${HOME}/data
-RESULT_PATH=${HOME}/result/nemo_experiments
-GITHUB_ACCESS_TOKEN=INSERT_GITHUB_ACCESS_TOKEN_HERE
-WANDB_API_KEY=$(grep password $HOME/.netrc | cut -d' ' -f4)
-REGISTRY_ACCESS_TOKEN=$(grep apikey ~/.ngc/config | cut -d' ' -f3)
+
+# Path to Source code
+PROJECT_PATH=/home/rilango/Projects/github/NeMo_MegaMolBART/
+
+# Path to data and results file
+DATA_PATH=/data/bionemo/data/
+RESULT_PATH=/data/bionemo/results/
+
+# HOST port for jupyter lab web interface
+JUPYTER_PORT=8888
+
+# Docker image repository configuration
 REGISTRY_USER=$oauthtoken
 REGISTRY=NotSpecified
+REGISTRY_ACCESS_TOKEN=$(grep apikey ~/.ngc/config | cut -d' ' -f3)
+
+# wandb API key. ttps://wandb.ai/
+WANDB_API_KEY=NotSpecified
+
+# GITHUB configuration only required for building the image.
+GITHUB_ACCESS_TOKEN=INSERT_GITHUB_ACCESS_TOKEN_HERE
+GITHUB_BRANCH=main
 ```
 
 ### Build Container
