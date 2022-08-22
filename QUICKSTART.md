@@ -10,7 +10,7 @@ NeMo provides optional logging with Tensorboard and Weights and Biases. Use of W
 
 ## Docker Container
 
-The latest docker container can be downloaded from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/containers/megamolbart/tags). It is also possible to build a container (see the [README](./README.md)), but using the provided container is **highly** recommended.
+The latest docker container can be downloaded from [NGC](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/clara/containers/megamolbart_v0.2/tags). It is also possible to build a container (see the [README](./README.md)), but using the provided container is **highly** recommended.
 
 The following are best practices for mounting volumes for data, results, and code within the container:
 
