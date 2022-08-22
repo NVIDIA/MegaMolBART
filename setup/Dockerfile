@@ -67,6 +67,7 @@ COPY ./setup/config_model.sh /tmp
 COPY ./setup/startup.sh /opt/nvidia
 COPY ./setup/entrypoint.sh /opt
 RUN chmod +x /opt/entrypoint.sh
+ENV NOTEBOOK_HOME=/opt/nvidia/nemo_chem/examples/chem/nbs
 RUN bash /tmp/config_model.sh ${PACKAGE}
 WORKDIR ${NEMO_CHEM_HOME}
 COPY ./.tmp/ /tmp/

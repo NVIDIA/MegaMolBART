@@ -322,6 +322,11 @@ dev() {
                 DOCKER_CMD="${DOCKER_CMD} -d"
                 shift
                 ;;
+            -n|--notebook_home)
+                DOCKER_CMD="${DOCKER_CMD} -e NOTEBOOK_HOME=$2"
+                shift
+                shift
+                ;;
             -c|--cmd)
                 shift
                 CMD="$@"
