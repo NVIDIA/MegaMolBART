@@ -7,3 +7,8 @@ ngc registry model upload-version \
 
 
 # Commands for uploading containers are in launch.sh script
+
+
+
+DOCKER_BUILDKIT=1 docker build -f Dockerfile \
+    -t nvcr.io/nvstaging/clara/megamolbart_base:nemo_1.11_rc1 .

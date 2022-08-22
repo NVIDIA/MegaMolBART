@@ -39,7 +39,7 @@ REGISTRY_ACCESS_TOKEN=$(grep apikey ~/.ngc/config | cut -d' ' -f3)
 # wandb API key. ttps://wandb.ai/
 WANDB_API_KEY=NotSpecified
 
-# GITHUB configuration only required for building the image.
+# GITHUB configuration only required for building image.
 GITHUB_ACCESS_TOKEN=INSERT_GITHUB_ACCESS_TOKEN_HERE
 GITHUB_BRANCH=main
 ```
