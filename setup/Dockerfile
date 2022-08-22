@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Fix the image for GA
 ARG BASE_IMAGE=nvcr.io/nvidia/clara/megamolbart_taining:nemo_1.11_rc1
 FROM ${BASE_IMAGE}
 
@@ -48,7 +47,7 @@ RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /
     && cd /opt/pysmilesutils; pip install .
 
 RUN git clone --branch ${GITHUB_BRANCH} \
-    https://${GITHUB_ACCESS_TOKEN}@github.com/clara-parabricks/NeMo_MegaMolBART.git ${NEMO_CHEM_HOME}
+    https://${GITHUB_ACCESS_TOKEN}@github.com/NVIDIA/MegaMolBART.git ${NEMO_CHEM_HOME}
 
 RUN cd ${NEMO_CHEM_HOME} && conda run -n ${CONDA_ENV} pip install -e .
 

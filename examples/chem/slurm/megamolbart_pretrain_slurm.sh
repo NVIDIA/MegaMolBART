@@ -78,8 +78,6 @@ MOUNTS="$DATA_PATH:/data,$RESULT_PATH:/result"
 mkdir -p ${RESULT_PATH}
 
 # This configuration assumes TP and PP is 1.
-# TODO: Revisit to apply the following calculation
-#       global_batch = micro_batch * TP * PP * DP
 GLOBAL_BATCH_SIZE=$(expr ${MICRO_BATCH_SIZE} \* ${SLURM_JOB_NUM_NODES} \* ${SLURM_NTASKS_PER_NODE})
 
 

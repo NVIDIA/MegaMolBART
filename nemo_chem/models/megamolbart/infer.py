@@ -28,7 +28,6 @@ class NeMoMegaMolBARTWrapper():
         super().__init__()
 
         if model_cfg is None:
-            # TODO: Create a default global variable for this
             log.info('Loading default configuration...')
             model_cfg = OmegaConf.load(
                 '/workspace/nemo_chem/examples/chem/conf/infer.yaml')
@@ -194,7 +193,9 @@ class NeMoMegaMolBARTWrapper():
         hidden_states, enc_masks = self.smis_to_hidden(smis)
 
         if sampling_method == 'greedy-perturbate':
-            scaled_radius = sampling_kwarg['scaled_radius']
+            # 1.1 is experimentally derived. At this radius we get optimal
+            # sampling KPIs values.
+            scaled_radius = 1.1 * sampling_kwarg['scaled_radius']
             sample_masks = enc_masks.repeat_interleave(num_samples, 0)
             perturbed_hiddens = hidden_states.repeat_interleave(num_samples, 0)
             perturbed_hiddens = perturbed_hiddens + (scaled_radius * torch.randn(perturbed_hiddens.shape).to(perturbed_hiddens.device))

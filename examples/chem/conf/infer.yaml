@@ -27,7 +27,7 @@ handlers:
   file:
     class: logging.FileHandler
     formatter: simple
-    filename: /logs/nemo_megamolbart.log
+    filename: /logs/megamolbart.log
 root:
   level: INFO
   handlers: [console, file]

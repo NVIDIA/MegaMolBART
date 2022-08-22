@@ -12,6 +12,32 @@ During pre-processing, the compounds are filtered to ensure a maximum length of 
 
 The [Quickstart Guide](./QUICKSTART.md) contains configuration information and examples of how to run data processing and training of a small model on a workstation or SLURM-enabled cluster. The tutorial contained in the Quickstart is highly recommended to gain familiarity with how trainings are run and configured. The remainder of this README contains additional information that will be of use for more advanced tasks, such as code development or model configuration changes.
 
+
+## Running example notebook
+MegaMolBART v0.2 container encloses all prerequisites for training and inference. Please follow these steps to start **MegaMolBART** container for inference.
+
+- Start an instance of the Docker image using the following command:
+
+  ```
+  # For Docker version 19.03 or later
+  docker run \
+      --gpus all \
+      --rm \
+      -p 8888:8888 \
+      nvcr.io/nvidia/clara/megamolbart:0.2.0
+
+
+  # For Docker version 19.02 or older
+  docker run \
+      --runtime nvidia \
+      --rm \
+      -p 8888:8888 \
+      nvcr.io/nvidia/clara/megamolbart:0.2.0
+  ```
+
+ - In a browser open URL http://<<HOSTNAME/IP>>:8888
+
+
 ## Development Guide
 ### Configure `launch.sh` Script
 
@@ -22,7 +48,7 @@ The [`launch.sh` script](./launch.sh) can be used to build the NeMo MegaMolBART 
 MEGAMOLBART_CONT=nvcr.io/nvidia/clara/megamolbart:0.2.0
 
 # Path to Source code
-PROJECT_PATH=/home/rilango/Projects/github/NeMo_MegaMolBART/
+PROJECT_PATH=/home/user/Projects/github/MegaMolBART/
 
 # Path to data and results file
 DATA_PATH=/data/bionemo/data/
@@ -50,6 +76,17 @@ GITHUB_BRANCH=main
 
 The `launch.sh` script can be used to build and push containers to a registry. It can also be used to run interactive development jobs on a local system. See the instructions inside the script for more information. Once the `.env` script is created, a container can be built by running `bash launch.sh build`. If pushing to a registry is desired, `bash launch.sh push` will complete this task.
 
+### Start examples in dev mode
+- Start developmentment container
+
+  `./launch.sh dev`
+
+- Start inference service by executing the following command in the development container
+
+  `python3 -m nemo_chem.models.megamolbart.grpc.service`
+
+- In a browser open URL http://<<HOSTNAME/IP>>:8888
+
 ### Setup Data Processing and Training Files
 
 The following elements are required to process data or run pre-training.
@@ -64,7 +101,7 @@ MegaMolBART uses yaml based parameter files. The existing model configuration fi
 
 Additional files can be created to suit other configurations. Though data processing does not require an explicit model configuration, one of these files (or the default) must be provided.
 
-#### Python Run Script
+#### Python Run Script(training)
 
 The yaml parameter files are read by the python file [`megamolbart_pretrain.py`](./examples/chem/megamolbart_pretrain.py) which runs the data processing and/or training loop. Typically changes will not need to be made to this file.
 
@@ -78,7 +115,7 @@ The bash scripts found in [`examples/chem/slurm`](./examples/chem/slurm) and [`e
 
 By default, the python pretrain script uses a subset of the selected ZINC15 tranches to process and train. This is to prevent ~100GB of data from being downloaded accidentally. To process with all of the data from the ZINC15 tranches, the following modification is required:
 
-> Change the `links_file` path from `'conf/dataset/ZINC-downloader-test.txt'` to `'conf/dataset/ZINC-downloader.txt'` in the config file [here](https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/dev/examples/chem/conf/megamolbart_pretrain_base.yaml)
+> Change the `links_file` path from `'conf/dataset/ZINC-downloader-test.txt'` to `'conf/dataset/ZINC-downloader.txt'` in the config file [here](https://github.com/NVIDIA/MegaMolBART/blob/main/examples/chem/conf/megamolbart_pretrain_base.yaml)
 
 ```yaml
 links_file: 'conf/dataset/ZINC-downloader.txt' # to process with all of the ZINC15 data

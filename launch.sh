@@ -61,9 +61,7 @@ variables:
         container image for MegaMolBART training, prepended with registry. e.g.,
         Note that this is a separate (precursor) container from any service associated containers
     PROJECT_PATH
-        local path to code. e.g., /home/user/code/NeMo_MegaMolBART
-        If code should not be mounted in the container, then the PROJECT_MOUNT_PATH line should
-        be removed from the DOCKER_CMD here https://github.com/clara-parabricks/NeMo_MegaMolBART/blob/main/launch.sh#L164
+        local path to code. e.g., /home/user/code/MegaMolBART
     JUPYTER_PORT
         Port for launching jupyter lab, e.g. 8888
     DATA_PATH
