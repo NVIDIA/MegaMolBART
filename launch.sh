@@ -82,7 +82,7 @@ EOF
     exit
 }
 
-MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidia/clara/megamolbart:0.2.0}
+MEGAMOLBART_CONT=${MEGAMOLBART_CONT:=nvcr.io/nvidia/clara/megamolbart_v0.2:0.2.0}
 PROJECT_PATH=${PROJECT_PATH:=$(pwd)}
 DATA_PATH=${DATA_PATH:=/tmp}
 RESULT_PATH=${RESULT_PATH:=${HOME}/results/nemo_experiments}
