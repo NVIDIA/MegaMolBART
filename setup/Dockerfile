@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG BASE_IMAGE=nvcr.io/nvidia/clara/megamolbart_taining:nemo_1.11_rc1
+ARG BASE_IMAGE=nvcr.io/nvidia/clara/megamolbart_base:nemo_1.11_rc1
 FROM ${BASE_IMAGE}
 
 ARG GITHUB_ACCESS_TOKEN
