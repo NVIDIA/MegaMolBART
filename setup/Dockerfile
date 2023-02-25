@@ -32,15 +32,16 @@ ENV TERM=xterm
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
-        python-setuptools python-dev swig \
-        wget git unzip tmux vim && \
+        python-setuptools python-dev swig git && \
     rm -rf /var/lib/apt/lists/*
+RUN apt remove -y vim vim-*
 
 ## Setup - Install and upgrade additional packages
-# RUN pip install --upgrade numpy wandb
-# RUN pip install --upgrade einops
-COPY setup/conda/env.yml /tmp/env.yml
-RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
+# COPY setup/conda/env.yml /tmp/env.yml
+# RUN conda env update --name base -f /tmp/env.yml && conda clean -afy
+RUN apt update && apt install --only-upgrade libksba8  libssl1.1  openssl libslurm34 libzmq5
+RUN pip install --upgrade cryptography pillow joblib setuptools \
+    jupyter_core graphviz onnx future rdkit
 
 ## PySMILES
 RUN git clone https://github.com/MolecularAI/pysmilesutils.git --branch master /opt/pysmilesutils \
@@ -71,6 +72,11 @@ ENV NOTEBOOK_HOME=/opt/nvidia/nemo_chem/examples/chem/nbs
 RUN bash /tmp/config_model.sh ${PACKAGE}
 WORKDIR ${NEMO_CHEM_HOME}
 COPY ./.tmp/ /tmp/
+
+RUN source /usr/local/nvm/nvm.sh; nvm install stable --reinstall-packages-from=current; \
+    rm -rf /usr/local/nvm/versions/node/v16.15.1/;\
+    /usr/local/nvm/versions/node/v19.7.0/bin/npm i http-cache-semantics@4.1.1;
+RUN pip install pyopenssl --upgrade
 
 ENTRYPOINT ["/opt/entrypoint.sh"]
 CMD [ "bash", "-c", "/opt/nvidia/startup.sh"]
