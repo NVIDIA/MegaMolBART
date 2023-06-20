@@ -68,12 +68,12 @@ model:
   tokenizer:
     library: 'regex'
     type: null
-    model: /workspace/nemo_chem/models/vocab/megamolbart.model
-    vocab_file: /workspace/nemo_chem/models/vocab/megamolbart.vocab
+    model: /opt/nvidia/nemo_chem/models/vocab/megamolbart.model
+    vocab_file: /opt/nvidia/nemo_chem/models/vocab/megamolbart.vocab
     merge_file: null
 
   data:
-    links_file: /workspace/nemo_chem/examples/chem/conf/dataset/ZINC-downloader-test.txt
+    links_file: /opt/nvidia/nemo_chem/examples/chem/conf/dataset/ZINC-downloader-test.txt
     dataset_path: /data/zinc_csv_split # parent directory for data, contains train / val / test folders
     dataset: # inclusive range of data files to load or can load a single file, e.g. x000
       train: x[000..146]

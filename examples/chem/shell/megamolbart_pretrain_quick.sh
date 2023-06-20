@@ -7,7 +7,7 @@
 MEGAMOLBART_CONFIG_FILE=megamolbart_pretrain_xsmall_span_aug
 DATA_FORMAT='csv' # "csv" or "bin"
 DATA_MOUNT=/data/zinc_csv_split
-CODE_MOUNT=/workspace/nemo_chem
+CODE_MOUNT=/opt/nvidia/nemo_chem
 OUTPUT_MOUNT=/result
 PROJECT=MegaMolBART
 RESULTS_MOUNT=${OUTPUT_MOUNT}/nemo_experiments/${DATA_FORMAT}/${MEGAMOLBART_CONFIG_FILE}

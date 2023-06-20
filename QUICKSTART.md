@@ -16,7 +16,7 @@ The following are best practices for mounting volumes for data, results, and cod
 
 - `/data` : the directory which will container the data (see Data Processing section) should be mounted within the container.
 - `/result` : training results, including logs and checkpoints
-- `/workspace/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Code Development section below), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
+- `/opt/nvidia/nemo_chem` : this is where the MegaMolBART code resides. It is already installed in the container, so a volume mount is not required. However, for development (see Code Development section below), it is convenient to have the code mounted so that modifications can be preserved between container restarts.
 
 ## Data Processing
 
@@ -45,8 +45,8 @@ docker run -t \
 --ulimit memlock=-1 \
 --ulimit stack=67108864 \
 --volume ${DATA_PATH}:/data \
---env HOME=/workspace/nemo_chem \
---workspace /workspace/nemo_chem \
+--env HOME=/opt/nvidia/nemo_chem \
+--workspace /opt/nvidia/nemo_chem \
 --name megamolbart_data \
 ${MEGAMOLBART_CONT} \
 bash -c $RUN_SCRIPT
@@ -88,8 +88,8 @@ docker run -t \
 --ulimit stack=67108864 \
 --volume ${DATA_PATH}:/data \
 --volume ${RESULT_PATH}:/result \
---env HOME=/workspace/nemo_chem \
---workspace /workspace/nemo_chem \
+--env HOME=/opt/nvidia/nemo_chem \
+--workspace /opt/nvidia/nemo_chem \
 --env WANDB_API_KEY=$WANDB_API_KEY \
 --name megamolbart_train
 ${MEGAMOLBART_CONT} \
@@ -127,7 +127,7 @@ srun \
 --error /results/error-%j-%n.out \
 --container-image ${MEGAMOLBART_CONT} \
 --container-mounts ${MOUNTS} \
---container-workdir /workspace/nemo_chem \
+--container-workdir /opt/nvidia/nemo_chem \
 --export WANDB_API_KEY="${WANDB_API_KEY}" \
 python megamolbart_pretrain.py \
     --config-path=conf \
@@ -164,9 +164,9 @@ docker run -it \
 --ulimit stack=67108864 \
 --volume ${DATA_PATH}:/data \
 --volume ${RESULT_PATH}:/result \
---volume ${PROJECT_PATH}:/workspace/nemo_chem
---env HOME=/workspace/nemo_chem \
---workspace /workspace/nemo_chem \
+--volume ${PROJECT_PATH}:/opt/nvidia/nemo_chem
+--env HOME=/opt/nvidia/nemo_chem \
+--workspace /opt/nvidia/nemo_chem \
 --env WANDB_API_KEY=$WANDB_API_KEY \
 --name megamolbart_dev
 ${MEGAMOLBART_CONT} \
