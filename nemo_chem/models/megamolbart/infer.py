@@ -30,7 +30,7 @@ class NeMoMegaMolBARTWrapper():
         if model_cfg is None:
             log.info('Loading default configuration...')
             model_cfg = OmegaConf.load(
-                '/workspace/nemo_chem/examples/chem/conf/infer.yaml')
+                '/opt/nvidia/nemo_chem/examples/chem/conf/infer.yaml')
         if random_weights:
             model_cfg['model']['model_path'] = None
 
@@ -120,7 +120,7 @@ class NeMoMegaMolBARTWrapper():
         else:
             # Initialize with random weights
             cfg = OmegaConf.load(
-                '/workspace/nemo_chem/examples/chem/conf/megamolbart_pretrain_base.yaml')
+                '/opt/nvidia/nemo_chem/examples/chem/conf/megamolbart_pretrain_base.yaml')
             cfg.model.num_layers=6
             cfg.model.hidden_size=512
             cfg.model.num_attention_heads=8

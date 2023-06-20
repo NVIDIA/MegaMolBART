@@ -124,7 +124,7 @@ if [ $write_env -eq 1 ]; then
     echo GITHUB_BRANCH=${GITHUB_BRANCH} >> $LOCAL_ENV
 fi
 
-PROJECT_MOUNT_PATH="/workspace/nemo_chem"
+PROJECT_MOUNT_PATH="/opt/nvidia/nemo_chem"
 DATA_MOUNT_PATH="/data"
 RESULT_MOUNT_PATH='/result/nemo_experiments'
 DEV_CONT_NAME='nemo_megamolbart'
@@ -281,17 +281,17 @@ setup() {
     mkdir -p ${DATA_PATH}
     mkdir -p ${RESULT_PATH}
 
-    DEV_PYTHONPATH="/workspace/nemo_chem:/workspace/nemo_chem/generated"
+    DEV_PYTHONPATH="/opt/nvidia/nemo_chem:/opt/nvidia/nemo_chem/generated"
     if [ ! -z "${NEMO_PATH}" ];
     then
-        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/workspace/nemo "
-        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/workspace/nemo"
+        DOCKER_CMD="${DOCKER_CMD} -v ${NEMO_PATH}:/opt/nvidia/nemo "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/opt/nvidia/nemo"
     fi
 
     if [ ! -z "${CHEM_BENCH_PATH}" ];
     then
-        DOCKER_CMD="${DOCKER_CMD} -v ${CHEM_BENCH_PATH}:/workspace/chembench "
-        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/workspace/chembench"
+        DOCKER_CMD="${DOCKER_CMD} -v ${CHEM_BENCH_PATH}:/opt/nvidia/chembench "
+        DEV_PYTHONPATH="${DEV_PYTHONPATH}:/opt/nvidia/chembench"
     fi
 
     if [ ! -z "${MODEL_PATH}" ];
@@ -372,7 +372,7 @@ jupyter() {
         --port=${JUPYTER_PORT} \
         --ip=0.0.0.0 \
         --allow-root \
-        --notebook-dir=/workspace \
+        --notebook-dir=/opt/nvidia \
         --NotebookApp.password='' \
         --NotebookApp.token='' \
         --NotebookApp.password_required=False
